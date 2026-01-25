@@ -34,7 +34,8 @@ Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
 Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
 Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 
-' Zielordner in Apple Mail (iCloud Archiv)
+' Zielordner in Apple Mail (Account + Ordnername)
+' Hinweis: LEAD_MAILBOX muss exakt dem Kontonamen in Apple Mail entsprechen (z. B. E-Mail-Adresse).
 Private Const LEAD_MAILBOX As String = "iCloud"
 Private Const LEAD_FOLDER As String = "Archiv"
 
@@ -100,7 +101,16 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     script = "" & _
     "with timeout of 30 seconds" & vbLf & _
     "tell application ""Mail""" & vbLf & _
-    "set targetBox to mailbox """ & LEAD_FOLDER & """ of account """ & LEAD_MAILBOX & """" & vbLf & _
+    "set targetBox to missing value" & vbLf & _
+    "try" & vbLf & _
+    "set targetBox to first mailbox of account """ & LEAD_MAILBOX & """ whose name is """ & LEAD_FOLDER & """" & vbLf & _
+    "end try" & vbLf & _
+    "if targetBox is missing value then" & vbLf & _
+    "try" & vbLf & _
+    "set targetBox to first mailbox whose name is """ & LEAD_FOLDER & """" & vbLf & _
+    "end try" & vbLf & _
+    "end if" & vbLf & _
+    "if targetBox is missing value then error ""Mailbox nicht gefunden: "" & """ & LEAD_FOLDER & """" & vbLf & _
     "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf & _
     "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf & _
     "set outText to """"" & vbLf & _
