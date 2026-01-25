@@ -138,9 +138,7 @@ End Function
 
 Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As String)
     Dim folderPath As String
-    Dim fileData As String
-    Dim inFile As Integer
-    Dim outFile As Integer
+    Dim retryOk As Boolean
 
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
     EnsureFolderExists folderPath
@@ -152,24 +150,23 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
 
     On Error GoTo ErrHandler
 
-    inFile = FreeFile
-    Open sourcePath For Binary As #inFile
-    fileData = Space$(LOF(inFile))
-    If Len(fileData) > 0 Then Get #inFile, , fileData
-    Close #inFile
-
     If Len(Dir$(targetPath)) > 0 Then Kill targetPath
 
-    outFile = FreeFile
-    Open targetPath For Binary As #outFile
-    If Len(fileData) > 0 Then Put #outFile, , fileData
-    Close #outFile
+    FileCopy sourcePath, targetPath
     Exit Sub
 
 ErrHandler:
-    On Error Resume Next
-    If inFile > 0 Then Close #inFile
-    If outFile > 0 Then Close #outFile
+    If Err.Number = 75 Then
+        retryOk = RequestFolderAccess(folderPath)
+        If retryOk Then
+            Err.Clear
+            On Error GoTo ErrHandler
+            If Len(Dir$(targetPath)) > 0 Then Kill targetPath
+            FileCopy sourcePath, targetPath
+            Exit Sub
+        End If
+    End If
+
     MsgBox "AppleScript konnte nicht installiert werden. Prüfe Rechte.", vbExclamation
 End Sub
 
@@ -192,6 +189,28 @@ Private Sub EnsureFolderExists(ByVal folderPath As String)
         End If
     Next i
 End Sub
+
+Private Function RequestFolderAccess(ByVal folderPath As String) As Boolean
+    Dim fd As FileDialog
+    Dim selectedPath As String
+
+    On Error GoTo ErrHandler
+    Set fd = Application.FileDialog(msoFileDialogFolderPicker)
+    fd.Title = "Bitte Ordnerfreigabe erteilen: " & folderPath
+    fd.InitialFileName = folderPath
+
+    If fd.Show = -1 Then
+        selectedPath = fd.SelectedItems(1)
+        If LCase$(selectedPath) = LCase$(folderPath) Then
+            RequestFolderAccess = True
+        End If
+    End If
+
+    Exit Function
+
+ErrHandler:
+    RequestFolderAccess = False
+End Function
 
 ' =========================
 ' Message Parsing
