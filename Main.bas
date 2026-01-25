@@ -29,11 +29,14 @@ Private Const BODY_TAG As String = "BODY:"
 
 Private Const APPLESCRIPT_FILE As String = "MailReader.scpt"
 Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
+Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
 
 ' =========================
 ' Public Entry
 ' =========================
 Public Sub ImportLeadsFromAppleMail()
+    EnsureAppleScriptInstalled
+
     ' --- Variablen (Objekte) ---
     Dim ws As Worksheet
     Dim tbl As ListObject
@@ -111,6 +114,51 @@ ErrHandler:
     MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
     FetchAppleMailMessages = vbNullString
 End Function
+
+' =========================
+' AppleScript Setup
+' =========================
+Private Sub EnsureAppleScriptInstalled()
+    Dim targetPath As String
+    Dim sourcePath As String
+
+    targetPath = GetAppleScriptTargetPath()
+    sourcePath = ThisWorkbook.Path & "/" & APPLESCRIPT_SOURCE
+
+    If Len(Dir$(targetPath)) = 0 Then
+        InstallAppleScript sourcePath, targetPath
+    End If
+End Sub
+
+Private Function GetAppleScriptTargetPath() As String
+    Dim homePath As String
+    homePath = Environ$("HOME")
+    GetAppleScriptTargetPath = homePath & "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
+End Function
+
+Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As String)
+    Dim folderPath As String
+    Dim fso As Object
+
+    folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
+    Set fso = CreateObject("Scripting.FileSystemObject")
+
+    If Len(Dir$(folderPath, vbDirectory)) = 0 Then
+        MkDir folderPath
+    End If
+
+    If Len(Dir$(sourcePath)) = 0 Then
+        MsgBox "AppleScript-Quelle fehlt: " & sourcePath, vbExclamation
+        Exit Sub
+    End If
+
+    On Error GoTo ErrHandler
+    fso.CopyFile sourcePath, targetPath, True
+    Exit Sub
+
+ErrHandler:
+    MsgBox "AppleScript konnte nicht installiert werden. Prüfe Rechte.", vbExclamation
+End Sub
 
 ' =========================
 ' Message Parsing
