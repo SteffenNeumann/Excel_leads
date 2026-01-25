@@ -169,7 +169,7 @@ Private Function FetchAppleMailFolderList() As String
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
     script = script & "tell application ""Mail""" & vbLf
-    script = script & "set outText to \"\"" & vbLf
+    script = script & "set outText to """"" & vbLf
     script = script & "repeat with b in (every mailbox)" & vbLf
     script = script & "set outText to outText & (name of b) & linefeed" & vbLf
     script = script & "end repeat" & vbLf
