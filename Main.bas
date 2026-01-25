@@ -138,7 +138,6 @@ End Function
 
 Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As String)
     Dim folderPath As String
-    Dim retryOk As Boolean
 
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
     EnsureFolderExists folderPath
@@ -157,14 +156,8 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
 
 ErrHandler:
     If Err.Number = 75 Then
-        retryOk = RequestFolderAccess(folderPath)
-        If retryOk Then
-            Err.Clear
-            On Error GoTo ErrHandler
-            If Len(Dir$(targetPath)) > 0 Then Kill targetPath
-            FileCopy sourcePath, targetPath
-            Exit Sub
-        End If
+        MsgBox "Zugriff verweigert. Bitte in Excel Vollzugriff auf Dateien erlauben oder manuell kopieren nach: " & folderPath, vbExclamation
+        Exit Sub
     End If
 
     MsgBox "AppleScript konnte nicht installiert werden. Prüfe Rechte.", vbExclamation
@@ -190,27 +183,6 @@ Private Sub EnsureFolderExists(ByVal folderPath As String)
     Next i
 End Sub
 
-Private Function RequestFolderAccess(ByVal folderPath As String) As Boolean
-    Dim fd As FileDialog
-    Dim selectedPath As String
-
-    On Error GoTo ErrHandler
-    Set fd = Application.FileDialog(msoFileDialogFolderPicker)
-    fd.Title = "Bitte Ordnerfreigabe erteilen: " & folderPath
-    fd.InitialFileName = folderPath
-
-    If fd.Show = -1 Then
-        selectedPath = fd.SelectedItems(1)
-        If LCase$(selectedPath) = LCase$(folderPath) Then
-            RequestFolderAccess = True
-        End If
-    End If
-
-    Exit Function
-
-ErrHandler:
-    RequestFolderAccess = False
-End Function
 
 ' =========================
 ' Message Parsing
