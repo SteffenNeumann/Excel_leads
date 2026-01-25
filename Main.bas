@@ -116,6 +116,11 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
 
     On Error GoTo ErrHandler
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    If Left$(result, 6) = "ERROR:" Then
+        MsgBox "AppleScript-Fehler: " & Mid$(result, 7), vbExclamation
+        FetchAppleMailMessages = vbNullString
+        Exit Function
+    End If
     FetchAppleMailMessages = result
     Exit Function
 
