@@ -143,10 +143,7 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     Dim outFile As Integer
 
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
-
-    If Len(Dir$(folderPath, vbDirectory)) = 0 Then
-        MkDir folderPath
-    End If
+    EnsureFolderExists folderPath
 
     If Len(Dir$(sourcePath)) = 0 Then
         MsgBox "AppleScript-Quelle fehlt: " & sourcePath, vbExclamation
@@ -161,6 +158,8 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     If Len(fileData) > 0 Then Get #inFile, , fileData
     Close #inFile
 
+    If Len(Dir$(targetPath)) > 0 Then Kill targetPath
+
     outFile = FreeFile
     Open targetPath For Binary As #outFile
     If Len(fileData) > 0 Then Put #outFile, , fileData
@@ -172,6 +171,26 @@ ErrHandler:
     If inFile > 0 Then Close #inFile
     If outFile > 0 Then Close #outFile
     MsgBox "AppleScript konnte nicht installiert werden. Prüfe Rechte.", vbExclamation
+End Sub
+
+Private Sub EnsureFolderExists(ByVal folderPath As String)
+    Dim parts() As String
+    Dim i As Long
+    Dim currentPath As String
+
+    parts = Split(folderPath, "/")
+    currentPath = ""
+
+    For i = LBound(parts) To UBound(parts)
+        If Len(parts(i)) > 0 Then
+            currentPath = currentPath & "/" & parts(i)
+            If Len(Dir$(currentPath, vbDirectory)) = 0 Then
+                On Error Resume Next
+                MkDir currentPath
+                On Error GoTo 0
+            End If
+        End If
+    Next i
 End Sub
 
 ' =========================
