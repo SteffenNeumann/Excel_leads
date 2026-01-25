@@ -146,6 +146,52 @@ ErrHandler:
     FetchAppleMailMessages = vbNullString
 End Function
 
+Public Sub DebugPrintAppleMailFolders()
+    Dim folderText As String
+    Dim lines() As String
+    Dim i As Long
+
+    folderText = FetchAppleMailFolderList()
+    If Len(folderText) = 0 Then Exit Sub
+
+    lines = Split(folderText, vbLf)
+    For i = LBound(lines) To UBound(lines)
+        If Len(Trim$(lines(i))) > 0 Then
+            Debug.Print Trim$(lines(i))
+        End If
+    Next i
+End Sub
+
+Private Function FetchAppleMailFolderList() As String
+    Dim script As String
+    Dim result As String
+
+    script = ""
+    script = script & "with timeout of 30 seconds" & vbLf
+    script = script & "tell application ""Mail""" & vbLf
+    script = script & "set outText to \"\"" & vbLf
+    script = script & "repeat with b in (every mailbox)" & vbLf
+    script = script & "set outText to outText & (name of b) & linefeed" & vbLf
+    script = script & "end repeat" & vbLf
+    script = script & "return outText" & vbLf
+    script = script & "end tell" & vbLf
+    script = script & "end timeout"
+
+    On Error GoTo ErrHandler
+    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    If Left$(result, 6) = "ERROR:" Then
+        MsgBox "AppleScript-Fehler: " & Mid$(result, 7), vbExclamation
+        FetchAppleMailFolderList = vbNullString
+        Exit Function
+    End If
+    FetchAppleMailFolderList = result
+    Exit Function
+
+ErrHandler:
+    MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
+    FetchAppleMailFolderList = vbNullString
+End Function
+
 ' =========================
 ' AppleScript Setup
 ' =========================
