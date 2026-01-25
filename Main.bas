@@ -27,6 +27,9 @@ Private Const DATE_TAG As String = "DATE:"
 Private Const SUBJECT_TAG As String = "SUBJECT:"
 Private Const BODY_TAG As String = "BODY:"
 
+Private Const APPLESCRIPT_FILE As String = "MailReader.scpt"
+Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
+
 ' =========================
 ' Public Entry
 ' =========================
@@ -96,14 +99,16 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     "end tell"
 
     On Error GoTo ErrHandler
-    result = MacScript(script)
+    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
     FetchAppleMailMessages = result
     Exit Function
 
 ErrHandler:
-    ' Häufige Ursache: fehlende Automations-Rechte (Systemeinstellungen > Datenschutz & Sicherheit > Automation)
+    ' Häufige Ursachen:
+    ' 1) Script nicht installiert: ~/Library/Application Scripts/com.microsoft.Excel/MailReader.scpt
+    ' 2) Fehlende Automation-Rechte (Systemeinstellungen > Datenschutz & Sicherheit > Automation)
     ' Excel muss Apple Mail steuern dürfen.
-    MsgBox "AppleScript-Fehler beim Zugriff auf Apple Mail. Prüfe Automation-Rechte für Excel.", vbExclamation
+    MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
     FetchAppleMailMessages = vbNullString
 End Function
 
