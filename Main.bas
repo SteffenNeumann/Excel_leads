@@ -34,6 +34,10 @@ Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
 Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
 Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 
+' Zielordner in Apple Mail (iCloud Archiv)
+Private Const LEAD_MAILBOX As String = "iCloud"
+Private Const LEAD_FOLDER As String = "Archiv"
+
 ' =========================
 ' Public Entry
 ' =========================
@@ -96,7 +100,8 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     script = "" & _
     "with timeout of 30 seconds" & vbLf & _
     "tell application ""Mail""" & vbLf & _
-    "set theMessages to (every message of inbox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf & _
+    "set targetBox to mailbox """ & LEAD_FOLDER & """ of account """ & LEAD_MAILBOX & """" & vbLf & _
+    "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf & _
     "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf & _
     "set outText to """"" & vbLf & _
     "repeat with m in theMessages" & vbLf & _
