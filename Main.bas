@@ -27,6 +27,8 @@ Private Const DATE_TAG As String = "DATE:"
 Private Const SUBJECT_TAG As String = "SUBJECT:"
 Private Const BODY_TAG As String = "BODY:"
 
+Private Const MAX_MESSAGES As Long = 50
+
 Private Const APPLESCRIPT_FILE As String = "MailReader.scpt"
 Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
 Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
@@ -92,8 +94,10 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     Dim result As String
 
     script = "" & _
+    "with timeout of 30 seconds" & vbLf & _
     "tell application ""Mail""" & vbLf & _
     "set theMessages to (every message of inbox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf & _
+    "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf & _
     "set outText to """"" & vbLf & _
     "repeat with m in theMessages" & vbLf & _
     "set outText to outText & """ & MSG_DELIM & """ & linefeed" & vbLf & _
@@ -102,7 +106,8 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     "set outText to outText & """ & BODY_TAG & """ & (content of m) & linefeed" & vbLf & _
     "end repeat" & vbLf & _
     "return outText" & vbLf & _
-    "end tell"
+    "end tell" & vbLf & _
+    "end timeout"
 
     On Error GoTo ErrHandler
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
