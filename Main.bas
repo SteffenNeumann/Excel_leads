@@ -99,33 +99,33 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     Dim script As String
     Dim result As String
 
-    script = "" & _
-    "with timeout of 30 seconds" & vbLf & _
-    "tell application ""Mail""" & vbLf & _
-    "set targetBox to missing value" & vbLf & _
-    "if """ & LEAD_MAILBOX & """ is not "" then" & vbLf & _
-    "try" & vbLf & _
-    "set targetBox to first mailbox of account """ & LEAD_MAILBOX & """ whose name contains """ & LEAD_FOLDER & """" & vbLf & _
-    "end try" & vbLf & _
-    "end if" & vbLf & _
-    "if targetBox is missing value then" & vbLf & _
-    "try" & vbLf & _
-    "set targetBox to first mailbox whose name contains """ & LEAD_FOLDER & """" & vbLf & _
-    "end try" & vbLf & _
-    "end if" & vbLf & _
-    "if targetBox is missing value then error ""Mailbox nicht gefunden: "" & """ & LEAD_FOLDER & """" & vbLf & _
-    "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf & _
-    "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf & _
-    "set outText to """"" & vbLf & _
-    "repeat with m in theMessages" & vbLf & _
-    "set outText to outText & """ & MSG_DELIM & """ & linefeed" & vbLf & _
-    "set outText to outText & """ & DATE_TAG & """ & (date sent of m) & linefeed" & vbLf & _
-    "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf & _
-    "set outText to outText & """ & BODY_TAG & """ & (content of m) & linefeed" & vbLf & _
-    "end repeat" & vbLf & _
-    "return outText" & vbLf & _
-    "end tell" & vbLf & _
-    "end timeout"
+    script = ""
+    script = script & "with timeout of 30 seconds" & vbLf
+    script = script & "tell application ""Mail""" & vbLf
+    script = script & "set targetBox to missing value" & vbLf
+    script = script & "if """ & LEAD_MAILBOX & """ is not "" then" & vbLf
+    script = script & "try" & vbLf
+    script = script & "set targetBox to first mailbox of account """ & LEAD_MAILBOX & """ whose name contains """ & LEAD_FOLDER & """" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "end if" & vbLf
+    script = script & "if targetBox is missing value then" & vbLf
+    script = script & "try" & vbLf
+    script = script & "set targetBox to first mailbox whose name contains """ & LEAD_FOLDER & """" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "end if" & vbLf
+    script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: "" & """ & LEAD_FOLDER & """" & vbLf
+    script = script & "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf
+    script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
+    script = script & "set outText to """"" & vbLf
+    script = script & "repeat with m in theMessages" & vbLf
+    script = script & "set outText to outText & """ & MSG_DELIM & """ & linefeed" & vbLf
+    script = script & "set outText to outText & """ & DATE_TAG & """ & (date sent of m) & linefeed" & vbLf
+    script = script & "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf
+    script = script & "set outText to outText & """ & BODY_TAG & """ & (content of m) & linefeed" & vbLf
+    script = script & "end repeat" & vbLf
+    script = script & "return outText" & vbLf
+    script = script & "end tell" & vbLf
+    script = script & "end timeout"
 
     On Error GoTo ErrHandler
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
