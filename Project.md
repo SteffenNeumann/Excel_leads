@@ -6,6 +6,8 @@ E-Mails in Apple Mail mit den Schlagwörtern **„Lead“** oder **„Neue Anfra
 ## Voraussetzungen
 - macOS, Apple Mail, Microsoft Excel (Mac)
 - Excel-Datei mit Tabelle (ListObject) und fixen Spaltenüberschriften
+- Arbeitsblatt: **Pipeline**
+- Tabellenname: **Kundenliste** (intelligente Tabelle)
 - Makros aktiviert
 
 ## Datenfelder (Zielspalten)
@@ -38,7 +40,7 @@ E-Mails in Apple Mail mit den Schlagwörtern **„Lead“** oder **„Neue Anfra
 	- Abschnittswechsel erkennen (z. B. „Informationen zum Senior“).
 
 4) **Excel-Tabelle befüllen**
-	- Tabelle als ListObject nutzen (z. B. `tblLeads`).
+	- Tabelle **Kundenliste** auf Blatt **Pipeline** als ListObject nutzen.
 	- Nächste freie Zeile: `ListObject.ListRows.Add`.
 	- Spalten über Headernamen finden und setzen.
 
@@ -72,29 +74,42 @@ result = MacScript(script)
 ' - Find table, add row, set cells by header name
 ```
 
-## Spalten-Mapping (Beispiel)
+## Tabellenstruktur (Kundenliste)
+Kopf-Überschriften in der Tabelle:
+- Monat Lead erhalten
+- Status
+- Lead-Quelle
+- Name
+- Adresse
+- PLZ
+- Ort
+- Telefonnummer
+- PG
+- Letzter Kontakt
+- Nächster Kontakt
+- Notizen
+- Abschluss
+- Abgesprungen nach
+- Grund zum Absprung
+- Learning
+- Reklamierung Verbund:
+- Spend
+- Leadtyp
+
+## Spalten-Mapping (Kundenliste)
 | Quelle | Zielspalte |
 |---|---|
-| Anrede | Kontakt_Anrede |
-| Vorname | Kontakt_Vorname |
-| Nachname | Kontakt_Nachname |
-| Name (Kontakt) | Kontakt_Name |
-| Mobil | Kontakt_Mobil |
-| E-Mail / E-Mail-Adresse | Kontakt_Email |
-| Erreichbarkeit | Kontakt_Erreichbarkeit |
-| Senior Name | Senior_Name |
-| Beziehung | Senior_Beziehung |
-| Alter | Senior_Alter |
-| Pflegegrad Status | Senior_Pflegegrad_Status |
-| Pflegegrad | Senior_Pflegegrad |
-| Lebenssituation | Senior_Lebenssituation |
-| Mobilität | Senior_Mobilitaet |
-| Medizinisches | Senior_Medizinisches |
+| Kontakt: Name (voll oder aus Vor-/Nachname) | Name |
+| Kontakt: Mobil / Telefonnummer | Telefonnummer |
 | Postleitzahl / PLZ | PLZ |
-| Nutzer | Nutzer |
-| Alltagshilfe Aufgaben | Alltagshilfe_Aufgaben |
-| Alltagshilfe Häufigkeit | Alltagshilfe_Haeufigkeit |
-| ID | Anfrage_ID |
+| Senior: Pflegegrad | PG |
+| Lead-Quelle | Lead-Quelle |
+| Monat Lead erhalten (aus Mail-Datum) | Monat Lead erhalten |
+| Leadtyp | Leadtyp |
+| Notizen (Restinfos wie Erreichbarkeit, Beziehung, Lebenssituation, Mobilität, Medizinisches, Aufgaben, Häufigkeit, ID, E-Mail) | Notizen |
+
+Nicht aus den Maildaten befüllbar (bleiben leer, bis manuell gepflegt):
+- Status, Adresse, Ort, Letzter Kontakt, Nächster Kontakt, Abschluss, Abgesprungen nach, Grund zum Absprung, Learning, Reklamierung Verbund:, Spend
 
 ## Ergebnis
 Bei jedem Lauf werden neue Leads aus Apple Mail erkannt, die relevanten Felder extrahiert und in die nächste freie Zeile der Excel-Tabelle geschrieben.
