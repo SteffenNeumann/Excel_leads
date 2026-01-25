@@ -105,15 +105,15 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     script = script & "set targetBox to missing value" & vbLf
     If Len(LEAD_MAILBOX) > 0 Then
         script = script & "try" & vbLf
-        script = script & "set targetBox to first mailbox of account \"" & LEAD_MAILBOX & "\" whose name contains \"" & LEAD_FOLDER & "\"" & vbLf
+        script = script & "set targetBox to first mailbox of account """ & LEAD_MAILBOX & """ whose name contains """ & LEAD_FOLDER & """" & vbLf
         script = script & "end try" & vbLf
     End If
     script = script & "if targetBox is missing value then" & vbLf
     script = script & "try" & vbLf
-    script = script & "set targetBox to first mailbox whose name contains \"" & LEAD_FOLDER & "\"" & vbLf
+    script = script & "set targetBox to first mailbox whose name contains """ & LEAD_FOLDER & """" & vbLf
     script = script & "end try" & vbLf
     script = script & "end if" & vbLf
-    script = script & "if targetBox is missing value then error \"Mailbox nicht gefunden: "" & \"" & LEAD_FOLDER & "\"" & vbLf
+    script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: " & LEAD_FOLDER & """" & vbLf
     script = script & "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf
     script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
     script = script & "set outText to """"" & vbLf
