@@ -83,14 +83,14 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     Dim result As String
 
     script = "" & _
-    "tell application \"Mail\"" & vbLf & _
-    "set theMessages to (every message of inbox whose subject contains \"" & keywordA & "\" or subject contains \"" & keywordB & "\" or content contains \"" & keywordA & "\" or content contains \"" & keywordB & "\")" & vbLf & _
-    "set outText to \"\"" & vbLf & _
+    "tell application ""Mail""" & vbLf & _
+    "set theMessages to (every message of inbox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf & _
+    "set outText to """"" & vbLf & _
     "repeat with m in theMessages" & vbLf & _
-    "set outText to outText & \"" & MSG_DELIM & "\" & linefeed" & vbLf & _
-    "set outText to outText & \"" & DATE_TAG & "\" & (date sent of m) & linefeed" & vbLf & _
-    "set outText to outText & \"" & SUBJECT_TAG & "\" & (subject of m) & linefeed" & vbLf & _
-    "set outText to outText & \"" & BODY_TAG & "\" & (content of m) & linefeed" & vbLf & _
+    "set outText to outText & """ & MSG_DELIM & """ & linefeed" & vbLf & _
+    "set outText to outText & """ & DATE_TAG & """ & (date sent of m) & linefeed" & vbLf & _
+    "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf & _
+    "set outText to outText & """ & BODY_TAG & """ & (content of m) & linefeed" & vbLf & _
     "end repeat" & vbLf & _
     "return outText" & vbLf & _
     "end tell"
