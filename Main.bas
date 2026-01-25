@@ -30,12 +30,15 @@ Private Const BODY_TAG As String = "BODY:"
 Private Const APPLESCRIPT_FILE As String = "MailReader.scpt"
 Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
 Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
+Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 
 ' =========================
 ' Public Entry
 ' =========================
 Public Sub ImportLeadsFromAppleMail()
-    EnsureAppleScriptInstalled
+    If AUTO_INSTALL_APPLESCRIPT Then
+        EnsureAppleScriptInstalled
+    End If
 
     ' --- Variablen (Objekte) ---
     Dim ws As Worksheet
@@ -156,7 +159,7 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
 
 ErrHandler:
     If Err.Number = 75 Then
-        MsgBox "Zugriff verweigert. Bitte in Excel Vollzugriff auf Dateien erlauben oder manuell kopieren nach: " & folderPath, vbExclamation
+        MsgBox "Zugriff verweigert. Bitte manuell kopieren nach: " & folderPath & " oder AUTO_INSTALL_APPLESCRIPT aktivieren.", vbExclamation
         Exit Sub
     End If
 
