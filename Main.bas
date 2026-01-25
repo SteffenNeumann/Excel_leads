@@ -138,10 +138,11 @@ End Function
 
 Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As String)
     Dim folderPath As String
-    Dim fso As Object
+    Dim fileData As String
+    Dim inFile As Integer
+    Dim outFile As Integer
 
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
-    Set fso = CreateObject("Scripting.FileSystemObject")
 
     If Len(Dir$(folderPath, vbDirectory)) = 0 Then
         MkDir folderPath
@@ -153,10 +154,23 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     End If
 
     On Error GoTo ErrHandler
-    fso.CopyFile sourcePath, targetPath, True
+
+    inFile = FreeFile
+    Open sourcePath For Binary As #inFile
+    fileData = Space$(LOF(inFile))
+    If Len(fileData) > 0 Then Get #inFile, , fileData
+    Close #inFile
+
+    outFile = FreeFile
+    Open targetPath For Binary As #outFile
+    If Len(fileData) > 0 Then Put #outFile, , fileData
+    Close #outFile
     Exit Sub
 
 ErrHandler:
+    On Error Resume Next
+    If inFile > 0 Then Close #inFile
+    If outFile > 0 Then Close #outFile
     MsgBox "AppleScript konnte nicht installiert werden. Prüfe Rechte.", vbExclamation
 End Sub
 
