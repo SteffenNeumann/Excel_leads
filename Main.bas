@@ -37,7 +37,7 @@ Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 ' Zielordner in Apple Mail
 ' LEAD_FOLDER darf Teilstring sein (z. B. "Archiv" für "Archiv — iCloud")
 ' Optional: LEAD_MAILBOX leer lassen, um global zu suchen.
-Private Const LEAD_MAILBOX As String = ""
+Private Const LEAD_MAILBOX As String = "steffen.neumann.ic@icloud.com"
 Private Const LEAD_FOLDER As String = "Archiv"
 
 ' =========================
@@ -98,14 +98,25 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     ' Holt Nachrichteninhalte aus Apple Mail (Inbox) per AppleScript
     Dim script As String
     Dim result As String
+    Dim q As String
+
+    q = Chr$(34)
 
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
     script = script & "tell application ""Mail""" & vbLf
     script = script & "set targetBox to missing value" & vbLf
     If Len(LEAD_MAILBOX) > 0 Then
+        script = script & "set targetAccountName to " & q & LEAD_MAILBOX & q & vbLf
         script = script & "try" & vbLf
-        script = script & "set targetBox to first mailbox of account """ & LEAD_MAILBOX & """ whose name contains """ & LEAD_FOLDER & """" & vbLf
+        script = script & "repeat with a in accounts" & vbLf
+        script = script & "if (name of a) contains targetAccountName then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set targetBox to first mailbox of a whose name contains " & q & LEAD_FOLDER & q & vbLf
+        script = script & "exit repeat" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
+        script = script & "end repeat" & vbLf
         script = script & "end try" & vbLf
     End If
     script = script & "if targetBox is missing value then" & vbLf
@@ -165,15 +176,40 @@ End Sub
 Private Function FetchAppleMailFolderList() As String
     Dim script As String
     Dim result As String
+    Dim q As String
+
+    q = Chr$(34)
 
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
     script = script & "tell application ""Mail""" & vbLf
-    script = script & "set outText to """"" & vbLf
-    script = script & "repeat with b in (every mailbox)" & vbLf
-    script = script & "set outText to outText & (name of b) & linefeed" & vbLf
+    script = script & "set targetAccountName to " & q & LEAD_MAILBOX & q & vbLf
+    script = script & "script Dump" & vbLf
+    script = script & "property outText : " & q & q & vbLf
+    script = script & "on addLine(t)" & vbLf
+    script = script & "set outText to outText & t & linefeed" & vbLf
+    script = script & "end addLine" & vbLf
+    script = script & "on walk(boxList, prefix)" & vbLf
+    script = script & "repeat with mb in boxList" & vbLf
+    script = script & "set mbName to (name of mb)" & vbLf
+    script = script & "my addLine(prefix & mbName)" & vbLf
+    script = script & "try" & vbLf
+    script = script & "set kids to (every mailbox of mb)" & vbLf
+    script = script & "if (count of kids) > 0 then my walk(kids, prefix & mbName & " & q & " / " & q & " )" & vbLf
+    script = script & "end try" & vbLf
     script = script & "end repeat" & vbLf
-    script = script & "return outText" & vbLf
+    script = script & "end walk" & vbLf
+    script = script & "end script" & vbLf
+    script = script & "set outText of Dump to " & q & q & vbLf
+    script = script & "repeat with a in accounts" & vbLf
+    script = script & "set aName to (name of a)" & vbLf
+    script = script & "if (targetAccountName is " & q & q & ") or (aName contains targetAccountName) then" & vbLf
+    script = script & "Dump's addLine(" & q & "ACCOUNT: " & q & " & aName)" & vbLf
+    script = script & "Dump's walk((mailboxes of a), " & q & q & ")" & vbLf
+    script = script & "Dump's addLine(" & q & q & ")" & vbLf
+    script = script & "end if" & vbLf
+    script = script & "end repeat" & vbLf
+    script = script & "return (outText of Dump)" & vbLf
     script = script & "end tell" & vbLf
     script = script & "end timeout"
 
