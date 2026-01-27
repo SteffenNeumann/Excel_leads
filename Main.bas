@@ -51,9 +51,11 @@ Public Sub ImportLeadsFromAppleMail()
     ' --- Variablen (Objekte) ---
     Dim ws As Worksheet
     Dim tbl As ListObject
-    Dim messagesText As String
-    Dim messages() As String
-    Dim msgBlock As Variant
+
+            Dim v As Variant
+            If TryGetKV(payload, "Date", v) Then msgDate = CDate(v)
+            If TryGetKV(payload, "Subject", v) Then msgSubject = CStr(v)
+            If TryGetKV(payload, "Body", v) Then msgBody = CStr(v)
     Dim payload As Object
     Dim parsed As Object
 
@@ -132,7 +134,32 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     script = script & "set outText to outText & """ & MSG_DELIM & """ & linefeed" & vbLf
     script = script & "set outText to outText & """ & DATE_TAG & """ & (date sent of m) & linefeed" & vbLf
     script = script & "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf
-    script = script & "set outText to outText & """ & BODY_TAG & """ & (content of m) & linefeed" & vbLf
+        script = script & "set bodyText to \"\"" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set theAtts to (mail attachments of m)" & vbLf
+        script = script & "repeat with a in theAtts" & vbLf
+        script = script & "set attName to (name of a)" & vbLf
+        script = script & "set attLower to attName as string" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set attLower to do shell script \"python3 -c 'import sys; print(sys.argv[1].lower())' \" & quoted form of attLower" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "if (attLower ends with \".txt\") or (attLower ends with \".csv\") or (attLower ends with \".log\") or (attLower ends with \".json\") or (attLower ends with \".xml\") or (attLower ends with \".html\") or (attLower ends with \".htm\") then" & vbLf
+        script = script & "set tmpDir to POSIX path of (path to temporary items)" & vbLf
+        script = script & "set tmpPath to tmpDir & \"mail-\" & (do shell script \"date +%s\") & \"-\" & attName" & vbLf
+        script = script & "try" & vbLf
+        script = script & "save a in (POSIX file tmpPath)" & vbLf
+        script = script & "if (attLower ends with \".html\") or (attLower ends with \".htm\") then" & vbLf
+        script = script & "set bodyText to do shell script \"/usr/bin/textutil -convert txt -stdout \" & quoted form of tmpPath" & vbLf
+        script = script & "else" & vbLf
+        script = script & "set bodyText to do shell script \"/bin/cat \" & quoted form of tmpPath" & vbLf
+        script = script & "end if" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "if bodyText is not \"\" then exit repeat" & vbLf
+        script = script & "end if" & vbLf
+        script = script & "end repeat" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "if bodyText is \"\" then set bodyText to (content of m)" & vbLf
+        script = script & "set outText to outText & \"" & BODY_TAG & "\" & bodyText & linefeed" & vbLf
     script = script & "end repeat" & vbLf
     script = script & "return outText" & vbLf
     script = script & "end tell" & vbLf
@@ -323,6 +350,7 @@ Private Function NewKeyValueStore() As Object
         d.CompareMode = vbTextCompare
         Set NewKeyValueStore = d
     End If
+
 End Function
 
 Private Function KeyNorm(ByVal keyName As String) As String
