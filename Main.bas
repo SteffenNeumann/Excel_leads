@@ -310,6 +310,60 @@ End Sub
 
 
 ' =========================
+' Cross-Platform Key/Value Store (macOS-safe)
+' =========================
+Private Function NewKeyValueStore() As Object
+    ' macOS: kein ActiveX (Scripting.Dictionary) verfügbar
+    ' Windows: Dictionary ist ok und schneller
+    If InStr(1, Application.OperatingSystem, "Mac", vbTextCompare) > 0 Then
+        Set NewKeyValueStore = New Collection
+    Else
+        Dim d As Object
+        Set d = CreateObject("Scripting.Dictionary")
+        d.CompareMode = vbTextCompare
+        Set NewKeyValueStore = d
+    End If
+End Function
+
+Private Function KeyNorm(ByVal keyName As String) As String
+    KeyNorm = LCase$(Trim$(keyName))
+End Function
+
+Private Sub SetKV(ByRef store As Object, ByVal keyName As String, ByVal valueToSet As Variant)
+    Dim k As String
+    k = KeyNorm(keyName)
+
+    If TypeName(store) = "Dictionary" Then
+        store(k) = valueToSet
+    Else
+        On Error Resume Next
+        store.Remove k
+        On Error GoTo 0
+        store.Add valueToSet, k
+    End If
+End Sub
+
+Private Function TryGetKV(ByVal store As Object, ByVal keyName As String, ByRef valueOut As Variant) As Boolean
+    Dim k As String
+    k = KeyNorm(keyName)
+
+    If TypeName(store) = "Dictionary" Then
+        If store.Exists(k) Then
+            valueOut = store(k)
+            TryGetKV = True
+        End If
+    Else
+        On Error GoTo NotFound
+        valueOut = store(k)
+        TryGetKV = True
+        Exit Function
+NotFound:
+        TryGetKV = False
+    End If
+End Function
+
+
+' =========================
 ' Message Parsing
 ' =========================
 Private Function ParseMessageBlock(ByVal blockText As String) As Object
@@ -319,12 +373,10 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
     Dim lineText As String
     Dim payload As Object
 
-    Set payload = CreateObject("Scripting.Dictionary")
-    payload.CompareMode = vbTextCompare
-
-    payload("Date") = Date
-    payload("Subject") = vbNullString
-    payload("Body") = vbNullString
+    Set payload = NewKeyValueStore()
+    SetKV payload, "Date", Date
+    SetKV payload, "Subject", vbNullString
+    SetKV payload, "Body", vbNullString
 
     lines = Split(blockText, vbLf)
     For i = LBound(lines) To UBound(lines)
@@ -332,13 +384,15 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
         If Len(lineText) = 0 Then GoTo NextLine
 
         If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
-            payload("Date") = CDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
+            SetKV payload, "Date", CDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
         ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
-            payload("Subject") = Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
+            SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
         ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
-            payload("Body") = Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
+            SetKV payload, "Body", Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
         Else
-            payload("Body") = payload("Body") & lineText & vbLf
+            Dim curBody As Variant
+            If Not TryGetKV(payload, "Body", curBody) Then curBody = vbNullString
+            SetKV payload, "Body", CStr(curBody) & lineText & vbLf
         End If
 NextLine:
     Next i
@@ -363,8 +417,7 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     Dim currentSection As String
     Dim pendingKey As String
 
-    Set result = CreateObject("Scripting.Dictionary")
-    result.CompareMode = vbTextCompare
+    Set result = NewKeyValueStore()
 
     currentSection = "Kontakt"
     pendingKey = vbNullString
@@ -417,30 +470,30 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
     valueNorm = Trim$(rawValue)
 
     Select Case keyNorm
-        Case "anrede": fields("Kontakt_Anrede") = valueNorm
-        Case "vorname": fields("Kontakt_Vorname") = valueNorm
-        Case "nachname": fields("Kontakt_Nachname") = valueNorm
+        Case "anrede": SetKV fields, "Kontakt_Anrede", valueNorm
+        Case "vorname": SetKV fields, "Kontakt_Vorname", valueNorm
+        Case "nachname": SetKV fields, "Kontakt_Nachname", valueNorm
         Case "name"
             If LCase$(sectionName) = "senior" Then
-                fields("Senior_Name") = valueNorm
+                SetKV fields, "Senior_Name", valueNorm
             Else
-                fields("Kontakt_Name") = valueNorm
+                SetKV fields, "Kontakt_Name", valueNorm
             End If
-        Case "mobil", "telefonnummer": fields("Kontakt_Mobil") = valueNorm
-        Case "e-mail", "e-mail-adresse": fields("Kontakt_Email") = valueNorm
-        Case "erreichbarkeit": fields("Kontakt_Erreichbarkeit") = valueNorm
-        Case "beziehung": fields("Senior_Beziehung") = valueNorm
-        Case "alter": fields("Senior_Alter") = valueNorm
-        Case "pflegegrad status": fields("Senior_Pflegegrad_Status") = valueNorm
-        Case "pflegegrad": fields("Senior_Pflegegrad") = valueNorm
-        Case "lebenssituation": fields("Senior_Lebenssituation") = valueNorm
-        Case "mobilität": fields("Senior_Mobilitaet") = valueNorm
-        Case "medizinisches": fields("Senior_Medizinisches") = valueNorm
-        Case "postleitzahl", "plz": fields("PLZ") = valueNorm
-        Case "nutzer": fields("Nutzer") = valueNorm
-        Case "alltagshilfe aufgaben": fields("Alltagshilfe_Aufgaben") = valueNorm
-        Case "alltagshilfe häufigkeit": fields("Alltagshilfe_Haeufigkeit") = valueNorm
-        Case "id": fields("Anfrage_ID") = valueNorm
+        Case "mobil", "telefonnummer": SetKV fields, "Kontakt_Mobil", valueNorm
+        Case "e-mail", "e-mail-adresse": SetKV fields, "Kontakt_Email", valueNorm
+        Case "erreichbarkeit": SetKV fields, "Kontakt_Erreichbarkeit", valueNorm
+        Case "beziehung": SetKV fields, "Senior_Beziehung", valueNorm
+        Case "alter": SetKV fields, "Senior_Alter", valueNorm
+        Case "pflegegrad status": SetKV fields, "Senior_Pflegegrad_Status", valueNorm
+        Case "pflegegrad": SetKV fields, "Senior_Pflegegrad", valueNorm
+        Case "lebenssituation": SetKV fields, "Senior_Lebenssituation", valueNorm
+        Case "mobilität": SetKV fields, "Senior_Mobilitaet", valueNorm
+        Case "medizinisches": SetKV fields, "Senior_Medizinisches", valueNorm
+        Case "postleitzahl", "plz": SetKV fields, "PLZ", valueNorm
+        Case "nutzer": SetKV fields, "Nutzer", valueNorm
+        Case "alltagshilfe aufgaben": SetKV fields, "Alltagshilfe_Aufgaben", valueNorm
+        Case "alltagshilfe häufigkeit": SetKV fields, "Alltagshilfe_Haeufigkeit", valueNorm
+        Case "id": SetKV fields, "Anfrage_ID", valueNorm
     End Select
 End Sub
 
@@ -502,8 +555,9 @@ Private Function ResolveKontaktName(ByVal fields As Object) As String
 End Function
 
 Private Function GetField(ByVal fields As Object, ByVal keyName As String) As String
-    If fields.Exists(keyName) Then
-        GetField = CStr(fields(keyName))
+    Dim v As Variant
+    If TryGetKV(fields, keyName, v) Then
+        GetField = CStr(v)
     Else
         GetField = vbNullString
     End If
