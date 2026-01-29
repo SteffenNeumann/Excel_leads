@@ -414,7 +414,7 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
         If Len(lineText) = 0 Then GoTo NextLine
 
         If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
-            SetKV payload, "Date", CDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
+            SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
         ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
             SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
         ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
@@ -428,6 +428,76 @@ NextLine:
     Next i
 
     Set ParseMessageBlock = payload
+End Function
+
+Private Function ParseAppleMailDate(ByVal dateText As String) As Date
+    Dim t As String
+    Dim parts() As String
+    Dim datePart As String
+    Dim timePart As String
+    Dim dayNum As Long
+    Dim monthNum As Long
+    Dim yearNum As Long
+    Dim timeParts() As String
+    Dim h As Long, m As Long, s As Long
+
+    t = Trim$(dateText)
+    If InStr(t, ",") > 0 Then
+        t = Trim$(Mid$(t, InStr(t, ",") + 1))
+    End If
+
+    t = Replace(t, " um ", " ")
+
+    On Error GoTo Fallback
+    ParseAppleMailDate = CDate(t)
+    Exit Function
+
+Fallback:
+    On Error GoTo ErrHandler
+    parts = Split(t, " ")
+    If UBound(parts) < 2 Then GoTo ErrHandler
+
+    dayNum = CLng(Replace(parts(0), ".", ""))
+    monthNum = GermanMonthToNumber(parts(1))
+    yearNum = CLng(parts(2))
+
+    timePart = vbNullString
+    If UBound(parts) >= 3 Then timePart = parts(3)
+
+    h = 0: m = 0: s = 0
+    If Len(timePart) > 0 Then
+        timeParts = Split(timePart, ":")
+        If UBound(timeParts) >= 0 Then h = CLng(timeParts(0))
+        If UBound(timeParts) >= 1 Then m = CLng(timeParts(1))
+        If UBound(timeParts) >= 2 Then s = CLng(timeParts(2))
+    End If
+
+    ParseAppleMailDate = DateSerial(yearNum, monthNum, dayNum) + TimeSerial(h, m, s)
+    Exit Function
+
+ErrHandler:
+    ParseAppleMailDate = Date
+End Function
+
+Private Function GermanMonthToNumber(ByVal monthText As String) As Long
+    Dim m As String
+    m = LCase$(Trim$(monthText))
+
+    Select Case m
+        Case "januar": GermanMonthToNumber = 1
+        Case "februar": GermanMonthToNumber = 2
+        Case "märz", "maerz": GermanMonthToNumber = 3
+        Case "april": GermanMonthToNumber = 4
+        Case "mai": GermanMonthToNumber = 5
+        Case "juni": GermanMonthToNumber = 6
+        Case "juli": GermanMonthToNumber = 7
+        Case "august": GermanMonthToNumber = 8
+        Case "september": GermanMonthToNumber = 9
+        Case "oktober": GermanMonthToNumber = 10
+        Case "november": GermanMonthToNumber = 11
+        Case "dezember": GermanMonthToNumber = 12
+        Case Else: GermanMonthToNumber = 1
+    End Select
 End Function
 
 Private Function ResolveLeadType(ByVal subjectText As String, ByVal bodyText As String) As String
