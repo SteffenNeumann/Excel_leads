@@ -37,13 +37,14 @@ Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 ' Zielordner in Apple Mail
 ' LEAD_FOLDER darf Teilstring sein (z. B. "Archiv" für "Archiv — iCloud")
 ' Optional: LEAD_MAILBOX leer lassen, um global zu suchen.
-Private Const LEAD_MAILBOX As String = "steffen.neumann.ic@icloud.com"
-Private Const LEAD_FOLDER As String = "Archiv"
+Private Const LEAD_MAILBOX As String = "iCloud"
+Private Const LEAD_FOLDER As String = "Leads"
 
 ' =========================
 ' Public Entry
 ' =========================
 Public Sub ImportLeadsFromAppleMail()
+    ' Zweck: Apple-Mail-Leads abrufen, parsen und in die Tabelle schreiben.
     If AUTO_INSTALL_APPLESCRIPT Then
         EnsureAppleScriptInstalled
     End If
@@ -74,6 +75,7 @@ Public Sub ImportLeadsFromAppleMail()
     messages = Split(messagesText, MSG_DELIM)
 
     For Each msgBlock In messages
+        ' Schleife: jeden Nachrichtenblock einzeln verarbeiten.
         If Trim$(msgBlock) <> vbNullString Then
             Set payload = ParseMessageBlock(CStr(msgBlock))
 
@@ -90,7 +92,7 @@ Public Sub ImportLeadsFromAppleMail()
 
             If Not LeadAlreadyExists(tbl, parsed, msgDate) Then
                 AddLeadRow tbl, parsed, msgDate, leadType
-            End If 
+            End If
         End If
     Next msgBlock
 End Sub
@@ -99,7 +101,8 @@ End Sub
 ' Apple Mail Read
 ' =========================
 Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB As String) As String
-    ' Holt Nachrichteninhalte aus Apple Mail (Inbox) per AppleScript
+    ' Zweck: Apple-Mail-Nachrichten per AppleScript als Text abrufen.
+    ' Rückgabe: zusammengeführter Nachrichtentext oder Leerstring bei Fehler.
     Dim script As String
     Dim result As String
     Dim q As String
@@ -187,6 +190,7 @@ ErrHandler:
 End Function
 
 Public Sub DebugPrintAppleMailFolders()
+    ' Zweck: Mailbox-Ordnerstruktur im Direktfenster ausgeben.
     Dim folderText As String
     Dim lines() As String
     Dim i As Long
@@ -196,6 +200,7 @@ Public Sub DebugPrintAppleMailFolders()
 
     lines = Split(folderText, vbLf)
     For i = LBound(lines) To UBound(lines)
+        ' Schleife: jede Zeile der Ordnerliste ausgeben.
         If Len(Trim$(lines(i))) > 0 Then
             Debug.Print Trim$(lines(i))
         End If
@@ -203,6 +208,8 @@ Public Sub DebugPrintAppleMailFolders()
 End Sub
 
 Private Function FetchAppleMailFolderList() As String
+    ' Zweck: Ordnerliste aus Apple Mail via AppleScript abrufen.
+    ' Rückgabe: Textliste der Ordner (eine Zeile pro Ordner) oder Leerstring bei Fehler.
     Dim script As String
     Dim result As String
     Dim q As String
@@ -273,6 +280,7 @@ End Function
 ' AppleScript Setup
 ' =========================
 Private Sub EnsureAppleScriptInstalled()
+    ' Zweck: AppleScript ins Zielverzeichnis kopieren, falls es fehlt.
     Dim targetPath As String
     Dim sourcePath As String
 
@@ -285,12 +293,15 @@ Private Sub EnsureAppleScriptInstalled()
 End Sub
 
 Private Function GetAppleScriptTargetPath() As String
+    ' Zweck: Zielpfad für das AppleScript ermitteln.
+    ' Rückgabe: Vollständiger Pfad zur scpt-Datei.
     Dim homePath As String
     homePath = Environ$("HOME")
     GetAppleScriptTargetPath = homePath & "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
 End Function
 
 Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As String)
+    ' Zweck: AppleScript aus dem Projektverzeichnis installieren.
     Dim folderPath As String
 
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
@@ -318,6 +329,7 @@ ErrHandler:
 End Sub
 
 Private Sub EnsureFolderExists(ByVal folderPath As String)
+    ' Zweck: Zielordner rekursiv anlegen, falls nicht vorhanden.
     Dim parts() As String
     Dim i As Long
     Dim currentPath As String
@@ -326,6 +338,7 @@ Private Sub EnsureFolderExists(ByVal folderPath As String)
     currentPath = ""
 
     For i = LBound(parts) To UBound(parts)
+        ' Schleife: jeden Pfadteil prüfen und ggf. anlegen.
         If Len(parts(i)) > 0 Then
             currentPath = currentPath & "/" & parts(i)
             If Len(Dir$(currentPath, vbDirectory)) = 0 Then
@@ -342,6 +355,8 @@ End Sub
 ' Cross-Platform Key/Value Store (macOS-safe)
 ' =========================
 Private Function NewKeyValueStore() As Object
+    ' Zweck: Schlüssel/Wert-Store passend zum OS erstellen.
+    ' Rückgabe: Dictionary (Windows) oder Collection (macOS).
     ' macOS: kein ActiveX (Scripting.Dictionary) verfügbar
     ' Windows: Dictionary ist ok und schneller
     If InStr(1, Application.OperatingSystem, "Mac", vbTextCompare) > 0 Then
@@ -355,13 +370,16 @@ Private Function NewKeyValueStore() As Object
 
 End Function
 
-Private Function KeyNorm(ByVal keyName As String) As String
-    KeyNorm = LCase$(Trim$(keyName))
+Private Function keyNorm(ByVal keyName As String) As String
+    ' Zweck: Schlüssel vereinheitlichen (trim + lowercase).
+    ' Rückgabe: Normalisierter Schlüssel.
+    keyNorm = LCase$(Trim$(keyName))
 End Function
 
 Private Sub SetKV(ByRef store As Object, ByVal keyName As String, ByVal valueToSet As Variant)
+    ' Zweck: Wert im Store setzen (Dictionary/Collection abstrahiert).
     Dim k As String
-    k = KeyNorm(keyName)
+    k = keyNorm(keyName)
 
     If TypeName(store) = "Dictionary" Then
         store(k) = valueToSet
@@ -374,8 +392,10 @@ Private Sub SetKV(ByRef store As Object, ByVal keyName As String, ByVal valueToS
 End Sub
 
 Private Function TryGetKV(ByVal store As Object, ByVal keyName As String, ByRef valueOut As Variant) As Boolean
+    ' Zweck: Wert sicher aus dem Store lesen.
+    ' Rückgabe: True bei Treffer, sonst False.
     Dim k As String
-    k = KeyNorm(keyName)
+    k = keyNorm(keyName)
 
     If TypeName(store) = "Dictionary" Then
         If store.Exists(k) Then
@@ -397,7 +417,8 @@ End Function
 ' Message Parsing
 ' =========================
 Private Function ParseMessageBlock(ByVal blockText As String) As Object
-    ' Extrahiert Datum, Betreff und Body aus einem Message-Block
+    ' Zweck: Datum/Betreff/Body aus einem Message-Block extrahieren.
+    ' Rückgabe: Key/Value-Store mit "Date", "Subject", "Body".
     Dim lines() As String
     Dim i As Long
     Dim lineText As String
@@ -410,27 +431,29 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
 
     lines = Split(blockText, vbLf)
     For i = LBound(lines) To UBound(lines)
+        ' Schleife: jede Zeile des Message-Blocks auswerten.
         lineText = Trim$(lines(i))
-        If Len(lineText) = 0 Then GoTo NextLine
-
-        If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
-            SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
-        ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
-            SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
-        ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
-            SetKV payload, "Body", Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
-        Else
-            Dim curBody As Variant
-            If Not TryGetKV(payload, "Body", curBody) Then curBody = vbNullString
-            SetKV payload, "Body", CStr(curBody) & lineText & vbLf
+        If Len(lineText) > 0 Then
+            If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
+                SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
+            ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
+                SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
+            ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
+                SetKV payload, "Body", Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
+            Else
+                Dim curBody As Variant
+                If Not TryGetKV(payload, "Body", curBody) Then curBody = vbNullString
+                SetKV payload, "Body", CStr(curBody) & lineText & vbLf
+            End If
         End If
-NextLine:
     Next i
 
     Set ParseMessageBlock = payload
 End Function
 
 Private Function ParseAppleMailDate(ByVal dateText As String) As Date
+    ' Zweck: Apple-Mail-Datumstext robust in Date konvertieren.
+    ' Rückgabe: VBA-Date (Fallback: Heute).
     Dim t As String
     Dim parts() As String
     Dim datePart As String
@@ -480,6 +503,8 @@ ErrHandler:
 End Function
 
 Private Function GermanMonthToNumber(ByVal monthText As String) As Long
+    ' Zweck: deutschen Monatsnamen in Monatszahl wandeln.
+    ' Rückgabe: 1-12 (Fallback: 1).
     Dim m As String
     m = LCase$(Trim$(monthText))
 
@@ -501,6 +526,8 @@ Private Function GermanMonthToNumber(ByVal monthText As String) As Long
 End Function
 
 Private Function ResolveLeadType(ByVal subjectText As String, ByVal bodyText As String) As String
+    ' Zweck: Lead-Typ anhand Betreff/Inhalt bestimmen.
+    ' Rückgabe: KEYWORD_1 oder KEYWORD_2.
     If InStr(1, subjectText, KEYWORD_2, vbTextCompare) > 0 Or InStr(1, bodyText, KEYWORD_2, vbTextCompare) > 0 Then
         ResolveLeadType = KEYWORD_2
     Else
@@ -509,7 +536,8 @@ Private Function ResolveLeadType(ByVal subjectText As String, ByVal bodyText As 
 End Function
 
 Private Function ParseLeadContent(ByVal bodyText As String) As Object
-    ' Parst den Nachrichtentext in strukturierte Felder
+    ' Zweck: Nachrichtentext in strukturierte Felder parsen.
+    ' Rückgabe: Key/Value-Store mit den erkannten Feldern.
     Dim result As Object
     Dim lines() As String
     Dim i As Long
@@ -524,6 +552,7 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
 
     lines = Split(bodyText, vbLf)
     For i = LBound(lines) To UBound(lines)
+        ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
         lineText = Trim$(lines(i))
         If Len(lineText) = 0 Then GoTo NextLine
 
@@ -551,6 +580,7 @@ NextLine:
 End Function
 
 Private Sub MapInlinePair(ByRef fields As Object, ByVal lineText As String, ByVal sectionName As String)
+    ' Zweck: Inline-Label/Value ("key: value") in Felder mappen.
     Dim keyPart As String
     Dim valuePart As String
 
@@ -563,6 +593,7 @@ Private Sub MapInlinePair(ByRef fields As Object, ByVal lineText As String, ByVa
 End Sub
 
 Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal rawValue As String, ByVal sectionName As String)
+    ' Zweck: Normalisierten Schlüssel auf Zielspalte mappen.
     Dim keyNorm As String
     Dim valueNorm As String
 
@@ -598,6 +629,8 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
 End Sub
 
 Private Function NormalizeKey(ByVal rawKey As String) As String
+    ' Zweck: Schlüsseltext vereinheitlichen.
+    ' Rückgabe: normalisierte Zeichenkette.
     Dim k As String
     k = LCase$(Trim$(rawKey))
     k = Replace(k, vbTab, " ")
@@ -609,6 +642,7 @@ End Function
 ' Excel Output
 ' =========================
 Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal msgDate As Date, ByVal leadType As String)
+    ' Zweck: neue Tabellenzeile mit Lead-Daten anlegen.
     Dim newRow As ListRow
     Dim colIndex As Long
 
@@ -625,6 +659,7 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
 End Sub
 
 Private Sub SetCellByHeader(ByVal rowItem As ListRow, ByVal headerName As String, ByVal valueToSet As Variant)
+    ' Zweck: Zellwert anhand Spaltenüberschrift setzen.
     Dim idx As Long
     idx = GetColumnIndex(rowItem.Parent, headerName)
     If idx > 0 Then
@@ -633,8 +668,11 @@ Private Sub SetCellByHeader(ByVal rowItem As ListRow, ByVal headerName As String
 End Sub
 
 Private Function GetColumnIndex(ByVal tbl As ListObject, ByVal headerName As String) As Long
+    ' Zweck: Spaltenindex anhand Überschrift finden.
+    ' Rückgabe: Index oder 0 falls nicht gefunden.
     Dim i As Long
     For i = 1 To tbl.ListColumns.Count
+        ' Schleife: jede Spaltenüberschrift vergleichen.
         If StrComp(Trim$(tbl.ListColumns(i).Name), headerName, vbTextCompare) = 0 Then
             GetColumnIndex = i
             Exit Function
@@ -644,6 +682,8 @@ Private Function GetColumnIndex(ByVal tbl As ListObject, ByVal headerName As Str
 End Function
 
 Private Function ResolveKontaktName(ByVal fields As Object) As String
+    ' Zweck: Kontaktname aus Feldern zusammenstellen.
+    ' Rückgabe: Vollständiger Name (ggf. leer).
     Dim fullName As String
     fullName = GetField(fields, "Kontakt_Name")
 
@@ -655,6 +695,8 @@ Private Function ResolveKontaktName(ByVal fields As Object) As String
 End Function
 
 Private Function GetField(ByVal fields As Object, ByVal keyName As String) As String
+    ' Zweck: Feldwert sicher lesen.
+    ' Rückgabe: Feldinhalt oder Leerstring.
     Dim v As Variant
     If TryGetKV(fields, keyName, v) Then
         GetField = CStr(v)
@@ -664,6 +706,8 @@ Private Function GetField(ByVal fields As Object, ByVal keyName As String) As St
 End Function
 
 Private Function BuildNotes(ByVal fields As Object) As String
+    ' Zweck: Notizentext aus optionalen Feldern aufbauen.
+    ' Rückgabe: zusammengesetzter Notiztext.
     Dim notes As String
 
     notes = ""
@@ -685,6 +729,8 @@ Private Function BuildNotes(ByVal fields As Object) As String
 End Function
 
 Private Function AppendNote(ByVal currentText As String, ByVal labelText As String, ByVal valueText As String) As String
+    ' Zweck: Notizfeld anhängen, wenn ein Wert vorhanden ist.
+    ' Rückgabe: aktualisierter Notiztext.
     If Len(Trim$(valueText)) = 0 Then
         AppendNote = currentText
     ElseIf Len(currentText) = 0 Then
@@ -698,6 +744,8 @@ End Function
 ' Duplicate Handling
 ' =========================
 Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Object, ByVal msgDate As Date) As Boolean
+    ' Zweck: Duplikate anhand ID oder Name+Telefon+Monat verhindern.
+    ' Rückgabe: True bei Treffer, sonst False.
     Dim idValue As String
     Dim nameValue As String
     Dim phoneValue As String
@@ -719,6 +767,7 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
     If tbl.ListRows.Count = 0 Then Exit Function
 
     For i = 1 To tbl.ListRows.Count
+        ' Schleife: bestehende Zeilen auf Duplikate prüfen.
         If Len(idValue) > 0 And notesColIndex > 0 Then
             If InStr(1, CStr(tbl.DataBodyRange.Cells(i, notesColIndex).Value), "ID: " & idValue, vbTextCompare) > 0 Then
                 LeadAlreadyExists = True
@@ -736,3 +785,5 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
         End If
     Next i
 End Function
+
+
