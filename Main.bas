@@ -42,10 +42,54 @@ Private Const LEAD_MAILBOX As String = "iCloud"
 Private Const LEAD_FOLDER As String = "Leads"
 
 ' =========================
+' Funktionsübersicht & Abhängigkeiten
+' =========================
+' ImportLeadsFromAppleMail: Einstiegspunkt; ruft FetchAppleMailMessages, ParseMessageBlock, ParseLeadContent, LeadAlreadyExists, AddLeadRow. Rückgabe: Sub, schreibt Zeilen.
+' FetchAppleMailMessages: Baut AppleScript, ruft AppleScriptTask; liefert zusammengefasste Roh-Nachrichten.
+' DebugPrintAppleMailFolders: Debug-Ausgabe der Ordner; nutzt FetchAppleMailFolderList.
+' FetchAppleMailFolderList: Baut AppleScript, ruft AppleScriptTask; liefert Ordnerliste als Text.
+' EnsureAppleScriptInstalled / GetAppleScriptTargetPath / InstallAppleScript / EnsureFolderExists: Helfer zum Installieren des AppleScripts. Rückgabe: Pfade oder Seiteneffekt.
+' NewKeyValueStore / keyNorm / SetKV / TryGetKV: Plattform-sicherer Key/Value-Store. Rückgabe: Collection/Dictionary oder Boolean.
+' ParseMessageBlock: Zerlegt einen Nachrichtenblock in Date/Subject/From/Body; nutzt ParseAppleMailDate.
+' ParseAppleMailDate / GermanMonthToNumber: Robust Datum parsen aus Apple Mail Text.
+' ResolveLeadType: Leitet Lead-Typ aus Betreff/Body ab.
+' ParseLeadContent: Parst Body in Felder; nutzt MapLabelValue, MapInlinePair, SetBedarfsort.
+' MapInlinePair: Teilt Inline "key: value" und delegiert an MapLabelValue.
+' MapLabelValue: Normalisiert Labels und schreibt ins Feld-Store; nutzt NormalizeKey, SetBedarfsort, SetKV.
+' NormalizeKey: Vereinheitlicht Label-Texte.
+' AddLeadRow: Schreibt Felder in Tabelle; nutzt BuildHeaderIndex, SetCellByHeaderMap, ResolveLeadSource, ResolveKontaktName, NormalizePflegegrad, BuildNotes.
+' FindTableByName: Sucht ListObject.
+' ResolveLeadSource: Fallback-Logik für Lead-Quelle.
+' SetCellByHeaderMap / BuildHeaderIndex / GetHeaderIndex: Tabellen-Header-Utilities.
+' ResolveKontaktName: Stellt Kontaktname zusammen; nutzt ExtractSenderName, GetField.
+' ExtractSenderName: Extrahiert Name aus Absender-String.
+' GetField: Sicheres Lesen aus KV-Store.
+' BuildNotes: Baut Notizen-Text; nutzt AppendNote.
+' SetBedarfsort: Splittet PLZ/Ort; nutzt FilterDigits, SetKV.
+' FilterDigits: Filtert Ziffern.
+' NormalizePflegegrad: Extrahiert Ziffern aus PG-Text.
+' AppendNote: Fügt Notizen zusammen.
+' LeadAlreadyExists: Duplikatsprüfung; nutzt ResolveKontaktName, GetField, BuildHeaderIndex, GetHeaderIndex.
+'
+' Abhängigkeitsgraph (vereinfacht)
+' ImportLeadsFromAppleMail
+'   -> FetchAppleMailMessages -> AppleScriptTask
+'   -> ParseMessageBlock -> ParseAppleMailDate -> GermanMonthToNumber
+'   -> ResolveLeadType
+'   -> ParseLeadContent -> MapLabelValue / MapInlinePair -> SetBedarfsort -> FilterDigits
+'   -> LeadAlreadyExists -> ResolveKontaktName -> ExtractSenderName
+'   -> AddLeadRow -> BuildHeaderIndex -> SetCellByHeaderMap
+'                -> ResolveLeadSource
+'                -> NormalizePflegegrad
+'                -> BuildNotes -> AppendNote
+
+' =========================
 ' Public Entry
 ' =========================
 Public Sub ImportLeadsFromAppleMail()
     ' Zweck: Apple-Mail-Leads abrufen, parsen und in die Tabelle schreiben.
+    ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
+    ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
     If AUTO_INSTALL_APPLESCRIPT Then
         EnsureAppleScriptInstalled
     End If
@@ -109,6 +153,8 @@ End Sub
 ' =========================
 Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB As String) As String
     ' Zweck: Apple-Mail-Nachrichten per AppleScript als Text abrufen.
+    ' Abhängigkeiten: AppleScriptTask, Konstanten für Tags/Delim, ParseAppleMailDate (indirekt via ParseMessageBlock später).
+    ' Rückgabe: zusammengeführter Nachrichtentext oder Leerstring bei Fehler.
     ' Rückgabe: zusammengeführter Nachrichtentext oder Leerstring bei Fehler.
     Dim script As String
     Dim result As String
@@ -175,6 +221,8 @@ End Function
 
 Public Sub DebugPrintAppleMailFolders()
     ' Zweck: Mailbox-Ordnerstruktur im Direktfenster ausgeben.
+    ' Abhängigkeiten: FetchAppleMailFolderList.
+    ' Rückgabe: keine (Debug.Print Ausgabe).
     Dim folderText As String
     Dim lines() As String
     Dim i As Long
@@ -193,6 +241,8 @@ End Sub
 
 Private Function FetchAppleMailFolderList() As String
     ' Zweck: Ordnerliste aus Apple Mail via AppleScript abrufen.
+    ' Abhängigkeiten: AppleScriptTask.
+    ' Rückgabe: Textliste der Ordner oder Leerstring.
     ' Rückgabe: Textliste der Ordner (eine Zeile pro Ordner) oder Leerstring bei Fehler.
     Dim script As String
     Dim result As String
@@ -265,6 +315,8 @@ End Function
 ' =========================
 Private Sub EnsureAppleScriptInstalled()
     ' Zweck: AppleScript ins Zielverzeichnis kopieren, falls es fehlt.
+    ' Abhängigkeiten: GetAppleScriptTargetPath, InstallAppleScript.
+    ' Rückgabe: keine (Seiteneffekt Datei-Kopie).
     Dim targetPath As String
     Dim sourcePath As String
 
@@ -278,6 +330,8 @@ End Sub
 
 Private Function GetAppleScriptTargetPath() As String
     ' Zweck: Zielpfad für das AppleScript ermitteln.
+    ' Abhängigkeiten: Environ$ HOME.
+    ' Rückgabe: Vollständiger Pfad.
     ' Rückgabe: Vollständiger Pfad zur scpt-Datei.
     Dim homePath As String
     homePath = Environ$("HOME")
@@ -286,6 +340,8 @@ End Function
 
 Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As String)
     ' Zweck: AppleScript aus dem Projektverzeichnis installieren.
+    ' Abhängigkeiten: EnsureFolderExists, FileCopy, Kill.
+    ' Rückgabe: keine (kopiert Datei oder zeigt MsgBox).
     Dim folderPath As String
 
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
@@ -314,6 +370,8 @@ End Sub
 
 Private Sub EnsureFolderExists(ByVal folderPath As String)
     ' Zweck: Zielordner rekursiv anlegen, falls nicht vorhanden.
+    ' Abhängigkeiten: MkDir, Dir$.
+    ' Rückgabe: keine (stellt Ordner sicher bereit).
     Dim parts() As String
     Dim i As Long
     Dim currentPath As String
@@ -340,6 +398,8 @@ End Sub
 ' =========================
 Private Function NewKeyValueStore() As Object
     ' Zweck: Schlüssel/Wert-Store passend zum OS erstellen.
+    ' Abhängigkeiten: Application.OperatingSystem, Collection/Scripting.Dictionary.
+    ' Rückgabe: Collection (Mac) oder Dictionary (Windows).
     ' Rückgabe: Dictionary (Windows) oder Collection (macOS).
     ' macOS: kein ActiveX (Scripting.Dictionary) verfügbar
     ' Windows: Dictionary ist ok und schneller
@@ -356,12 +416,16 @@ End Function
 
 Private Function keyNorm(ByVal keyName As String) As String
     ' Zweck: Schlüssel vereinheitlichen (trim + lowercase).
+    ' Abhängigkeiten: Trim$, LCase$.
+    ' Rückgabe: normalisierter Schlüsselstring.
     ' Rückgabe: Normalisierter Schlüssel.
     keyNorm = LCase$(Trim$(keyName))
 End Function
 
 Private Sub SetKV(ByRef store As Object, ByVal keyName As String, ByVal valueToSet As Variant)
     ' Zweck: Wert im Store setzen (Dictionary/Collection abstrahiert).
+    ' Abhängigkeiten: keyNorm, Collection/Dictionary API.
+    ' Rückgabe: keine (mutiert Store).
     Dim k As String
     k = keyNorm(keyName)
 
@@ -377,6 +441,8 @@ End Sub
 
 Private Function TryGetKV(ByVal store As Object, ByVal keyName As String, ByRef valueOut As Variant) As Boolean
     ' Zweck: Wert sicher aus dem Store lesen.
+    ' Abhängigkeiten: keyNorm, Collection/Dictionary API.
+    ' Rückgabe: True bei Treffer, sonst False.
     ' Rückgabe: True bei Treffer, sonst False.
     Dim k As String
     k = keyNorm(keyName)
@@ -402,6 +468,8 @@ End Function
 ' =========================
 Private Function ParseMessageBlock(ByVal blockText As String) As Object
     ' Zweck: Datum/Betreff/Body aus einem Message-Block extrahieren.
+    ' Abhängigkeiten: NewKeyValueStore, ParseAppleMailDate, SetKV, TryGetKV.
+    ' Rückgabe: Key/Value-Store mit "Date", "Subject", "Body", "From".
     ' Rückgabe: Key/Value-Store mit "Date", "Subject", "Body".
     Dim lines() As String
     Dim i As Long
@@ -440,6 +508,8 @@ End Function
 
 Private Function ParseAppleMailDate(ByVal dateText As String) As Date
     ' Zweck: Apple-Mail-Datumstext robust in Date konvertieren.
+    ' Abhängigkeiten: GermanMonthToNumber, CDate, DateSerial/TimeSerial.
+    ' Rückgabe: Datum (Fallback: Today).
     ' Rückgabe: VBA-Date (Fallback: Heute).
     Dim t As String
     Dim parts() As String
@@ -491,6 +561,8 @@ End Function
 
 Private Function GermanMonthToNumber(ByVal monthText As String) As Long
     ' Zweck: deutschen Monatsnamen in Monatszahl wandeln.
+    ' Abhängigkeiten: keine externen; verwendet Select Case.
+    ' Rückgabe: Monatszahl 1-12 (Fallback 1).
     ' Rückgabe: 1-12 (Fallback: 1).
     Dim m As String
     m = LCase$(Trim$(monthText))
@@ -514,6 +586,8 @@ End Function
 
 Private Function ResolveLeadType(ByVal subjectText As String, ByVal bodyText As String) As String
     ' Zweck: Lead-Typ anhand Betreff/Inhalt bestimmen.
+    ' Abhängigkeiten: String-Suche InStr.
+    ' Rückgabe: KEYWORD_1 oder KEYWORD_2.
     ' Rückgabe: KEYWORD_1 oder KEYWORD_2.
     If InStr(1, subjectText, KEYWORD_2, vbTextCompare) > 0 Or InStr(1, bodyText, KEYWORD_2, vbTextCompare) > 0 Then
         ResolveLeadType = KEYWORD_2
@@ -524,6 +598,8 @@ End Function
 
 Private Function ParseLeadContent(ByVal bodyText As String) As Object
     ' Zweck: Nachrichtentext in strukturierte Felder parsen.
+    ' Abhängigkeiten: NewKeyValueStore, MapLabelValue, MapInlinePair, SetBedarfsort.
+    ' Rückgabe: Key/Value-Store mit Feldwerten.
     ' Rückgabe: Key/Value-Store mit den erkannten Feldern.
     Dim result As Object
     Dim lines() As String
@@ -574,6 +650,8 @@ End Function
 
 Private Sub MapInlinePair(ByRef fields As Object, ByVal lineText As String, ByVal sectionName As String)
     ' Zweck: Inline-Label/Value ("key: value") in Felder mappen.
+    ' Abhängigkeiten: MapLabelValue.
+    ' Rückgabe: keine (schreibt in fields).
     Dim keyPart As String
     Dim valuePart As String
 
@@ -587,6 +665,8 @@ End Sub
 
 Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal rawValue As String, ByVal sectionName As String)
     ' Zweck: Normalisierten Schlüssel auf Zielspalte mappen.
+    ' Abhängigkeiten: NormalizeKey, SetBedarfsort, SetKV.
+    ' Rückgabe: keine (schreibt in fields).
     Dim keyNorm As String
     Dim valueNorm As String
 
@@ -637,6 +717,8 @@ End Sub
 
 Private Function NormalizeKey(ByVal rawKey As String) As String
     ' Zweck: Schlüsseltext vereinheitlichen.
+    ' Abhängigkeiten: Trim$, Replace, LCase$.
+    ' Rückgabe: normalisierter Label-Text.
     ' Rückgabe: normalisierte Zeichenkette.
     Dim k As String
     k = LCase$(Trim$(rawKey))
@@ -650,6 +732,8 @@ End Function
 ' =========================
 Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal msgDate As Date, ByVal leadType As String)
     ' Zweck: neue Tabellenzeile mit Lead-Daten anlegen.
+    ' Abhängigkeiten: BuildHeaderIndex, SetCellByHeaderMap, ResolveLeadSource, ResolveKontaktName, NormalizePflegegrad, BuildNotes.
+    ' Rückgabe: keine (fügt Zeile hinzu).
     Dim newRow As ListRow
 
     Set newRow = tbl.ListRows.Add
@@ -670,6 +754,8 @@ End Sub
 
 Private Function FindTableByName(ByVal tableName As String) As ListObject
     ' Zweck: ListObject global nach Name suchen. Rückgabe: gefundene Tabelle oder Nothing.
+    ' Abhängigkeiten: ThisWorkbook.Worksheets, ListObjects.
+    ' Rückgabe: ListObject oder Nothing.
     Dim ws As Worksheet
     For Each ws In ThisWorkbook.Worksheets
         Dim lo As ListObject
@@ -684,6 +770,8 @@ End Function
 
 Private Function ResolveLeadSource(ByVal fields As Object) As String
     ' Zweck: Lead-Quelle aus Absender nutzen, Fallback auf Default.
+    ' Abhängigkeiten: GetField.
+    ' Rückgabe: Absender oder LEAD_SOURCE.
     Dim fromVal As String
     fromVal = GetField(fields, "From")
     If Len(Trim$(fromVal)) = 0 Then
@@ -695,6 +783,8 @@ End Function
 
 Private Sub SetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Object, ByVal headerName As String, ByVal valueToSet As Variant)
     ' Zweck: Zellwert anhand vorberechneter Header-Map setzen.
+    ' Abhängigkeiten: GetHeaderIndex.
+    ' Rückgabe: keine (schreibt in Zeile).
     Dim idx As Long
     idx = GetHeaderIndex(headerMap, headerName)
     If idx > 0 Then rowItem.Range.Cells(1, idx).Value = valueToSet
@@ -702,6 +792,8 @@ End Sub
 
 Private Function BuildHeaderIndex(ByVal tbl As ListObject) As Object
     ' Zweck: Map Headername -> Spaltenindex erzeugen. Rückgabe: Store mit Indizes.
+    ' Abhängigkeiten: NewKeyValueStore, SetKV.
+    ' Rückgabe: Key/Value-Store Header->Index.
     Dim map As Object
     Dim i As Long
     Set map = NewKeyValueStore()
@@ -713,12 +805,16 @@ End Function
 
 Private Function GetHeaderIndex(ByVal headerMap As Object, ByVal headerName As String) As Long
     ' Zweck: Spaltenindex aus Map lesen. Rückgabe: Index oder 0.
+    ' Abhängigkeiten: TryGetKV.
+    ' Rückgabe: Spaltenindex oder 0.
     Dim v As Variant
     If TryGetKV(headerMap, headerName, v) Then GetHeaderIndex = CLng(v) Else GetHeaderIndex = 0
 End Function
 
 Private Function ResolveKontaktName(ByVal fields As Object) As String
     ' Zweck: Kontaktname aus Feldern zusammenstellen.
+    ' Abhängigkeiten: GetField, ExtractSenderName.
+    ' Rückgabe: vollqualifizierter Name oder Leerstring.
     ' Rückgabe: Vollständiger Name (ggf. leer).
     Dim fullName As String
     fullName = GetField(fields, "Kontakt_Name")
@@ -740,6 +836,9 @@ Private Function ResolveKontaktName(ByVal fields As Object) As String
 End Function
 
 Private Function ExtractSenderName(ByVal fromVal As String) As String
+    ' Zweck: Namensteil aus From-Header extrahieren.
+    ' Abhängigkeiten: Stringfunktionen (InStr, Left$, Replace).
+    ' Rückgabe: gereinigter Name.
     Dim s As String
     s = Trim$(fromVal)
     If Len(s) = 0 Then Exit Function
@@ -754,6 +853,8 @@ End Function
 
 Private Function GetField(ByVal fields As Object, ByVal keyName As String) As String
     ' Zweck: Feldwert sicher lesen.
+    ' Abhängigkeiten: TryGetKV.
+    ' Rückgabe: Feldinhalt oder Leerstring.
     ' Rückgabe: Feldinhalt oder Leerstring.
     Dim v As Variant
     If TryGetKV(fields, keyName, v) Then
@@ -765,6 +866,8 @@ End Function
 
 Private Function BuildNotes(ByVal fields As Object) As String
     ' Zweck: Notizentext aus optionalen Feldern aufbauen.
+    ' Abhängigkeiten: AppendNote, GetField.
+    ' Rückgabe: zusammengesetzter Notiztext.
     ' Rückgabe: zusammengesetzter Notiztext.
     Dim notes As String
 
@@ -797,6 +900,9 @@ Private Function BuildNotes(ByVal fields As Object) As String
 End Function
 
 Private Sub SetBedarfsort(ByRef fields As Object, ByVal rawValue As String)
+    ' Zweck: Bedarfsort in PLZ/Ort trennen.
+    ' Abhängigkeiten: FilterDigits, SetKV.
+    ' Rückgabe: keine (schreibt Felder).
     Dim tokens() As String
     Dim i As Long
     Dim plzToken As String
@@ -824,6 +930,9 @@ Private Sub SetBedarfsort(ByRef fields As Object, ByVal rawValue As String)
 End Sub
 
 Private Function FilterDigits(ByVal textIn As String) As String
+    ' Zweck: Nur Ziffern aus Text extrahieren.
+    ' Abhängigkeiten: Stringzugriff.
+    ' Rückgabe: Ziffernfolge oder Leerstring.
     Dim i As Long
     Dim digits As String
     For i = 1 To Len(textIn)
@@ -835,6 +944,9 @@ Private Function FilterDigits(ByVal textIn As String) As String
 End Function
 
 Private Function NormalizePflegegrad(ByVal rawValue As String) As String
+    ' Zweck: Pflegegrad auf reine Ziffern normalisieren.
+    ' Abhängigkeiten: Stringzugriff.
+    ' Rückgabe: Ziffernfolge oder Leerstring.
     Dim i As Long
     Dim digits As String
 
@@ -853,6 +965,8 @@ End Function
 
 Private Function AppendNote(ByVal currentText As String, ByVal labelText As String, ByVal valueText As String) As String
     ' Zweck: Notizfeld anhängen, wenn ein Wert vorhanden ist.
+    ' Abhängigkeiten: keine externen.
+    ' Rückgabe: aktualisierter Notiztext.
     ' Rückgabe: aktualisierter Notiztext.
     If Len(Trim$(valueText)) = 0 Then
         AppendNote = currentText
@@ -868,6 +982,8 @@ End Function
 ' =========================
 Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Object, ByVal msgDate As Date) As Boolean
     ' Zweck: Duplikate anhand ID oder Name+Telefon+Monat verhindern.
+    ' Abhängigkeiten: ResolveKontaktName, GetField, BuildHeaderIndex, GetHeaderIndex, DateSerial.
+    ' Rückgabe: True bei Duplikat sonst False.
     ' Rückgabe: True bei Treffer, sonst False.
     Dim idValue As String
     Dim nameValue As String
