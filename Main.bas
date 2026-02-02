@@ -25,6 +25,7 @@ Private Const KEYWORD_2 As String = "Neue Anfrage"
 Private Const MSG_DELIM As String = "<<<MSG>>>"
 Private Const DATE_TAG As String = "DATE:"
 Private Const SUBJECT_TAG As String = "SUBJECT:"
+Private Const FROM_TAG As String = "FROM:"
 Private Const BODY_TAG As String = "BODY:"
 
 Private Const MAX_MESSAGES As Long = 50
@@ -50,7 +51,6 @@ Public Sub ImportLeadsFromAppleMail()
     End If
 
     ' --- Variablen (Objekte) ---
-    Dim ws As Worksheet
     Dim tbl As ListObject
     Dim payload As Object
     Dim parsed As Object
@@ -60,14 +60,18 @@ Public Sub ImportLeadsFromAppleMail()
     Dim msgDate As Date
     Dim msgSubject As String
     Dim msgBody As String
+    Dim msgFrom As String
     Dim leadType As String
 
     Dim messagesText As String
     Dim messages() As String
     Dim msgBlock As Variant
 
-    Set ws = ThisWorkbook.Worksheets(SHEET_NAME)
-    Set tbl = ws.ListObjects(TABLE_NAME)
+    Set tbl = FindTableByName(TABLE_NAME)
+    If tbl Is Nothing Then
+        MsgBox "Tabelle '" & TABLE_NAME & "' nicht gefunden.", vbExclamation
+        Exit Sub
+    End If
 
     messagesText = FetchAppleMailMessages(KEYWORD_1, KEYWORD_2)
     If Len(messagesText) = 0 Then Exit Sub
@@ -82,13 +86,16 @@ Public Sub ImportLeadsFromAppleMail()
             msgDate = Date
             msgSubject = vbNullString
             msgBody = vbNullString
+            msgFrom = vbNullString
             If TryGetKV(payload, "Date", v) Then msgDate = CDate(v)
             If TryGetKV(payload, "Subject", v) Then msgSubject = CStr(v)
             If TryGetKV(payload, "Body", v) Then msgBody = CStr(v)
+            If TryGetKV(payload, "From", v) Then msgFrom = CStr(v)
 
             leadType = ResolveLeadType(msgSubject, msgBody)
 
             Set parsed = ParseLeadContent(msgBody)
+            SetKV parsed, "From", msgFrom
 
             If Not LeadAlreadyExists(tbl, parsed, msgDate) Then
                 AddLeadRow tbl, parsed, msgDate, leadType
@@ -136,34 +143,11 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
     script = script & "set outText to """"" & vbLf
     script = script & "repeat with m in theMessages" & vbLf
-    script = script & "set outText to outText & """ & MSG_DELIM & """ & linefeed" & vbLf
-    script = script & "set outText to outText & """ & DATE_TAG & """ & (date sent of m) & linefeed" & vbLf
-    script = script & "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf
-        script = script & "set bodyText to " & q & q & vbLf
-        script = script & "try" & vbLf
-        script = script & "set theAtts to (mail attachments of m)" & vbLf
-        script = script & "repeat with a in theAtts" & vbLf
-        script = script & "set attName to (name of a)" & vbLf
-        script = script & "set attLower to attName as string" & vbLf
-        script = script & "try" & vbLf
-        script = script & "set attLower to do shell script " & q & "python3 -c 'import sys; print(sys.argv[1].lower())' " & q & " & quoted form of attLower" & vbLf
-        script = script & "end try" & vbLf
-        script = script & "if (attLower ends with "".txt"") or (attLower ends with "".csv"") or (attLower ends with "".log"") or (attLower ends with "".json"") or (attLower ends with "".xml"") or (attLower ends with "".html"") or (attLower ends with "".htm"") then" & vbLf
-        script = script & "set tmpDir to POSIX path of (path to temporary items)" & vbLf
-        script = script & "set tmpPath to tmpDir & ""mail-"" & (do shell script ""date +%s"") & ""-"" & attName" & vbLf
-        script = script & "try" & vbLf
-        script = script & "save a in (POSIX file tmpPath)" & vbLf
-        script = script & "if (attLower ends with "".html"") or (attLower ends with "".htm"") then" & vbLf
-        script = script & "set bodyText to do shell script ""/usr/bin/textutil -convert txt -stdout "" & quoted form of tmpPath" & vbLf
-        script = script & "else" & vbLf
-        script = script & "set bodyText to do shell script ""/bin/cat "" & quoted form of tmpPath" & vbLf
-        script = script & "end if" & vbLf
-        script = script & "end try" & vbLf
-        script = script & "if bodyText is not " & q & q & " then exit repeat" & vbLf
-        script = script & "end if" & vbLf
-        script = script & "end repeat" & vbLf
-        script = script & "end try" & vbLf
-        script = script & "if bodyText is " & q & q & " then set bodyText to (content of m)" & vbLf
+        script = script & "set outText to outText & """ & MSG_DELIM & """ & linefeed" & vbLf
+        script = script & "set outText to outText & """ & DATE_TAG & """ & (date sent of m) & linefeed" & vbLf
+        script = script & "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf
+        script = script & "set outText to outText & """ & FROM_TAG & """ & (sender of m) & linefeed" & vbLf
+            script = script & "set bodyText to (content of m)" & vbLf
         script = script & "set outText to outText & " & q & BODY_TAG & q & " & bodyText & linefeed" & vbLf
     script = script & "end repeat" & vbLf
     script = script & "return outText" & vbLf
@@ -427,6 +411,7 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
     Set payload = NewKeyValueStore()
     SetKV payload, "Date", Date
     SetKV payload, "Subject", vbNullString
+    SetKV payload, "From", vbNullString
     SetKV payload, "Body", vbNullString
 
     lines = Split(blockText, vbLf)
@@ -438,6 +423,8 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
                 SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
             ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
                 SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
+            ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
+                SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
             ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
                 SetKV payload, "Body", Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
             Else
@@ -544,13 +531,19 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     Dim lineText As String
     Dim currentSection As String
     Dim pendingKey As String
+    Dim workText As String
+    Dim posSenior As Long
 
     Set result = NewKeyValueStore()
 
     currentSection = "Kontakt"
     pendingKey = vbNullString
 
-    lines = Split(bodyText, vbLf)
+    workText = bodyText
+    posSenior = InStr(1, workText, "Informationen zum Senior", vbTextCompare)
+    If posSenior > 0 Then workText = Mid$(workText, posSenior)
+
+    lines = Split(workText, vbLf)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
         lineText = Trim$(lines(i))
@@ -604,6 +597,7 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "anrede": SetKV fields, "Kontakt_Anrede", valueNorm
         Case "vorname": SetKV fields, "Kontakt_Vorname", valueNorm
         Case "nachname": SetKV fields, "Kontakt_Nachname", valueNorm
+        Case "vor- und nachname", "vor und nachname": SetKV fields, "Kontakt_Name", valueNorm
         Case "name"
             If LCase$(sectionName) = "senior" Then
                 SetKV fields, "Senior_Name", valueNorm
@@ -616,14 +610,27 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "beziehung": SetKV fields, "Senior_Beziehung", valueNorm
         Case "alter": SetKV fields, "Senior_Alter", valueNorm
         Case "pflegegrad status": SetKV fields, "Senior_Pflegegrad_Status", valueNorm
-        Case "pflegegrad": SetKV fields, "Senior_Pflegegrad", valueNorm
+        Case "pflegegrad", "pflegegrad/-stufe": SetKV fields, "Senior_Pflegegrad", valueNorm
         Case "lebenssituation": SetKV fields, "Senior_Lebenssituation", valueNorm
         Case "mobilität": SetKV fields, "Senior_Mobilitaet", valueNorm
         Case "medizinisches": SetKV fields, "Senior_Medizinisches", valueNorm
+        Case "behinderung": SetKV fields, "Senior_Behinderung", valueNorm
         Case "postleitzahl", "plz": SetKV fields, "PLZ", valueNorm
+        Case "bedarfsort": SetBedarfsort fields, valueNorm
         Case "nutzer": SetKV fields, "Nutzer", valueNorm
         Case "alltagshilfe aufgaben": SetKV fields, "Alltagshilfe_Aufgaben", valueNorm
         Case "alltagshilfe häufigkeit": SetKV fields, "Alltagshilfe_Haeufigkeit", valueNorm
+        Case "aufgaben": SetKV fields, "Aufgaben", valueNorm
+        Case "wöchentlicher umfang": SetKV fields, "Woechentlicher_Umfang", valueNorm
+        Case "umfang am stück", "umfang am stueck": SetKV fields, "Umfang_am_Stueck", valueNorm
+        Case "abrechnung über bet.- & entlastungsleistungen", "abrechnung ueber bet.- & entlastungsleistungen": SetKV fields, "Abrechnung_Betreuungsleistungen", valueNorm
+        Case "pflegedienst vorhanden": SetKV fields, "Pflegedienst_Vorhanden", valueNorm
+        Case "anfragedetails": SetKV fields, "Anfragedetails", valueNorm
+        Case "anfragen-nr", "anfragen-nr.", "anfragen nr": SetKV fields, "Anfrage_ID", valueNorm
+        Case "weitere details": SetKV fields, "Weitere_Details", valueNorm
+        Case "bedarf": SetKV fields, "Bedarf", valueNorm
+        Case "anfragedetails": SetKV fields, "Anfragedetails", valueNorm
+        Case "anfragen-nr:": SetKV fields, "Anfrage_ID", valueNorm
         Case "id": SetKV fields, "Anfrage_ID", valueNorm
     End Select
 End Sub
@@ -644,41 +651,70 @@ End Function
 Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal msgDate As Date, ByVal leadType As String)
     ' Zweck: neue Tabellenzeile mit Lead-Daten anlegen.
     Dim newRow As ListRow
-    Dim colIndex As Long
 
     Set newRow = tbl.ListRows.Add
 
-    SetCellByHeader newRow, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
-    SetCellByHeader newRow, "Lead-Quelle", LEAD_SOURCE
-    SetCellByHeader newRow, "Leadtyp", leadType
-    SetCellByHeader newRow, "Name", ResolveKontaktName(fields)
-    SetCellByHeader newRow, "Telefonnummer", GetField(fields, "Kontakt_Mobil")
-    SetCellByHeader newRow, "PLZ", GetField(fields, "PLZ")
-    SetCellByHeader newRow, "PG", GetField(fields, "Senior_Pflegegrad")
-    SetCellByHeader newRow, "Notizen", BuildNotes(fields)
+    Dim headerMap As Object
+    Set headerMap = BuildHeaderIndex(tbl)
+
+    SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
+    SetCellByHeaderMap newRow, headerMap, "Lead-Quelle", ResolveLeadSource(fields)
+    SetCellByHeaderMap newRow, headerMap, "Leadtyp", leadType
+    SetCellByHeaderMap newRow, headerMap, "Status", "Lead erhalten"
+    SetCellByHeaderMap newRow, headerMap, "Name", ResolveKontaktName(fields)
+    SetCellByHeaderMap newRow, headerMap, "Telefonnummer", GetField(fields, "Kontakt_Mobil")
+    SetCellByHeaderMap newRow, headerMap, "PLZ", GetField(fields, "PLZ")
+    SetCellByHeaderMap newRow, headerMap, "PG", NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
+    SetCellByHeaderMap newRow, headerMap, "Notizen", BuildNotes(fields)
 End Sub
 
-Private Sub SetCellByHeader(ByVal rowItem As ListRow, ByVal headerName As String, ByVal valueToSet As Variant)
-    ' Zweck: Zellwert anhand Spaltenüberschrift setzen.
-    Dim idx As Long
-    idx = GetColumnIndex(rowItem.Parent, headerName)
-    If idx > 0 Then
-        rowItem.Range.Cells(1, idx).Value = valueToSet
+Private Function FindTableByName(ByVal tableName As String) As ListObject
+    ' Zweck: ListObject global nach Name suchen. Rückgabe: gefundene Tabelle oder Nothing.
+    Dim ws As Worksheet
+    For Each ws In ThisWorkbook.Worksheets
+        Dim lo As ListObject
+        For Each lo In ws.ListObjects
+            If StrComp(lo.Name, tableName, vbTextCompare) = 0 Then
+                Set FindTableByName = lo
+                Exit Function
+            End If
+        Next lo
+    Next ws
+End Function
+
+Private Function ResolveLeadSource(ByVal fields As Object) As String
+    ' Zweck: Lead-Quelle aus Absender nutzen, Fallback auf Default.
+    Dim fromVal As String
+    fromVal = GetField(fields, "From")
+    If Len(Trim$(fromVal)) = 0 Then
+        ResolveLeadSource = LEAD_SOURCE
+    Else
+        ResolveLeadSource = fromVal
     End If
+End Function
+
+Private Sub SetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Object, ByVal headerName As String, ByVal valueToSet As Variant)
+    ' Zweck: Zellwert anhand vorberechneter Header-Map setzen.
+    Dim idx As Long
+    idx = GetHeaderIndex(headerMap, headerName)
+    If idx > 0 Then rowItem.Range.Cells(1, idx).Value = valueToSet
 End Sub
 
-Private Function GetColumnIndex(ByVal tbl As ListObject, ByVal headerName As String) As Long
-    ' Zweck: Spaltenindex anhand Überschrift finden.
-    ' Rückgabe: Index oder 0 falls nicht gefunden.
+Private Function BuildHeaderIndex(ByVal tbl As ListObject) As Object
+    ' Zweck: Map Headername -> Spaltenindex erzeugen. Rückgabe: Store mit Indizes.
+    Dim map As Object
     Dim i As Long
+    Set map = NewKeyValueStore()
     For i = 1 To tbl.ListColumns.Count
-        ' Schleife: jede Spaltenüberschrift vergleichen.
-        If StrComp(Trim$(tbl.ListColumns(i).Name), headerName, vbTextCompare) = 0 Then
-            GetColumnIndex = i
-            Exit Function
-        End If
+        SetKV map, Trim$(tbl.ListColumns(i).Name), i
     Next i
-    GetColumnIndex = 0
+    Set BuildHeaderIndex = map
+End Function
+
+Private Function GetHeaderIndex(ByVal headerMap As Object, ByVal headerName As String) As Long
+    ' Zweck: Spaltenindex aus Map lesen. Rückgabe: Index oder 0.
+    Dim v As Variant
+    If TryGetKV(headerMap, headerName, v) Then GetHeaderIndex = CLng(v) Else GetHeaderIndex = 0
 End Function
 
 Private Function ResolveKontaktName(ByVal fields As Object) As String
@@ -691,7 +727,29 @@ Private Function ResolveKontaktName(ByVal fields As Object) As String
         fullName = Trim$(GetField(fields, "Kontakt_Vorname") & " " & GetField(fields, "Kontakt_Nachname"))
     End If
 
+    If Len(fullName) = 0 Then
+        fullName = GetField(fields, "Senior_Name")
+    End If
+
+    If Len(fullName) = 0 Then
+        fullName = ExtractSenderName(GetField(fields, "From"))
+    End If
+
+    fullName = Trim$(fullName)
     ResolveKontaktName = fullName
+End Function
+
+Private Function ExtractSenderName(ByVal fromVal As String) As String
+    Dim s As String
+    s = Trim$(fromVal)
+    If Len(s) = 0 Then Exit Function
+
+    If InStr(s, "<") > 0 Then
+        s = Trim$(Left$(s, InStr(s, "<") - 1))
+    End If
+
+    s = Replace(s, """", "")
+    ExtractSenderName = Trim$(s)
 End Function
 
 Private Function GetField(ByVal fields As Object, ByVal keyName As String) As String
@@ -720,12 +778,77 @@ Private Function BuildNotes(ByVal fields As Object) As String
     notes = AppendNote(notes, "Lebenssituation", GetField(fields, "Senior_Lebenssituation"))
     notes = AppendNote(notes, "Mobilität", GetField(fields, "Senior_Mobilitaet"))
     notes = AppendNote(notes, "Medizinisches", GetField(fields, "Senior_Medizinisches"))
+    notes = AppendNote(notes, "Behinderung", GetField(fields, "Senior_Behinderung"))
     notes = AppendNote(notes, "Nutzer", GetField(fields, "Nutzer"))
     notes = AppendNote(notes, "Alltagshilfe Aufgaben", GetField(fields, "Alltagshilfe_Aufgaben"))
     notes = AppendNote(notes, "Alltagshilfe Häufigkeit", GetField(fields, "Alltagshilfe_Haeufigkeit"))
+    notes = AppendNote(notes, "Aufgaben", GetField(fields, "Aufgaben"))
+    notes = AppendNote(notes, "Wöchentlicher Umfang", GetField(fields, "Woechentlicher_Umfang"))
+    notes = AppendNote(notes, "Umfang am Stück", GetField(fields, "Umfang_am_Stueck"))
+    notes = AppendNote(notes, "Abrechnung über Bet.- & Entlastungsleistungen", GetField(fields, "Abrechnung_Betreuungsleistungen"))
+    notes = AppendNote(notes, "Pflegedienst vorhanden", GetField(fields, "Pflegedienst_Vorhanden"))
+    notes = AppendNote(notes, "Anfragedetails", GetField(fields, "Anfragedetails"))
+    notes = AppendNote(notes, "Weitere Details", GetField(fields, "Weitere_Details"))
+    notes = AppendNote(notes, "Bedarf", GetField(fields, "Bedarf"))
+    notes = AppendNote(notes, "Bedarfsort Ort", GetField(fields, "Bedarfsort_Ort"))
     notes = AppendNote(notes, "ID", GetField(fields, "Anfrage_ID"))
 
     BuildNotes = notes
+End Function
+
+Private Sub SetBedarfsort(ByRef fields As Object, ByVal rawValue As String)
+    Dim tokens() As String
+    Dim i As Long
+    Dim plzToken As String
+    Dim ortPart As String
+    Dim t As String
+
+    tokens = Split(Trim$(rawValue), " ")
+    For i = LBound(tokens) To UBound(tokens)
+        t = Trim$(tokens(i))
+        If Len(t) >= 4 And Len(FilterDigits(t)) >= 4 And Len(FilterDigits(t)) <= 5 Then
+            plzToken = FilterDigits(t)
+            tokens(i) = ""
+            Exit For
+        End If
+    Next i
+
+    If Len(plzToken) > 0 Then
+        SetKV fields, "PLZ", plzToken
+    End If
+
+    ortPart = Trim$(Join(tokens, " "))
+    If Len(ortPart) > 0 Then
+        SetKV fields, "Bedarfsort_Ort", ortPart
+    End If
+End Sub
+
+Private Function FilterDigits(ByVal textIn As String) As String
+    Dim i As Long
+    Dim digits As String
+    For i = 1 To Len(textIn)
+        If Mid$(textIn, i, 1) >= "0" And Mid$(textIn, i, 1) <= "9" Then
+            digits = digits & Mid$(textIn, i, 1)
+        End If
+    Next i
+    FilterDigits = digits
+End Function
+
+Private Function NormalizePflegegrad(ByVal rawValue As String) As String
+    Dim i As Long
+    Dim digits As String
+
+    For i = 1 To Len(rawValue)
+        If Mid$(rawValue, i, 1) >= "0" And Mid$(rawValue, i, 1) <= "9" Then
+            digits = digits & Mid$(rawValue, i, 1)
+        End If
+    Next i
+
+    If Len(digits) > 0 Then
+        NormalizePflegegrad = digits
+    Else
+        NormalizePflegegrad = vbNullString
+    End If
 End Function
 
 Private Function AppendNote(ByVal currentText As String, ByVal labelText As String, ByVal valueText As String) As String
@@ -736,7 +859,7 @@ Private Function AppendNote(ByVal currentText As String, ByVal labelText As Stri
     ElseIf Len(currentText) = 0 Then
         AppendNote = labelText & ": " & valueText
     Else
-        AppendNote = currentText & " | " & labelText & ": " & valueText
+        AppendNote = currentText & vbLf & labelText & ": " & valueText
     End If
 End Function
 
@@ -749,6 +872,7 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
     Dim idValue As String
     Dim nameValue As String
     Dim phoneValue As String
+    Dim headerMap As Object
     Dim notesColIndex As Long
     Dim nameColIndex As Long
     Dim phoneColIndex As Long
@@ -759,10 +883,11 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
     nameValue = ResolveKontaktName(fields)
     phoneValue = GetField(fields, "Kontakt_Mobil")
 
-    notesColIndex = GetColumnIndex(tbl, "Notizen")
-    nameColIndex = GetColumnIndex(tbl, "Name")
-    phoneColIndex = GetColumnIndex(tbl, "Telefonnummer")
-    dateColIndex = GetColumnIndex(tbl, "Monat Lead erhalten")
+    Set headerMap = BuildHeaderIndex(tbl)
+    notesColIndex = GetHeaderIndex(headerMap, "Notizen")
+    nameColIndex = GetHeaderIndex(headerMap, "Name")
+    phoneColIndex = GetHeaderIndex(headerMap, "Telefonnummer")
+    dateColIndex = GetHeaderIndex(headerMap, "Monat Lead erhalten")
 
     If tbl.ListRows.Count = 0 Then Exit Function
 
