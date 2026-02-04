@@ -225,7 +225,30 @@ Private Function GetLeadFolder() As String
 End Function
 
 Private Function GetMailPath() As String
-    GetMailPath = GetSettingValue(NAME_MAILPATH, vbNullString)
+    GetMailPath = CleanPathValue(GetSettingValue(NAME_MAILPATH, vbNullString))
+End Function
+
+Private Function CleanPathValue(ByVal rawValue As String) As String
+    ' Zweck: Pfadwert bereinigen (führende/abschließende Hochkommas entfernen).
+    Dim s As String
+
+    s = Trim$(rawValue)
+    If Len(s) = 0 Then
+        CleanPathValue = s
+        Exit Function
+    End If
+
+    If Left$(s, 1) = """" Or Left$(s, 1) = "'" Then
+        s = Mid$(s, 2)
+    End If
+
+    If Len(s) > 0 Then
+        If Right$(s, 1) = """" Or Right$(s, 1) = "'" Then
+            s = Left$(s, Len(s) - 1)
+        End If
+    End If
+
+    CleanPathValue = Trim$(s)
 End Function
 
 Private Function FolderExists(ByVal folderPath As String) As Boolean
