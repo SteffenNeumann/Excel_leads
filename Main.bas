@@ -44,6 +44,10 @@ Private Const NAME_LEAD_FOLDER As String = "LEAD_FOLDER"
 Private Const LEAD_MAILBOX_DEFAULT As String = "iCloud"
 Private Const LEAD_FOLDER_DEFAULT As String = "Leads"
 
+' Index für Dublettenprüfung während eines Imports
+Private gLeadIndex As Object
+Private gLeadIndexInitialized As Boolean
+
 ' =========================
 ' Funktionsübersicht & Abhängigkeiten
 ' =========================
@@ -113,6 +117,8 @@ Public Sub ImportLeadsFromAppleMail()
     Dim messagesText As String
     Dim messages() As String
     Dim msgBlock As Variant
+    Dim analyzedCount As Long
+    Dim importedCount As Long
 
     Set tbl = FindTableByName(TABLE_NAME)
     If tbl Is Nothing Then
@@ -123,11 +129,15 @@ Public Sub ImportLeadsFromAppleMail()
     messagesText = FetchAppleMailMessages(KEYWORD_1, KEYWORD_2)
     If Len(messagesText) = 0 Then Exit Sub
 
+    Set gLeadIndex = BuildExistingLeadIndex(tbl)
+    gLeadIndexInitialized = True
+
     messages = Split(messagesText, MSG_DELIM)
 
     For Each msgBlock In messages
         ' Schleife: jeden Nachrichtenblock einzeln verarbeiten.
         If Trim$(msgBlock) <> vbNullString Then
+            analyzedCount = analyzedCount + 1
             Set payload = ParseMessageBlock(CStr(msgBlock))
 
             msgDate = Date
@@ -146,9 +156,13 @@ Public Sub ImportLeadsFromAppleMail()
 
             If Not LeadAlreadyExists(tbl, parsed, msgDate) Then
                 AddLeadRow tbl, parsed, msgDate, leadType
+                importedCount = importedCount + 1
+                AddLeadToIndex parsed, msgDate
             End If
         End If
     Next msgBlock
+
+    MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten übertragen.", vbInformation
 End Sub
 
 ' =========================
@@ -190,6 +204,109 @@ End Function
 
 Private Function GetLeadFolder() As String
     GetLeadFolder = GetSettingValue(NAME_LEAD_FOLDER, LEAD_FOLDER_DEFAULT)
+End Function
+
+Private Function BuildExistingLeadIndex(ByVal tbl As ListObject) As Object
+    ' Zweck: Index für bestehende Leads aufbauen (ID + Name/Telefon/Monat).
+    ' Abhängigkeiten: NewKeyValueStore, BuildHeaderIndex, GetHeaderIndex, AddLeadKey, ExtractIdFromNotes.
+    ' Rückgabe: Key/Value-Store mit bestehenden Schlüsseln.
+    Dim idx As Object
+    Dim headerMap As Object
+    Dim notesColIndex As Long
+    Dim nameColIndex As Long
+    Dim phoneColIndex As Long
+    Dim dateColIndex As Long
+    Dim i As Long
+    Dim idValue As String
+    Dim nameValue As String
+    Dim phoneValue As String
+    Dim monthKey As String
+    Dim rowDate As Date
+
+    Set idx = NewKeyValueStore()
+    If tbl Is Nothing Then
+        Set BuildExistingLeadIndex = idx
+        Exit Function
+    End If
+
+    If tbl.ListRows.Count = 0 Then
+        Set BuildExistingLeadIndex = idx
+        Exit Function
+    End If
+
+    Set headerMap = BuildHeaderIndex(tbl)
+    notesColIndex = GetHeaderIndex(headerMap, "Notizen")
+    nameColIndex = GetHeaderIndex(headerMap, "Name")
+    phoneColIndex = GetHeaderIndex(headerMap, "Telefonnummer")
+    dateColIndex = GetHeaderIndex(headerMap, "Monat Lead erhalten")
+
+    For i = 1 To tbl.ListRows.Count
+        If notesColIndex > 0 Then
+            idValue = ExtractIdFromNotes(CStr(tbl.DataBodyRange.Cells(i, notesColIndex).Value))
+            If Len(idValue) > 0 Then AddLeadKey idx, MakeIdKey(idValue)
+        End If
+
+        If nameColIndex > 0 And phoneColIndex > 0 And dateColIndex > 0 Then
+            nameValue = CStr(tbl.DataBodyRange.Cells(i, nameColIndex).Value)
+            phoneValue = CStr(tbl.DataBodyRange.Cells(i, phoneColIndex).Value)
+            On Error Resume Next
+            rowDate = CDate(tbl.DataBodyRange.Cells(i, dateColIndex).Value)
+            On Error GoTo 0
+            monthKey = MakeNamePhoneMonthKey(nameValue, phoneValue, rowDate)
+            If Len(monthKey) > 0 Then AddLeadKey idx, monthKey
+        End If
+    Next i
+
+    Set BuildExistingLeadIndex = idx
+End Function
+
+Private Sub AddLeadToIndex(ByVal fields As Object, ByVal msgDate As Date)
+    ' Zweck: aktuellen Lead in den Index aufnehmen.
+    Dim idValue As String
+    Dim nameValue As String
+    Dim phoneValue As String
+    Dim keyVal As String
+
+    If Not gLeadIndexInitialized Then Exit Sub
+
+    idValue = GetField(fields, "Anfrage_ID")
+    keyVal = MakeIdKey(idValue)
+    If Len(keyVal) > 0 Then AddLeadKey gLeadIndex, keyVal
+
+    nameValue = ResolveKontaktName(fields)
+    phoneValue = GetField(fields, "Kontakt_Mobil")
+    keyVal = MakeNamePhoneMonthKey(nameValue, phoneValue, msgDate)
+    If Len(keyVal) > 0 Then AddLeadKey gLeadIndex, keyVal
+End Sub
+
+Private Sub AddLeadKey(ByRef idx As Object, ByVal keyName As String)
+    If Len(keyName) > 0 Then SetKV idx, keyName, True
+End Sub
+
+Private Function MakeIdKey(ByVal idValue As String) As String
+    If Len(Trim$(idValue)) > 0 Then MakeIdKey = "ID:" & LCase$(Trim$(idValue))
+End Function
+
+Private Function MakeNamePhoneMonthKey(ByVal nameValue As String, ByVal phoneValue As String, ByVal msgDate As Date) As String
+    If Len(Trim$(nameValue)) = 0 Or Len(Trim$(phoneValue)) = 0 Then Exit Function
+    MakeNamePhoneMonthKey = "NPM:" & LCase$(Trim$(nameValue)) & "|" & Trim$(phoneValue) & "|" & Format$(DateSerial(Year(msgDate), Month(msgDate), 1), "yyyy-mm")
+End Function
+
+Private Function ExtractIdFromNotes(ByVal noteText As String) As String
+    ' Zweck: ID aus Notizen extrahieren ("ID: ...").
+    Dim p As Long
+    Dim tailText As String
+    Dim endPos As Long
+
+    p = InStr(1, noteText, "ID:", vbTextCompare)
+    If p = 0 Then Exit Function
+
+    tailText = Mid$(noteText, p + 3)
+    If Left$(tailText, 1) = " " Then tailText = Mid$(tailText, 2)
+    endPos = InStr(1, tailText, vbLf)
+    If endPos > 0 Then tailText = Left$(tailText, endPos - 1)
+
+    ExtractIdFromNotes = Trim$(tailText)
 End Function
 
 Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB As String) As String
@@ -1035,6 +1152,8 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
     Dim idValue As String
     Dim nameValue As String
     Dim phoneValue As String
+    Dim keyVal As String
+    Dim v As Variant
     Dim headerMap As Object
     Dim notesColIndex As Long
     Dim nameColIndex As Long
@@ -1046,13 +1165,31 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
     nameValue = ResolveKontaktName(fields)
     phoneValue = GetField(fields, "Kontakt_Mobil")
 
+    If gLeadIndexInitialized Then
+        keyVal = MakeIdKey(idValue)
+        If Len(keyVal) > 0 Then
+            If TryGetKV(gLeadIndex, keyVal, v) Then
+                LeadAlreadyExists = True
+                Exit Function
+            End If
+        End If
+
+        keyVal = MakeNamePhoneMonthKey(nameValue, phoneValue, msgDate)
+        If Len(keyVal) > 0 Then
+            If TryGetKV(gLeadIndex, keyVal, v) Then
+                LeadAlreadyExists = True
+                Exit Function
+            End If
+        End If
+    End If
+
+    If tbl.ListRows.Count = 0 Then Exit Function
+
     Set headerMap = BuildHeaderIndex(tbl)
     notesColIndex = GetHeaderIndex(headerMap, "Notizen")
     nameColIndex = GetHeaderIndex(headerMap, "Name")
     phoneColIndex = GetHeaderIndex(headerMap, "Telefonnummer")
     dateColIndex = GetHeaderIndex(headerMap, "Monat Lead erhalten")
-
-    If tbl.ListRows.Count = 0 Then Exit Function
 
     For i = 1 To tbl.ListRows.Count
         ' Schleife: bestehende Zeilen auf Duplikate prüfen.
