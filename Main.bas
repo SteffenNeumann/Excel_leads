@@ -44,6 +44,9 @@ Private Const NAME_LEAD_FOLDER As String = "LEAD_FOLDER"
 Private Const LEAD_MAILBOX_DEFAULT As String = "iCloud"
 Private Const LEAD_FOLDER_DEFAULT As String = "Leads"
 
+' Error Log
+Private Const ERROR_LOG_SHEET As String = "ErrLog"
+
 ' Index für Dublettenprüfung während eines Imports
 Private gLeadIndex As Object
 Private gLeadIndexInitialized As Boolean
@@ -176,6 +179,7 @@ NextMsg:
 
 MsgError:
     errorCount = errorCount + 1
+    LogImportError "Fehler beim Verarbeiten einer Nachricht", Err.Description
     Err.Clear
     Resume NextMsg
 End Sub
@@ -928,6 +932,46 @@ Private Sub SetImportNote(ByVal targetCell As Range)
     If Not targetCell.Comment Is Nothing Then targetCell.Comment.Visible = False
     On Error GoTo 0
 End Sub
+
+Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As String)
+    ' Zweck: Fehler in ErrLog protokollieren.
+    Dim ws As Worksheet
+    Dim nextRow As Long
+
+    Set ws = GetOrCreateErrorLogSheet()
+    If ws Is Nothing Then Exit Sub
+
+    nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
+    If nextRow = 1 And Len(Trim$(CStr(ws.Cells(1, 1).Value))) = 0 Then nextRow = 0
+    nextRow = nextRow + 1
+
+    ws.Cells(nextRow, 1).Value = Format$(Now, "dd.mm.yy hh.nn")
+    ws.Cells(nextRow, 2).Value = errMessage
+    ws.Cells(nextRow, 3).Value = possibleCause
+End Sub
+
+Private Function GetOrCreateErrorLogSheet() As Worksheet
+    ' Zweck: ErrLog-Sheet holen oder anlegen.
+    Dim ws As Worksheet
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(ERROR_LOG_SHEET)
+    On Error GoTo 0
+
+    If ws Is Nothing Then
+        On Error Resume Next
+        Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
+        If Not ws Is Nothing Then
+            ws.Name = ERROR_LOG_SHEET
+            ws.Cells(1, 1).Value = "Zeitstempel"
+            ws.Cells(1, 2).Value = "Fehler"
+            ws.Cells(1, 3).Value = "Mögliche Ursache"
+        End If
+        On Error GoTo 0
+    End If
+
+    Set GetOrCreateErrorLogSheet = ws
+End Function
 
 ' =========================
 ' Excel Output
