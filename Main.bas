@@ -168,8 +168,6 @@ Public Sub ImportLeadsFromAppleMail()
                 duplicateCount = duplicateCount + 1
             End If
             On Error GoTo 0
-        Else
-            errorCount = errorCount + 1
         End If
 NextMsg:
     Next msgBlock
