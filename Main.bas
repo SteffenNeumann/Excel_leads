@@ -119,6 +119,8 @@ Public Sub ImportLeadsFromAppleMail()
     Dim msgBlock As Variant
     Dim analyzedCount As Long
     Dim importedCount As Long
+    Dim duplicateCount As Long
+    Dim errorCount As Long
 
     Set tbl = FindTableByName(TABLE_NAME)
     If tbl Is Nothing Then
@@ -138,6 +140,7 @@ Public Sub ImportLeadsFromAppleMail()
         ' Schleife: jeden Nachrichtenblock einzeln verarbeiten.
         If Trim$(msgBlock) <> vbNullString Then
             analyzedCount = analyzedCount + 1
+            On Error GoTo MsgError
             Set payload = ParseMessageBlock(CStr(msgBlock))
 
             msgDate = Date
@@ -158,11 +161,23 @@ Public Sub ImportLeadsFromAppleMail()
                 AddLeadRow tbl, parsed, msgDate, leadType
                 importedCount = importedCount + 1
                 AddLeadToIndex parsed, msgDate
+            Else
+                duplicateCount = duplicateCount + 1
             End If
+            On Error GoTo 0
+        Else
+            errorCount = errorCount + 1
         End If
+NextMsg:
     Next msgBlock
 
-    MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten übertragen.", vbInformation
+    MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten übertragen. Duplikate: " & duplicateCount & ". Fehler: " & errorCount & ".", vbInformation
+    Exit Sub
+
+MsgError:
+    errorCount = errorCount + 1
+    Err.Clear
+    Resume NextMsg
 End Sub
 
 ' =========================
@@ -891,6 +906,29 @@ Private Function NormalizeKey(ByVal rawKey As String) As String
     NormalizeKey = k
 End Function
 
+Private Function GetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Object, ByVal headerName As String) As Range
+    ' Zweck: Zellobjekt anhand Header-Map holen.
+    ' Abhängigkeiten: GetHeaderIndex.
+    ' Rückgabe: Range oder Nothing.
+    Dim idx As Long
+    idx = GetHeaderIndex(headerMap, headerName)
+    If idx > 0 Then Set GetCellByHeaderMap = rowItem.Range.Cells(1, idx)
+End Function
+
+Private Sub SetImportNote(ByVal targetCell As Range)
+    ' Zweck: Import-Notiz an Zelle setzen.
+    Dim noteText As String
+
+    If targetCell Is Nothing Then Exit Sub
+    noteText = "Automatischer Import vom: " & Format$(Now, "dd.mm.yy hh.nn")
+
+    On Error Resume Next
+    If Not targetCell.Comment Is Nothing Then targetCell.Comment.Delete
+    targetCell.AddComment noteText
+    If Not targetCell.Comment Is Nothing Then targetCell.Comment.Visible = False
+    On Error GoTo 0
+End Sub
+
 ' =========================
 ' Excel Output
 ' =========================
@@ -899,6 +937,7 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     ' Abhängigkeiten: BuildHeaderIndex, SetCellByHeaderMap, ResolveLeadSource, ResolveKontaktName, NormalizePflegegrad, BuildNotes.
     ' Rückgabe: keine (fügt Zeile hinzu).
     Dim newRow As ListRow
+    Dim monthCell As Range
 
     Set newRow = tbl.ListRows.Add
 
@@ -906,6 +945,8 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     Set headerMap = BuildHeaderIndex(tbl)
 
     SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
+    Set monthCell = GetCellByHeaderMap(newRow, headerMap, "Monat Lead erhalten")
+    SetImportNote monthCell
     SetCellByHeaderMap newRow, headerMap, "Lead-Quelle", ResolveLeadSource(fields)
     SetCellByHeaderMap newRow, headerMap, "Leadtyp", leadType
     SetCellByHeaderMap newRow, headerMap, "Status", "Lead erhalten"
