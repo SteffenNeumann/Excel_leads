@@ -385,6 +385,7 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
     If Left$(result, 6) = "ERROR:" Then
         MsgBox "AppleScript-Fehler: " & Mid$(result, 7), vbExclamation
+        LogImportError "AppleScript-Fehler", Mid$(result, 7)
         FetchAppleMailMessages = vbNullString
         Exit Function
     End If
@@ -397,6 +398,7 @@ ErrHandler:
     ' 2) Fehlende Automation-Rechte (Systemeinstellungen > Datenschutz & Sicherheit > Automation)
     ' Excel muss Apple Mail steuern dürfen.
     MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
+    LogImportError "AppleScriptTask-Fehler", Err.Description
     FetchAppleMailMessages = vbNullString
 End Function
 
@@ -482,6 +484,7 @@ Private Function FetchAppleMailFolderList() As String
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
     If Left$(result, 6) = "ERROR:" Then
         MsgBox "AppleScript-Fehler: " & Mid$(result, 7), vbExclamation
+        LogImportError "AppleScript-Fehler", Mid$(result, 7)
         FetchAppleMailFolderList = vbNullString
         Exit Function
     End If
@@ -490,6 +493,7 @@ Private Function FetchAppleMailFolderList() As String
 
 ErrHandler:
     MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
+    LogImportError "AppleScriptTask-Fehler", Err.Description
     FetchAppleMailFolderList = vbNullString
 End Function
 
