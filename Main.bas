@@ -160,17 +160,24 @@ Private Function GetSettingValue(ByVal namedRange As String, ByVal defaultValue 
     ' Rückgabe: String-Wert (trimmed) oder Default.
     Dim v As Variant
     Dim ws As Worksheet
+    Dim found As Boolean
 
     On Error Resume Next
     v = ThisWorkbook.Names(namedRange).RefersToRange.Value
-    If Err.Number <> 0 Then
-        Err.Clear
+    If Err.Number = 0 Then found = True
+    If Err.Number <> 0 Then Err.Clear
+    If Not found Then
         Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
-        If Not ws Is Nothing Then v = ws.Range(namedRange).Value
+        If Err.Number = 0 Then
+            v = ws.Range(namedRange).Value
+            If Err.Number = 0 Then found = True Else Err.Clear
+        Else
+            Err.Clear
+        End If
     End If
     On Error GoTo 0
 
-    If Len(Trim$(CStr(v))) = 0 Then
+    If Not found Then
         GetSettingValue = defaultValue
     Else
         GetSettingValue = Trim$(CStr(v))
