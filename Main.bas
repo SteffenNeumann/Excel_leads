@@ -41,6 +41,7 @@ Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 Private Const SETTINGS_SHEET As String = "Berechnung"
 Private Const NAME_LEAD_MAILBOX As String = "LEAD_MAILBOX"
 Private Const NAME_LEAD_FOLDER As String = "LEAD_FOLDER"
+Private Const NAME_MAILPATH As String = "mailpath"
 Private Const LEAD_MAILBOX_DEFAULT As String = "iCloud"
 Private Const LEAD_FOLDER_DEFAULT As String = "Leads"
 
@@ -223,6 +224,105 @@ Private Function GetLeadFolder() As String
     GetLeadFolder = GetSettingValue(NAME_LEAD_FOLDER, LEAD_FOLDER_DEFAULT)
 End Function
 
+Private Function GetMailPath() As String
+    GetMailPath = GetSettingValue(NAME_MAILPATH, vbNullString)
+End Function
+
+Private Function FolderExists(ByVal folderPath As String) As Boolean
+    If Len(Trim$(folderPath)) = 0 Then Exit Function
+    FolderExists = (Len(Dir$(folderPath, vbDirectory)) > 0)
+End Function
+
+Private Function ReadTextFile(ByVal filePath As String) As String
+    Dim f As Integer
+    Dim txt As String
+    Dim bytes As Long
+
+    On Error GoTo ErrHandler
+    f = FreeFile
+    Open filePath For Binary Access Read As #f
+    bytes = LOF(f)
+    If bytes > 0 Then
+        txt = String$(bytes, vbNullChar)
+        Get #f, , txt
+    End If
+    Close #f
+    ReadTextFile = txt
+    Exit Function
+
+ErrHandler:
+    On Error Resume Next
+    Close #f
+    ReadTextFile = vbNullString
+End Function
+
+Private Function ExtractHeaderValue(ByVal contentText As String, ByVal headerName As String) As String
+    Dim lines() As String
+    Dim i As Long
+    Dim lineText As String
+
+    lines = Split(contentText, vbCrLf)
+    For i = LBound(lines) To UBound(lines)
+        lineText = lines(i)
+        If Len(lineText) = 0 Then Exit For
+        If LCase$(Left$(lineText, Len(headerName))) = LCase$(headerName) Then
+            ExtractHeaderValue = Trim$(Mid$(lineText, Len(headerName) + 1))
+            Exit Function
+        End If
+    Next i
+End Function
+
+Private Function ExtractBodyFromEmail(ByVal contentText As String) As String
+    Dim splitMarker As String
+    Dim pos As Long
+
+    splitMarker = vbCrLf & vbCrLf
+    pos = InStr(1, contentText, splitMarker)
+    If pos > 0 Then
+        ExtractBodyFromEmail = Mid$(contentText, pos + Len(splitMarker))
+    Else
+        ExtractBodyFromEmail = vbNullString
+    End If
+End Function
+
+Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
+    ' Zweck: .eml-Dateien aus Ordner lesen und als MSG-Blocks liefern.
+    Dim fileName As String
+    Dim filePath As String
+    Dim outText As String
+    Dim rawText As String
+    Dim subj As String
+    Dim sender As String
+    Dim dateText As String
+    Dim bodyText As String
+    Dim count As Long
+
+    If Not FolderExists(folderPath) Then Exit Function
+
+    fileName = Dir$(folderPath & "/" & "*.eml")
+    Do While Len(fileName) > 0
+        filePath = folderPath & "/" & fileName
+        rawText = ReadTextFile(filePath)
+        subj = ExtractHeaderValue(rawText, "Subject:")
+        sender = ExtractHeaderValue(rawText, "From:")
+        dateText = ExtractHeaderValue(rawText, "Date:")
+        If Len(dateText) = 0 Then dateText = CStr(FileDateTime(filePath))
+        bodyText = ExtractBodyFromEmail(rawText)
+
+        outText = outText & MSG_DELIM & vbLf
+        outText = outText & DATE_TAG & dateText & vbLf
+        outText = outText & SUBJECT_TAG & subj & vbLf
+        outText = outText & FROM_TAG & sender & vbLf
+        outText = outText & BODY_TAG & bodyText & vbLf
+
+        count = count + 1
+        If count >= MAX_MESSAGES Then Exit Do
+        fileName = Dir$()
+    Loop
+
+    FetchMailMessagesFromPath = outText
+End Function
+
 Private Function BuildExistingLeadIndex(ByVal tbl As ListObject) As Object
     ' Zweck: Index für bestehende Leads aufbauen (ID + Name/Telefon/Monat).
     ' Abhängigkeiten: NewKeyValueStore, BuildHeaderIndex, GetHeaderIndex, AddLeadKey, ExtractIdFromNotes.
@@ -336,10 +436,24 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     Dim q As String
     Dim mailboxName As String
     Dim folderName As String
+    Dim mailPath As String
+    Dim pathResult As String
 
     q = Chr$(34)
     mailboxName = GetLeadMailbox()
     folderName = GetLeadFolder()
+    mailPath = GetMailPath()
+
+    If Len(Trim$(mailPath)) > 0 Then
+        If FolderExists(mailPath) Then
+            pathResult = FetchMailMessagesFromPath(mailPath)
+            FetchAppleMailMessages = pathResult
+            Exit Function
+        Else
+            MsgBox "Mailpath ungültig: " & mailPath, vbExclamation
+            LogImportError "Mailpath ungültig", mailPath
+        End If
+    End If
 
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
