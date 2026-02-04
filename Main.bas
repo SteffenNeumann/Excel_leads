@@ -226,7 +226,7 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     End If
     script = script & "if targetBox is missing value then" & vbLf
     script = script & "try" & vbLf
-    script = script & "set targetBox to first mailbox whose name contains \"" & folderName & "\"" & vbLf
+    script = script & "set targetBox to first mailbox whose name contains " & q & folderName & q & vbLf
     script = script & "end try" & vbLf
     script = script & "end if" & vbLf
     script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: " & folderName & """ & vbLf
