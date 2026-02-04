@@ -229,7 +229,7 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     script = script & "set targetBox to first mailbox whose name contains " & q & folderName & q & vbLf
     script = script & "end try" & vbLf
     script = script & "end if" & vbLf
-    script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: " & folderName & """ & vbLf
+    script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: " & folderName & """" & vbLf
     script = script & "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf
     script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
     script = script & "set outText to """"" & vbLf
