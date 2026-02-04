@@ -279,12 +279,22 @@ ErrHandler:
     ReadTextFile = vbNullString
 End Function
 
+Private Function NormalizeLineEndings(ByVal textIn As String) As String
+    ' Zweck: Zeilenenden vereinheitlichen (CRLF/CR -> LF).
+    Dim s As String
+    s = Replace(textIn, vbCrLf, vbLf)
+    s = Replace(s, vbCr, vbLf)
+    NormalizeLineEndings = s
+End Function
+
 Private Function ExtractHeaderValue(ByVal contentText As String, ByVal headerName As String) As String
     Dim lines() As String
     Dim i As Long
     Dim lineText As String
 
-    lines = Split(contentText, vbCrLf)
+    contentText = NormalizeLineEndings(contentText)
+
+    lines = Split(contentText, vbLf)
     For i = LBound(lines) To UBound(lines)
         lineText = lines(i)
         If Len(lineText) = 0 Then Exit For
@@ -299,7 +309,9 @@ Private Function ExtractBodyFromEmail(ByVal contentText As String) As String
     Dim splitMarker As String
     Dim pos As Long
 
-    splitMarker = vbCrLf & vbCrLf
+    contentText = NormalizeLineEndings(contentText)
+
+    splitMarker = vbLf & vbLf
     pos = InStr(1, contentText, splitMarker)
     If pos > 0 Then
         ExtractBodyFromEmail = Mid$(contentText, pos + Len(splitMarker))
