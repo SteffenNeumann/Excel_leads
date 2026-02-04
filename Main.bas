@@ -920,7 +920,7 @@ Private Sub SetImportNote(ByVal targetCell As Range)
     Dim noteText As String
 
     If targetCell Is Nothing Then Exit Sub
-    noteText = "Automatischer Import vom: " & Format$(Now, "dd.mm.yy hh.nn")
+    noteText = "Automatischer Import vom: " & Format$(Now, "dd.mm.yy hh.nn") & " | Quelle: " & LEAD_SOURCE
 
     On Error Resume Next
     If Not targetCell.Comment Is Nothing Then targetCell.Comment.Delete
