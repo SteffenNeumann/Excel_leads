@@ -38,8 +38,11 @@ Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 ' Zielordner in Apple Mail
 ' LEAD_FOLDER darf Teilstring sein (z. B. "Archiv" für "Archiv — iCloud")
 ' Optional: LEAD_MAILBOX leer lassen, um global zu suchen.
-Private Const LEAD_MAILBOX As String = "iCloud"
-Private Const LEAD_FOLDER As String = "Leads"
+Private Const SETTINGS_SHEET As String = "Berechnung"
+Private Const NAME_LEAD_MAILBOX As String = "LEAD_MAILBOX"
+Private Const NAME_LEAD_FOLDER As String = "LEAD_FOLDER"
+Private Const LEAD_MAILBOX_DEFAULT As String = "iCloud"
+Private Const LEAD_FOLDER_DEFAULT As String = "Leads"
 
 ' =========================
 ' Funktionsübersicht & Abhängigkeiten
@@ -151,6 +154,37 @@ End Sub
 ' =========================
 ' Apple Mail Read
 ' =========================
+Private Function GetSettingValue(ByVal namedRange As String, ByVal defaultValue As String) As String
+    ' Zweck: benannten Bereich lesen, Fallback auf Default.
+    ' Abhängigkeiten: ThisWorkbook.Names, Worksheets, Range.
+    ' Rückgabe: String-Wert (trimmed) oder Default.
+    Dim v As Variant
+    Dim ws As Worksheet
+
+    On Error Resume Next
+    v = ThisWorkbook.Names(namedRange).RefersToRange.Value
+    If Err.Number <> 0 Then
+        Err.Clear
+        Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+        If Not ws Is Nothing Then v = ws.Range(namedRange).Value
+    End If
+    On Error GoTo 0
+
+    If Len(Trim$(CStr(v))) = 0 Then
+        GetSettingValue = defaultValue
+    Else
+        GetSettingValue = Trim$(CStr(v))
+    End If
+End Function
+
+Private Function GetLeadMailbox() As String
+    GetLeadMailbox = GetSettingValue(NAME_LEAD_MAILBOX, LEAD_MAILBOX_DEFAULT)
+End Function
+
+Private Function GetLeadFolder() As String
+    GetLeadFolder = GetSettingValue(NAME_LEAD_FOLDER, LEAD_FOLDER_DEFAULT)
+End Function
+
 Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB As String) As String
     ' Zweck: Apple-Mail-Nachrichten per AppleScript als Text abrufen.
     ' Abhängigkeiten: AppleScriptTask, Konstanten für Tags/Delim, ParseAppleMailDate (indirekt via ParseMessageBlock später).
@@ -159,20 +193,24 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     Dim script As String
     Dim result As String
     Dim q As String
+    Dim mailboxName As String
+    Dim folderName As String
 
     q = Chr$(34)
+    mailboxName = GetLeadMailbox()
+    folderName = GetLeadFolder()
 
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
     script = script & "tell application ""Mail""" & vbLf
     script = script & "set targetBox to missing value" & vbLf
-    If Len(LEAD_MAILBOX) > 0 Then
-        script = script & "set targetAccountName to " & q & LEAD_MAILBOX & q & vbLf
+    If Len(mailboxName) > 0 Then
+        script = script & "set targetAccountName to " & q & mailboxName & q & vbLf
         script = script & "try" & vbLf
         script = script & "repeat with a in accounts" & vbLf
         script = script & "if (name of a) contains targetAccountName then" & vbLf
         script = script & "try" & vbLf
-        script = script & "set targetBox to first mailbox of a whose name contains " & q & LEAD_FOLDER & q & vbLf
+        script = script & "set targetBox to first mailbox of a whose name contains " & q & folderName & q & vbLf
         script = script & "exit repeat" & vbLf
         script = script & "end try" & vbLf
         script = script & "end if" & vbLf
@@ -181,10 +219,10 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     End If
     script = script & "if targetBox is missing value then" & vbLf
     script = script & "try" & vbLf
-    script = script & "set targetBox to first mailbox whose name contains """ & LEAD_FOLDER & """" & vbLf
+    script = script & "set targetBox to first mailbox whose name contains \"" & folderName & "\"" & vbLf
     script = script & "end try" & vbLf
     script = script & "end if" & vbLf
-    script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: " & LEAD_FOLDER & """" & vbLf
+    script = script & "if targetBox is missing value then error \"Mailbox nicht gefunden: " & folderName & "\"" & vbLf
     script = script & "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf
     script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
     script = script & "set outText to """"" & vbLf
@@ -247,13 +285,15 @@ Private Function FetchAppleMailFolderList() As String
     Dim script As String
     Dim result As String
     Dim q As String
+    Dim mailboxName As String
 
     q = Chr$(34)
+    mailboxName = GetLeadMailbox()
 
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
     script = script & "tell application ""Mail""" & vbLf
-    script = script & "set targetAccountName to " & q & LEAD_MAILBOX & q & vbLf
+    script = script & "set targetAccountName to " & q & mailboxName & q & vbLf
     script = script & "script Dump" & vbLf
     script = script & "property outText : " & q & q & vbLf
     script = script & "on addLine(t)" & vbLf
