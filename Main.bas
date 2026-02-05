@@ -51,6 +51,7 @@ Private Const ERROR_LOG_SHEET As String = "ErrLog"
 ' Index für Dublettenprüfung während eines Imports
 Private gLeadIndex As Object
 Private gLeadIndexInitialized As Boolean
+Private gLeadSourceNote As String
 
 ' =========================
 ' Funktionsübersicht & Abhängigkeiten
@@ -125,25 +126,36 @@ Public Sub ImportLeadsFromAppleMail()
     Dim importedCount As Long
     Dim duplicateCount As Long
     Dim errorCount As Long
+    Dim totalBlocks As Long
 
     Set tbl = FindTableByName(TABLE_NAME)
     If tbl Is Nothing Then
+        Application.StatusBar = False
         MsgBox "Tabelle '" & TABLE_NAME & "' nicht gefunden.", vbExclamation
         Exit Sub
     End If
 
+    Application.StatusBar = "Nachrichten abrufen..."
     messagesText = FetchAppleMailMessages(KEYWORD_1, KEYWORD_2)
-    If Len(messagesText) = 0 Then Exit Sub
+    If Len(messagesText) = 0 Then
+        Application.StatusBar = False
+        Exit Sub
+    End If
 
     Set gLeadIndex = BuildExistingLeadIndex(tbl)
     gLeadIndexInitialized = True
 
     messages = Split(messagesText, MSG_DELIM)
+    totalBlocks = UBound(messages) - LBound(messages) + 1
+    Application.StatusBar = "Nachrichten analysieren... 0/" & totalBlocks
 
     For Each msgBlock In messages
         ' Schleife: jeden Nachrichtenblock einzeln verarbeiten.
         If Trim$(msgBlock) <> vbNullString Then
             analyzedCount = analyzedCount + 1
+            If analyzedCount Mod 5 = 0 Then
+                Application.StatusBar = "Nachrichten analysieren... " & analyzedCount & "/" & totalBlocks
+            End If
             On Error GoTo MsgError
             Set payload = ParseMessageBlock(CStr(msgBlock))
 
@@ -173,6 +185,7 @@ Public Sub ImportLeadsFromAppleMail()
 NextMsg:
     Next msgBlock
 
+    Application.StatusBar = False
     MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten übertragen. Duplikate: " & duplicateCount & ". Fehler: " & errorCount & ".", vbInformation
     Exit Sub
 
@@ -473,22 +486,31 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     Dim folderName As String
     Dim mailPath As String
     Dim pathResult As String
+    Dim usedFile As Boolean
+    Dim usedMailbox As Boolean
+    Dim mailResult As String
 
     q = Chr$(34)
     mailboxName = GetLeadMailbox()
     folderName = GetLeadFolder()
     mailPath = GetMailPath()
 
+    result = vbNullString
+
     If Len(Trim$(mailPath)) > 0 Then
         If FolderExists(mailPath) Then
             pathResult = FetchMailMessagesFromPath(mailPath)
-            FetchAppleMailMessages = pathResult
-            Exit Function
+            If Len(pathResult) > 0 Then
+                result = result & pathResult
+                usedFile = True
+            End If
         Else
             MsgBox "Mailpath ungültig: " & mailPath, vbExclamation
             LogImportError "Mailpath ungültig", mailPath
         End If
     End If
+
+    If Len(Trim$(mailboxName)) > 0 And Len(Trim$(folderName)) > 0 Then
 
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
@@ -528,14 +550,25 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     script = script & "end tell" & vbLf
     script = script & "end timeout"
 
-    On Error GoTo ErrHandler
-    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
-    If Left$(result, 6) = "ERROR:" Then
-        MsgBox "AppleScript-Fehler: " & Mid$(result, 7), vbExclamation
-        LogImportError "AppleScript-Fehler", Mid$(result, 7)
-        FetchAppleMailMessages = vbNullString
-        Exit Function
+        On Error GoTo ErrHandler
+        mailResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+        If Left$(mailResult, 6) = "ERROR:" Then
+            MsgBox "AppleScript-Fehler: " & Mid$(mailResult, 7), vbExclamation
+            LogImportError "AppleScript-Fehler", Mid$(mailResult, 7)
+            FetchAppleMailMessages = vbNullString
+            Exit Function
+        End If
+        result = result & mailResult
+        usedMailbox = True
     End If
+
+    gLeadSourceNote = vbNullString
+    If usedFile Then gLeadSourceNote = "Dateiordner: " & mailPath
+    If usedMailbox Then
+        If Len(gLeadSourceNote) > 0 Then gLeadSourceNote = gLeadSourceNote & " | "
+        gLeadSourceNote = gLeadSourceNote & "E-Mail Postfach: " & BuildMailboxSourceLabel(mailboxName, folderName)
+    End If
+
     FetchAppleMailMessages = result
     Exit Function
 
@@ -547,6 +580,20 @@ ErrHandler:
     MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
     LogImportError "AppleScriptTask-Fehler", Err.Description
     FetchAppleMailMessages = vbNullString
+End Function
+
+Private Function BuildMailboxSourceLabel(ByVal mailboxName As String, ByVal folderName As String) As String
+    Dim labelText As String
+
+    labelText = Trim$(mailboxName)
+    If Len(labelText) > 0 And Len(Trim$(folderName)) > 0 Then
+        labelText = labelText & " / " & Trim$(folderName)
+    ElseIf Len(labelText) = 0 Then
+        labelText = Trim$(folderName)
+    End If
+
+    If Len(labelText) = 0 Then labelText = "(unbekannt)"
+    BuildMailboxSourceLabel = labelText
 End Function
 
 Public Sub DebugPrintAppleMailFolders()
@@ -942,7 +989,6 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     Dim currentSection As String
     Dim pendingKey As String
     Dim workText As String
-    Dim posSenior As Long
 
     Set result = NewKeyValueStore()
 
@@ -950,14 +996,18 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     pendingKey = vbNullString
 
     workText = bodyText
-    posSenior = InStr(1, workText, "Informationen zum Senior", vbTextCompare)
-    If posSenior > 0 Then workText = Mid$(workText, posSenior)
 
     lines = Split(workText, vbLf)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
         lineText = Trim$(lines(i))
         If Len(lineText) = 0 Then GoTo NextLine
+
+        If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
+            currentSection = "Kontakt"
+            pendingKey = vbNullString
+            GoTo NextLine
+        End If
 
         If InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 Then
             currentSection = "Senior"
@@ -978,6 +1028,15 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
         End If
 NextLine:
     Next i
+
+    If Len(Trim$(GetField(result, "Senior_Name"))) = 0 Then
+        Dim contactName As String
+        contactName = Trim$(GetField(result, "Kontakt_Name"))
+        If Len(contactName) = 0 Then
+            contactName = Trim$(GetField(result, "Kontakt_Vorname") & " " & GetField(result, "Kontakt_Nachname"))
+        End If
+        If Len(contactName) > 0 Then SetKV result, "Senior_Name", StripNamePrefix(contactName)
+    End If
 
     Set ParseLeadContent = result
 End Function
@@ -1061,6 +1120,24 @@ Private Function NormalizeKey(ByVal rawKey As String) As String
     NormalizeKey = k
 End Function
 
+Private Function StripNamePrefix(ByVal nameText As String) As String
+    Dim s As String
+    Dim sLower As String
+
+    s = Trim$(nameText)
+    sLower = LCase$(s)
+
+    If Left$(sLower, 5) = "herr " Then
+        s = Trim$(Mid$(s, 6))
+    ElseIf Left$(sLower, 6) = "herrn " Then
+        s = Trim$(Mid$(s, 7))
+    ElseIf Left$(sLower, 5) = "frau " Then
+        s = Trim$(Mid$(s, 6))
+    End If
+
+    StripNamePrefix = s
+End Function
+
 Private Function GetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Object, ByVal headerName As String) As Range
     ' Zweck: Zellobjekt anhand Header-Map holen.
     ' Abhängigkeiten: GetHeaderIndex.
@@ -1075,7 +1152,12 @@ Private Sub SetImportNote(ByVal targetCell As Range)
     Dim noteText As String
 
     If targetCell Is Nothing Then Exit Sub
-    noteText = "Automatischer Import vom: " & Format$(Now, "dd.mm.yy hh.nn") & " | Quelle: " & LEAD_SOURCE
+    noteText = "Automatischer Import vom: " & Format$(Now, "dd.mm.yy hh.nn") & " | Quelle: "
+    If Len(Trim$(gLeadSourceNote)) > 0 Then
+        noteText = noteText & gLeadSourceNote
+    Else
+        noteText = noteText & LEAD_SOURCE
+    End If
 
     On Error Resume Next
     If Not targetCell.Comment Is Nothing Then targetCell.Comment.Delete
@@ -1231,7 +1313,7 @@ Private Function ResolveKontaktName(ByVal fields As Object) As String
         fullName = ExtractSenderName(GetField(fields, "From"))
     End If
 
-    fullName = Trim$(fullName)
+    fullName = StripNamePrefix(Trim$(fullName))
     ResolveKontaktName = fullName
 End Function
 
