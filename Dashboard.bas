@@ -46,46 +46,46 @@ Public Sub BuildDashboard()
     ws.Range("A6").Value = "Laufend"
     ws.Range("A7").Value = "Nein"
 
-    ws.Range("B5").FormulaLocal = "=WENNFEHLER(ZÄHLENWENNS(Kundenliste[Abschluss];$A5;Kundenliste[Lead-Quelle];B$4)/ZÄHLENWENN(Kundenliste[Lead-Quelle];B$4);0)"
+    ws.Range("B5").Formula = "=IFERROR(COUNTIFS(Kundenliste[Abschluss],$A5,Kundenliste[Lead-Quelle],B$4)/COUNTIF(Kundenliste[Lead-Quelle],B$4),0)"
     ws.Range("B5:G5").FillRight
     ws.Range("B5:G5").AutoFill Destination:=ws.Range("B5:G7")
 
-    ws.Range("H5").FormulaLocal = "=WENNFEHLER(ZÄHLENWENN(Kundenliste[Abschluss];$A5)/ANZAHL2(Kundenliste[Abschluss]);0)"
+    ws.Range("H5").Formula = "=IFERROR(COUNTIF(Kundenliste[Abschluss],$A5)/COUNTA(Kundenliste[Abschluss]),0)"
     ws.Range("H5").AutoFill Destination:=ws.Range("H5:H7")
 
-    ws.Range("I5").FormulaLocal = "=ZÄHLENWENN(Kundenliste[Abschluss];$A5)"
+    ws.Range("I5").Formula = "=COUNTIF(Kundenliste[Abschluss],$A5)"
     ws.Range("I5").AutoFill Destination:=ws.Range("I5:I7")
 
     ws.Range("B5:H7").NumberFormat = "0.0%"
     ws.Range("I5:I7").NumberFormat = "0"
 
     ' Status Pipeline
-    ws.Range("B12").FormulaLocal = "=TRANSPOSE(SORT(UNIQUE(FILTER(Kundenliste[Status];Kundenliste[Status]<>\"\"))))"
-    ws.Range("B13").FormulaLocal = "=ZÄHLENWENN(Kundenliste[Status];B$12)"
-    ws.Range("B14").FormulaLocal = "=WENNFEHLER(B13/SUMME(B13#);0)"
+    ws.Range("B12").Formula = "=TRANSPOSE(SORT(UNIQUE(FILTER(Kundenliste[Status],Kundenliste[Status]<>\"\"))))"
+    ws.Range("B13").Formula = "=COUNTIF(Kundenliste[Status],B$12)"
+    ws.Range("B14").Formula = "=IFERROR(B13/SUM(B13#),0)"
     ws.Range("B14").NumberFormat = "0.0%"
 
     ' Kosten
-    ws.Range("B19").FormulaLocal = "=TRANSPOSE(SORT(UNIQUE(Kundenliste[Monat Lead erhalten])))"
+    ws.Range("B19").Formula = "=TRANSPOSE(SORT(UNIQUE(Kundenliste[Monat Lead erhalten])))"
     ws.Range("A20").Value = "Verbund"
     ws.Range("A21").Value = "Pflegehelfer24"
     ws.Range("A22").Value = "Empfehlung"
     ws.Range("A23").Value = "Sonstiges"
 
-    ws.Range("B20").FormulaLocal = "=SUMMEWENNS(Kundenliste[Spend];Kundenliste[Lead-Quelle];$A20;Kundenliste[Monat Lead erhalten];B$19)"
+    ws.Range("B20").Formula = "=SUMIFS(Kundenliste[Spend],Kundenliste[Lead-Quelle],$A20,Kundenliste[Monat Lead erhalten],B$19)"
     ws.Range("B20").AutoFill Destination:=ws.Range("B20:H23")
     ws.Range("B20:H23").NumberFormat = "# ##0 €"
 
     ' Abgesprungen nach
-    ws.Range("A26").FormulaLocal = "=SORT(UNIQUE(FILTER(Kundenliste[Abgesprungen nach];Kundenliste[Abgesprungen nach]<>\"\")))"
-    ws.Range("B26").FormulaLocal = "=ZÄHLENWENN(Kundenliste[Abgesprungen nach];A26)"
-    ws.Range("C26").FormulaLocal = "=WENNFEHLER(B26/SUMME(B26#);0)"
+    ws.Range("A26").Formula = "=SORT(UNIQUE(FILTER(Kundenliste[Abgesprungen nach],Kundenliste[Abgesprungen nach]<>\"\")))"
+    ws.Range("B26").Formula = "=COUNTIF(Kundenliste[Abgesprungen nach],A26)"
+    ws.Range("C26").Formula = "=IFERROR(B26/SUM(B26#),0)"
     ws.Range("C26").NumberFormat = "0.0%"
 
     ' Lead Orte
-    ws.Range("A34").FormulaLocal = "=SORT(UNIQUE(FILTER(Kundenliste[Ort];Kundenliste[Ort]<>\"\")))"
-    ws.Range("B34").FormulaLocal = "=XVERWEIS(A34;Kundenliste[Ort];Kundenliste[PLZ];\"\")"
-    ws.Range("C34").FormulaLocal = "=ZÄHLENWENN(Kundenliste[Ort];A34)"
+    ws.Range("A34").Formula = "=SORT(UNIQUE(FILTER(Kundenliste[Ort],Kundenliste[Ort]<>\"\")))"
+    ws.Range("B34").Formula = "=XLOOKUP(A34,Kundenliste[Ort],Kundenliste[PLZ],\"\")"
+    ws.Range("C34").Formula = "=COUNTIF(Kundenliste[Ort],A34)"
 
     ' Visual accents
     ws.Range("B4:I4").Font.Bold = True
