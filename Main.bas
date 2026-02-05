@@ -36,7 +36,7 @@ Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
 Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 
 ' Zielordner in Apple Mail
-' LEAD_FOLDER darf Teilstring sein (z. B. "Archiv" für "Archiv — iCloud")
+' LEAD_FOLDER muss exakter Ordnername sein (z. B. "Archiv")
 ' Optional: LEAD_MAILBOX leer lassen, um global zu suchen.
 Private Const SETTINGS_SHEET As String = "Berechnung"
 Private Const NAME_LEAD_MAILBOX As String = "LEAD_MAILBOX"
@@ -522,7 +522,7 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
         script = script & "repeat with a in accounts" & vbLf
         script = script & "if (name of a) contains targetAccountName then" & vbLf
         script = script & "try" & vbLf
-        script = script & "set targetBox to first mailbox of a whose name contains " & q & folderName & q & vbLf
+        script = script & "set targetBox to first mailbox of a whose name is " & q & folderName & q & vbLf
         script = script & "exit repeat" & vbLf
         script = script & "end try" & vbLf
         script = script & "end if" & vbLf
@@ -531,7 +531,7 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     End If
     script = script & "if targetBox is missing value then" & vbLf
     script = script & "try" & vbLf
-    script = script & "set targetBox to first mailbox whose name contains " & q & folderName & q & vbLf
+    script = script & "set targetBox to first mailbox whose name is " & q & folderName & q & vbLf
     script = script & "end try" & vbLf
     script = script & "end if" & vbLf
     script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: " & folderName & """" & vbLf
