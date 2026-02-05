@@ -186,6 +186,9 @@ NextMsg:
     Next msgBlock
 
     Application.StatusBar = False
+    On Error Resume Next
+    ThisWorkbook.Worksheets(SHEET_NAME).Range("B2").Value = Format$(Now, "hh:nn dd.mm.yy")
+    On Error GoTo 0
     MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten übertragen. Duplikate: " & duplicateCount & ". Fehler: " & errorCount & ".", vbInformation
     Exit Sub
 
@@ -1088,7 +1091,7 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "mobilität": SetKV fields, "Senior_Mobilitaet", valueNorm
         Case "medizinisches": SetKV fields, "Senior_Medizinisches", valueNorm
         Case "behinderung": SetKV fields, "Senior_Behinderung", valueNorm
-        Case "postleitzahl", "plz": SetKV fields, "PLZ", valueNorm
+        Case "postleitzahl", "plz": SetKV fields, "PLZ", CleanPostalCode(valueNorm)
         Case "bedarfsort": SetBedarfsort fields, valueNorm
         Case "nutzer": SetKV fields, "Nutzer", valueNorm
         Case "alltagshilfe aufgaben": SetKV fields, "Alltagshilfe_Aufgaben", valueNorm
@@ -1229,7 +1232,7 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     SetCellByHeaderMap newRow, headerMap, "Status", "Lead erhalten"
     SetCellByHeaderMap newRow, headerMap, "Name", ResolveKontaktName(fields)
     SetCellByHeaderMap newRow, headerMap, "Telefonnummer", GetField(fields, "Kontakt_Mobil")
-    SetCellByHeaderMap newRow, headerMap, "PLZ", GetField(fields, "PLZ")
+    SetCellByHeaderMap newRow, headerMap, "PLZ", CleanPostalCode(GetField(fields, "PLZ"))
     SetCellByHeaderMap newRow, headerMap, "PG", NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
     SetCellByHeaderMap newRow, headerMap, "Notizen", BuildNotes(fields)
 End Sub
@@ -1423,6 +1426,31 @@ Private Function FilterDigits(ByVal textIn As String) As String
         End If
     Next i
     FilterDigits = digits
+End Function
+
+Private Function CleanWhitespace(ByVal textIn As String) As String
+    ' Zweck: Whitespaces normalisieren (inkl. NBSP) und trimmen.
+    Dim s As String
+    s = Replace(textIn, ChrW$(160), " ")
+    s = Replace(s, vbTab, " ")
+    Do While InStr(s, "  ") > 0
+        s = Replace(s, "  ", " ")
+    Loop
+    CleanWhitespace = Trim$(s)
+End Function
+
+Private Function CleanPostalCode(ByVal rawValue As String) As String
+    ' Zweck: PLZ bereinigen (Whitespace/NBSP entfernen, bevorzugt nur Ziffern).
+    Dim cleaned As String
+    Dim digits As String
+
+    cleaned = CleanWhitespace(rawValue)
+    digits = FilterDigits(cleaned)
+    If Len(digits) > 0 Then
+        CleanPostalCode = digits
+    Else
+        CleanPostalCode = cleaned
+    End If
 End Function
 
 Private Function NormalizePflegegrad(ByVal rawValue As String) As String
