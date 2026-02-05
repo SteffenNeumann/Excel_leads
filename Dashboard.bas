@@ -60,7 +60,7 @@ Public Sub BuildDashboard()
     ws.Range("I5:I7").NumberFormat = "0"
 
     ' Status Pipeline
-    ws.Range("B12").Formula = "=TRANSPOSE(SORT(UNIQUE(FILTER(Kundenliste[Status],Kundenliste[Status]<>\"\"))))"
+    ws.Range("B12").Formula = "=TRANSPOSE(SORT(UNIQUE(FILTER(Kundenliste[Status],Kundenliste[Status]<>""""))))"
     ws.Range("B13").Formula = "=COUNTIF(Kundenliste[Status],B$12)"
     ws.Range("B14").Formula = "=IFERROR(B13/SUM(B13#),0)"
     ws.Range("B14").NumberFormat = "0.0%"
@@ -77,14 +77,14 @@ Public Sub BuildDashboard()
     ws.Range("B20:H23").NumberFormat = "# ##0 €"
 
     ' Abgesprungen nach
-    ws.Range("A26").Formula = "=SORT(UNIQUE(FILTER(Kundenliste[Abgesprungen nach],Kundenliste[Abgesprungen nach]<>\"\")))"
+    ws.Range("A26").Formula = "=SORT(UNIQUE(FILTER(Kundenliste[Abgesprungen nach],Kundenliste[Abgesprungen nach]<>"""")))"
     ws.Range("B26").Formula = "=COUNTIF(Kundenliste[Abgesprungen nach],A26)"
     ws.Range("C26").Formula = "=IFERROR(B26/SUM(B26#),0)"
     ws.Range("C26").NumberFormat = "0.0%"
 
     ' Lead Orte
-    ws.Range("A34").Formula = "=SORT(UNIQUE(FILTER(Kundenliste[Ort],Kundenliste[Ort]<>\"\")))"
-    ws.Range("B34").Formula = "=XLOOKUP(A34,Kundenliste[Ort],Kundenliste[PLZ],\"\")"
+    ws.Range("A34").Formula = "=SORT(UNIQUE(FILTER(Kundenliste[Ort],Kundenliste[Ort]<>"""")))"
+    ws.Range("B34").Formula = "=XLOOKUP(A34,Kundenliste[Ort],Kundenliste[PLZ],"""")"
     ws.Range("C34").Formula = "=COUNTIF(Kundenliste[Ort],A34)"
 
     ' Visual accents
