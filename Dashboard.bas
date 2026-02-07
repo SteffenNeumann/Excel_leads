@@ -3,7 +3,7 @@ Option Explicit
 ' ============================================================
 '  Dashboard Builder - Lead Analytics Dashboard
 '  Quelle: Kundenliste (Pipeline-Sheet)
-'  Design: Rounded cards, shadow, teal accent
+'  Design: Rounded cards, shadow, blue accent
 ' ============================================================
 
 Private Sub FormatCard(shp As Shape)
@@ -103,7 +103,7 @@ Public Sub BuildDashboard()
     Do While ws.ChartObjects.Count > 0: ws.ChartObjects(1).Delete: Loop
 
     ' Background & fonts
-    ws.Cells.Interior.Color = RGB(248, 250, 252)
+    ws.Cells.Interior.Color = RGB(245, 248, 252)
     ws.Cells.Font.Name = "Avenir Next"
     ws.Cells.Font.Size = 10
     ws.Cells.Font.Color = RGB(15, 23, 42)
@@ -236,7 +236,7 @@ NextRow:
 
     ' ===== TITLE =====
     yPos = 15
-    AddLabel ws, LM, yPos, 300, 30, "Dashboard", 20, True, RGB(15, 23, 42)
+    AddLabel ws, LM, yPos, 300, 30, "Dashboard", 20, True, RGB(25, 55, 95)
     yPos = yPos + 42
 
     ' ===== KPI CARDS =====
@@ -244,44 +244,44 @@ NextRow:
     xPos = LM
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, xPos, yPos, CW, CH)
     FormatCard shp
-    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Gesamt Leads", 10, False, RGB(100, 116, 139)
-    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalLeads), 28, True, RGB(15, 23, 42)
+    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Gesamt Leads", 10, False, RGB(100, 120, 150)
+    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalLeads), 28, True, RGB(25, 55, 95)
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 4, yPos + 10, 4, CH - 20)
-    shp.Fill.ForeColor.RGB = RGB(15, 150, 140)
+    shp.Fill.ForeColor.RGB = RGB(50, 110, 165)
     shp.Line.Visible = msoFalse
 
     ' Card 2: Abschlussrate
     xPos = xPos + CW + CG
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, xPos, yPos, CW, CH)
     FormatCard shp
-    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Abschlussrate", 10, False, RGB(100, 116, 139)
-    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, Format(abschlussRate, "0.0%"), 28, True, RGB(15, 150, 140)
+    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Abschlussrate", 10, False, RGB(100, 120, 150)
+    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, Format(abschlussRate, "0.0%"), 28, True, RGB(50, 110, 165)
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 4, yPos + 10, 4, CH - 20)
-    shp.Fill.ForeColor.RGB = RGB(15, 150, 140)
+    shp.Fill.ForeColor.RGB = RGB(50, 110, 165)
     shp.Line.Visible = msoFalse
 
     ' Card 3: Abspruenge
     xPos = xPos + CW + CG
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, xPos, yPos, CW, CH)
     FormatCard shp
-    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Abspruenge", 10, False, RGB(100, 116, 139)
-    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalDropped), 28, True, RGB(168, 112, 108)
+    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Abspruenge", 10, False, RGB(100, 120, 150)
+    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalDropped), 28, True, RGB(140, 160, 185)
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 4, yPos + 10, 4, CH - 20)
-    shp.Fill.ForeColor.RGB = RGB(168, 112, 108)
+    shp.Fill.ForeColor.RGB = RGB(140, 160, 185)
     shp.Line.Visible = msoFalse
 
     ' Card 4: Laufend
     xPos = xPos + CW + CG
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, xPos, yPos, CW, CH)
     FormatCard shp
-    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Laufend", 10, False, RGB(100, 116, 139)
-    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalLaufend), 28, True, RGB(100, 140, 180)
+    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Laufend", 10, False, RGB(100, 120, 150)
+    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalLaufend), 28, True, RGB(95, 145, 190)
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 4, yPos + 10, 4, CH - 20)
-    shp.Fill.ForeColor.RGB = RGB(100, 140, 180)
+    shp.Fill.ForeColor.RGB = RGB(95, 145, 190)
     shp.Line.Visible = msoFalse
 
     ' ===== CHART DATA (hidden columns T-W) =====
@@ -314,7 +314,7 @@ NextRow:
         xPos, yPos, CHW, CHH)
     FormatCard shp
     AddLabel ws, xPos + 15, yPos + 10, 260, 20, _
-        "Leads & Abschluss Trend", 13, True, RGB(15, 23, 42)
+        "Leads & Abschluss Trend", 13, True, RGB(25, 55, 95)
 
     If mCount > 0 Then
         Dim rngChart1 As Range
@@ -332,21 +332,21 @@ NextRow:
             .Legend.Font.Name = "Avenir Next"
             If .SeriesCollection.Count >= 1 Then
                 With .SeriesCollection(1)
-                    .Format.Line.ForeColor.RGB = RGB(15, 150, 140)
+                    .Format.Line.ForeColor.RGB = RGB(50, 110, 165)
                     .Format.Line.Weight = 2.5
                     .MarkerStyle = xlMarkerStyleCircle
                     .MarkerSize = 7
-                    .MarkerForegroundColor = RGB(15, 150, 140)
+                    .MarkerForegroundColor = RGB(50, 110, 165)
                     .MarkerBackgroundColor = RGB(255, 255, 255)
                 End With
             End If
             If .SeriesCollection.Count >= 2 Then
                 With .SeriesCollection(2)
-                    .Format.Line.ForeColor.RGB = RGB(100, 140, 180)
+                    .Format.Line.ForeColor.RGB = RGB(95, 145, 190)
                     .Format.Line.Weight = 2.5
                     .MarkerStyle = xlMarkerStyleCircle
                     .MarkerSize = 7
-                    .MarkerForegroundColor = RGB(100, 140, 180)
+                    .MarkerForegroundColor = RGB(95, 145, 190)
                     .MarkerBackgroundColor = RGB(255, 255, 255)
                 End With
             End If
@@ -363,7 +363,7 @@ NextRow:
         xPos, yPos, CHW, CHH)
     FormatCard shp
     AddLabel ws, xPos + 15, yPos + 10, 260, 20, _
-        "Absprung Trend", 13, True, RGB(15, 23, 42)
+        "Absprung Trend", 13, True, RGB(25, 55, 95)
 
     If mCount > 0 Then
         Dim rngChart2 As Range
@@ -377,7 +377,7 @@ NextRow:
             .HasLegend = False
             On Error Resume Next
             If .SeriesCollection.Count >= 1 Then
-                .SeriesCollection(1).Format.Fill.ForeColor.RGB = RGB(168, 112, 108)
+                .SeriesCollection(1).Format.Fill.ForeColor.RGB = RGB(140, 160, 185)
             End If
             .PlotArea.Format.Fill.Visible = msoFalse
             .ChartArea.Format.Fill.Visible = msoFalse
@@ -399,32 +399,32 @@ NextRow:
         xPos, yPos, CHW, abgCardH)
     FormatCard shp
     AddLabel ws, xPos + 15, yPos + 10, 260, 20, _
-        "Absprunggruende", 13, True, RGB(15, 23, 42)
+        "Absprunggruende", 13, True, RGB(25, 55, 95)
 
     tblTop = yPos + 38
     AddLabel ws, xPos + 15, tblTop, 250, rowH, _
-        "Grund", 9, True, RGB(100, 116, 139)
+        "Grund", 9, True, RGB(100, 120, 150)
     AddLabel ws, xPos + 280, tblTop, 50, rowH, _
-        "Anz.", 9, True, RGB(100, 116, 139)
+        "Anz.", 9, True, RGB(100, 120, 150)
     AddLabel ws, xPos + 340, tblTop, 60, rowH, _
-        "Anteil", 9, True, RGB(100, 116, 139)
+        "Anteil", 9, True, RGB(100, 120, 150)
 
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 15, tblTop + rowH, CHW - 30, 1)
-    shp.Fill.ForeColor.RGB = RGB(226, 232, 240)
+    shp.Fill.ForeColor.RGB = RGB(215, 225, 235)
     shp.Line.Visible = msoFalse
 
     For i = 1 To rCount: totalReasons = totalReasons + rCounts(i): Next i
     For i = 1 To maxR
         ry = tblTop + rowH + 4 + (i - 1) * (rowH + 2)
         AddLabel ws, xPos + 15, ry, 260, rowH, _
-            rLabels(i), 9, False, RGB(71, 85, 105)
+            rLabels(i), 9, False, RGB(65, 85, 110)
         AddLabel ws, xPos + 280, ry, 50, rowH, _
-            CStr(rCounts(i)), 9, False, RGB(71, 85, 105)
+            CStr(rCounts(i)), 9, False, RGB(65, 85, 110)
         If totalReasons > 0 Then
             AddLabel ws, xPos + 340, ry, 60, rowH, _
                 Format(rCounts(i) / totalReasons, "0.0%"), _
-                9, False, RGB(71, 85, 105)
+                9, False, RGB(65, 85, 110)
         End If
     Next i
 
@@ -434,17 +434,17 @@ NextRow:
         xPos, yPos, CHW, abgCardH)
     FormatCard shp
     AddLabel ws, xPos + 15, yPos + 10, 300, 20, _
-        "Insights & Empfehlungen", 13, True, RGB(15, 23, 42)
+        "Insights & Empfehlungen", 13, True, RGB(25, 55, 95)
 
     iy = yPos + 42
 
     ' Insight 1: Top Absprunggrund
     If rCount > 0 Then
         AddLabel ws, xPos + 15, iy, 380, 14, _
-            "Top Absprunggrund", 9, False, RGB(100, 116, 139)
+            "Top Absprunggrund", 9, False, RGB(100, 120, 150)
         AddLabel ws, xPos + 15, iy + 15, 380, 16, _
             rLabels(1) & " (" & rCounts(1) & "x)", _
-            11, True, RGB(168, 112, 108)
+            11, True, RGB(140, 160, 185)
         iy = iy + lineH + 6
     End If
 
@@ -455,10 +455,10 @@ NextRow:
     Next i
     If mCount > 0 Then
         AddLabel ws, xPos + 15, iy, 380, 14, _
-            "Peak Leads Monat", 9, False, RGB(100, 116, 139)
+            "Peak Leads Monat", 9, False, RGB(100, 120, 150)
         AddLabel ws, xPos + 15, iy + 15, 380, 16, _
             mLabels(peakIdx) & " (" & mLeads(peakIdx) & " Leads)", _
-            11, True, RGB(15, 150, 140)
+            11, True, RGB(50, 110, 165)
         iy = iy + lineH + 6
     End If
 
@@ -470,20 +470,20 @@ NextRow:
     Next i
     If mCount > 0 Then
         AddLabel ws, xPos + 15, iy, 380, 14, _
-            "Schwaechste Abschlussrate", 9, False, RGB(100, 116, 139)
+            "Schwaechste Abschlussrate", 9, False, RGB(100, 120, 150)
         AddLabel ws, xPos + 15, iy + 15, 380, 16, _
             mLabels(worstIdx) & " (" & Format(worstRate, "0.0%") & ")", _
-            11, True, RGB(190, 162, 95)
+            11, True, RGB(95, 145, 190)
         iy = iy + lineH + 6
     End If
 
     ' Insight 4: Haeufigster Absprungzeitpunkt
     If aCount > 0 Then
         AddLabel ws, xPos + 15, iy, 380, 14, _
-            "Haeufigster Absprungzeitpunkt", 9, False, RGB(100, 116, 139)
+            "Haeufigster Absprungzeitpunkt", 9, False, RGB(100, 120, 150)
         AddLabel ws, xPos + 15, iy + 15, 380, 16, _
             aLabels(1) & " (" & aCounts(1) & "x)", _
-            11, True, RGB(168, 112, 108)
+            11, True, RGB(140, 160, 185)
     End If
 
     ' ===== BOTTOM ROW 2: Abgesprungen nach + Monatsuebersicht =====
@@ -495,19 +495,19 @@ NextRow:
         xPos, yPos, CHW, TH)
     FormatCard shp
     AddLabel ws, xPos + 15, yPos + 10, 300, 20, _
-        "Abgesprungen nach Zeitpunkt", 13, True, RGB(15, 23, 42)
+        "Abgesprungen nach Zeitpunkt", 13, True, RGB(25, 55, 95)
 
     tblTop = yPos + 38
     AddLabel ws, xPos + 15, tblTop, 250, rowH, _
-        "Zeitpunkt", 9, True, RGB(100, 116, 139)
+        "Zeitpunkt", 9, True, RGB(100, 120, 150)
     AddLabel ws, xPos + 280, tblTop, 50, rowH, _
-        "Anz.", 9, True, RGB(100, 116, 139)
+        "Anz.", 9, True, RGB(100, 120, 150)
     AddLabel ws, xPos + 340, tblTop, 60, rowH, _
-        "Anteil", 9, True, RGB(100, 116, 139)
+        "Anteil", 9, True, RGB(100, 120, 150)
 
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 15, tblTop + rowH, CHW - 30, 1)
-    shp.Fill.ForeColor.RGB = RGB(226, 232, 240)
+    shp.Fill.ForeColor.RGB = RGB(215, 225, 235)
     shp.Line.Visible = msoFalse
 
     For i = 1 To aCount: totalAbg = totalAbg + aCounts(i): Next i
@@ -515,13 +515,13 @@ NextRow:
     For i = 1 To maxA
         ry = tblTop + rowH + 4 + (i - 1) * (rowH + 2)
         AddLabel ws, xPos + 15, ry, 260, rowH, _
-            aLabels(i), 9, False, RGB(71, 85, 105)
+            aLabels(i), 9, False, RGB(65, 85, 110)
         AddLabel ws, xPos + 280, ry, 50, rowH, _
-            CStr(aCounts(i)), 9, False, RGB(71, 85, 105)
+            CStr(aCounts(i)), 9, False, RGB(65, 85, 110)
         If totalAbg > 0 Then
             AddLabel ws, xPos + 340, ry, 60, rowH, _
                 Format(aCounts(i) / totalAbg, "0.0%"), _
-                9, False, RGB(71, 85, 105)
+                9, False, RGB(65, 85, 110)
         End If
     Next i
 
@@ -531,23 +531,23 @@ NextRow:
         xPos, yPos, CHW, TH)
     FormatCard shp
     AddLabel ws, xPos + 15, yPos + 10, 300, 20, _
-        "Monatsuebersicht", 13, True, RGB(15, 23, 42)
+        "Monatsuebersicht", 13, True, RGB(25, 55, 95)
 
     tblTop = yPos + 38
     AddLabel ws, xPos + 15, tblTop, 80, rowH, _
-        "Monat", 9, True, RGB(100, 116, 139)
+        "Monat", 9, True, RGB(100, 120, 150)
     AddLabel ws, xPos + 110, tblTop, 60, rowH, _
-        "Leads", 9, True, RGB(100, 116, 139)
+        "Leads", 9, True, RGB(100, 120, 150)
     AddLabel ws, xPos + 190, tblTop, 80, rowH, _
-        "Abgeschl.", 9, True, RGB(100, 116, 139)
+        "Abgeschl.", 9, True, RGB(100, 120, 150)
     AddLabel ws, xPos + 280, tblTop, 80, rowH, _
-        "Abgespr.", 9, True, RGB(100, 116, 139)
+        "Abgespr.", 9, True, RGB(100, 120, 150)
     AddLabel ws, xPos + 350, tblTop, 60, rowH, _
-        "Rate", 9, True, RGB(100, 116, 139)
+        "Rate", 9, True, RGB(100, 120, 150)
 
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 15, tblTop + rowH, CHW - 30, 1)
-    shp.Fill.ForeColor.RGB = RGB(226, 232, 240)
+    shp.Fill.ForeColor.RGB = RGB(215, 225, 235)
     shp.Line.Visible = msoFalse
 
     maxM = mCount: If maxM > 9 Then maxM = 9
@@ -555,17 +555,17 @@ NextRow:
         mi2 = mCount - maxM + i
         ry = tblTop + rowH + 4 + (i - 1) * (rowH + 2)
         AddLabel ws, xPos + 15, ry, 80, rowH, _
-            mLabels(mi2), 9, False, RGB(71, 85, 105)
+            mLabels(mi2), 9, False, RGB(65, 85, 110)
         AddLabel ws, xPos + 110, ry, 60, rowH, _
-            CStr(mLeads(mi2)), 9, True, RGB(15, 23, 42)
+            CStr(mLeads(mi2)), 9, True, RGB(25, 55, 95)
         AddLabel ws, xPos + 190, ry, 80, rowH, _
-            CStr(mClosed(mi2)), 9, False, RGB(15, 150, 140)
+            CStr(mClosed(mi2)), 9, False, RGB(50, 110, 165)
         AddLabel ws, xPos + 280, ry, 80, rowH, _
-            CStr(mDropped(mi2)), 9, False, RGB(168, 112, 108)
+            CStr(mDropped(mi2)), 9, False, RGB(140, 160, 185)
         If mLeads(mi2) > 0 Then
             AddLabel ws, xPos + 350, ry, 60, rowH, _
                 Format(mClosed(mi2) / mLeads(mi2), "0.0%"), _
-                9, False, RGB(71, 85, 105)
+                9, False, RGB(65, 85, 110)
         End If
     Next i
 
