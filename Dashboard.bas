@@ -295,12 +295,20 @@ NextRow:
         ws.Cells(1 + i, dataCol + 2).Value = mClosed(i)
         ws.Cells(1 + i, dataCol + 3).Value = mDropped(i)
     Next i
-    ' Columns bleiben sichtbar bis Charts erstellt sind
+
+    ' Chart 2 benoetigt eigene Spalten (Monat + Abgesprungen)
+    Dim dataCol2 As Long: dataCol2 = dataCol + 4
+    ws.Cells(1, dataCol2).Value = "Monat"
+    ws.Cells(1, dataCol2 + 1).Value = "Abgesprungen"
+    For i = 1 To mCount
+        ws.Cells(1 + i, dataCol2).Value = mLabels(i)
+        ws.Cells(1 + i, dataCol2 + 1).Value = mDropped(i)
+    Next i
 
     ' ===== CHARTS SECTION =====
     yPos = yPos + CH + SG
 
-    ' -- Chart 1: Leads & Abschluss Trend --
+    ' -- Chart 1: Leads & Abschluss Trend (SetSourceData) --
     xPos = LM
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
         xPos, yPos, CHW, CHH)
@@ -309,49 +317,39 @@ NextRow:
         "Leads & Abschluss Trend", 13, True, RGB(31, 41, 55)
 
     If mCount > 0 Then
+        Dim rngChart1 As Range
+        Set rngChart1 = ws.Range(ws.Cells(1, dataCol), ws.Cells(1 + mCount, dataCol + 2))
         Set chartObj = ws.ChartObjects.Add( _
             xPos + 10, yPos + 35, CHW - 20, CHH - 50)
         With chartObj.Chart
+            .SetSourceData Source:=rngChart1, PlotBy:=xlColumns
             .ChartType = xlLineMarkers
             .HasTitle = False
             .HasLegend = True
             .Legend.Position = xlLegendPositionBottom
+            On Error Resume Next
             .Legend.Font.Size = 8
             .Legend.Font.Name = "Avenir Next"
-            Do While .SeriesCollection.Count > 0
-                .SeriesCollection(1).Delete
-            Loop
-            With .SeriesCollection.NewSeries
-                .Name = "Leads"
-                .XValues = ws.Range(ws.Cells(2, dataCol), _
-                    ws.Cells(1 + mCount, dataCol))
-                .Values = ws.Range(ws.Cells(2, dataCol + 1), _
-                    ws.Cells(1 + mCount, dataCol + 1))
-                On Error Resume Next
-                .Format.Line.ForeColor.RGB = RGB(16, 185, 129)
-                .Format.Line.Weight = 2.5
-                .MarkerStyle = xlMarkerStyleCircle
-                .MarkerSize = 7
-                .MarkerForegroundColor = RGB(16, 185, 129)
-                .MarkerBackgroundColor = RGB(255, 255, 255)
-                On Error GoTo 0
-            End With
-            With .SeriesCollection.NewSeries
-                .Name = "Abgeschlossen"
-                .XValues = ws.Range(ws.Cells(2, dataCol), _
-                    ws.Cells(1 + mCount, dataCol))
-                .Values = ws.Range(ws.Cells(2, dataCol + 2), _
-                    ws.Cells(1 + mCount, dataCol + 2))
-                On Error Resume Next
-                .Format.Line.ForeColor.RGB = RGB(59, 130, 246)
-                .Format.Line.Weight = 2.5
-                .MarkerStyle = xlMarkerStyleCircle
-                .MarkerSize = 7
-                .MarkerForegroundColor = RGB(59, 130, 246)
-                .MarkerBackgroundColor = RGB(255, 255, 255)
-                On Error GoTo 0
-            End With
-            On Error Resume Next
+            If .SeriesCollection.Count >= 1 Then
+                With .SeriesCollection(1)
+                    .Format.Line.ForeColor.RGB = RGB(16, 185, 129)
+                    .Format.Line.Weight = 2.5
+                    .MarkerStyle = xlMarkerStyleCircle
+                    .MarkerSize = 7
+                    .MarkerForegroundColor = RGB(16, 185, 129)
+                    .MarkerBackgroundColor = RGB(255, 255, 255)
+                End With
+            End If
+            If .SeriesCollection.Count >= 2 Then
+                With .SeriesCollection(2)
+                    .Format.Line.ForeColor.RGB = RGB(59, 130, 246)
+                    .Format.Line.Weight = 2.5
+                    .MarkerStyle = xlMarkerStyleCircle
+                    .MarkerSize = 7
+                    .MarkerForegroundColor = RGB(59, 130, 246)
+                    .MarkerBackgroundColor = RGB(255, 255, 255)
+                End With
+            End If
             .PlotArea.Format.Fill.Visible = msoFalse
             .ChartArea.Format.Fill.Visible = msoFalse
             .ChartArea.Format.Line.Visible = msoFalse
@@ -359,7 +357,7 @@ NextRow:
         End With
     End If
 
-    ' -- Chart 2: Absprung Trend --
+    ' -- Chart 2: Absprung Trend (SetSourceData) --
     xPos = LM + CHW + CG
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
         xPos, yPos, CHW, CHH)
@@ -368,26 +366,19 @@ NextRow:
         "Absprung Trend", 13, True, RGB(31, 41, 55)
 
     If mCount > 0 Then
+        Dim rngChart2 As Range
+        Set rngChart2 = ws.Range(ws.Cells(1, dataCol2), ws.Cells(1 + mCount, dataCol2 + 1))
         Set chartObj = ws.ChartObjects.Add( _
             xPos + 10, yPos + 35, CHW - 20, CHH - 50)
         With chartObj.Chart
+            .SetSourceData Source:=rngChart2, PlotBy:=xlColumns
             .ChartType = xlColumnClustered
             .HasTitle = False
             .HasLegend = False
-            Do While .SeriesCollection.Count > 0
-                .SeriesCollection(1).Delete
-            Loop
-            With .SeriesCollection.NewSeries
-                .Name = "Abgesprungen"
-                .XValues = ws.Range(ws.Cells(2, dataCol), _
-                    ws.Cells(1 + mCount, dataCol))
-                .Values = ws.Range(ws.Cells(2, dataCol + 3), _
-                    ws.Cells(1 + mCount, dataCol + 3))
-                On Error Resume Next
-                .Format.Fill.ForeColor.RGB = RGB(239, 68, 68)
-                On Error GoTo 0
-            End With
             On Error Resume Next
+            If .SeriesCollection.Count >= 1 Then
+                .SeriesCollection(1).Format.Fill.ForeColor.RGB = RGB(239, 68, 68)
+            End If
             .PlotArea.Format.Fill.Visible = msoFalse
             .ChartArea.Format.Fill.Visible = msoFalse
             .ChartArea.Format.Line.Visible = msoFalse
@@ -396,7 +387,7 @@ NextRow:
     End If
 
     ' Jetzt Daten-Spalten verstecken (nach Chart-Erstellung)
-    ws.Columns(dataCol).Resize(, 4).Hidden = True
+    ws.Columns(dataCol).Resize(, 6).Hidden = True
 
     ' ===== BOTTOM ROW 1: Absprunggruende + Insights =====
     yPos = yPos + CHH + SG
