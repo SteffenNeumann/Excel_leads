@@ -244,21 +244,8 @@ NextRow:
     xPos = LM
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, xPos, yPos, CW, CH)
     FormatCard shp
-    With shp.TextFrame2
-        .VerticalAnchor = msoAnchorTop
-        .MarginLeft = 20: .MarginTop = 15: .MarginRight = 10
-        .WordWrap = msoTrue
-        .TextRange.Text = "Gesamt Leads" & vbLf & CStr(totalLeads)
-        With .TextRange.Paragraphs(1).Font
-            .Size = 10: .Fill.ForeColor.RGB = RGB(107, 114, 128)
-            .Name = "Avenir Next"
-        End With
-        With .TextRange.Paragraphs(2).Font
-            .Size = 28: .Bold = msoTrue
-            .Fill.ForeColor.RGB = RGB(31, 41, 55)
-            .Name = "Avenir Next"
-        End With
-    End With
+    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Gesamt Leads", 10, False, RGB(107, 114, 128)
+    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalLeads), 28, True, RGB(31, 41, 55)
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 4, yPos + 10, 4, CH - 20)
     shp.Fill.ForeColor.RGB = RGB(16, 185, 129)
@@ -268,21 +255,8 @@ NextRow:
     xPos = xPos + CW + CG
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, xPos, yPos, CW, CH)
     FormatCard shp
-    With shp.TextFrame2
-        .VerticalAnchor = msoAnchorTop
-        .MarginLeft = 20: .MarginTop = 15: .MarginRight = 10
-        .WordWrap = msoTrue
-        .TextRange.Text = "Abschlussrate" & vbLf & Format(abschlussRate, "0.0%")
-        With .TextRange.Paragraphs(1).Font
-            .Size = 10: .Fill.ForeColor.RGB = RGB(107, 114, 128)
-            .Name = "Avenir Next"
-        End With
-        With .TextRange.Paragraphs(2).Font
-            .Size = 28: .Bold = msoTrue
-            .Fill.ForeColor.RGB = RGB(16, 185, 129)
-            .Name = "Avenir Next"
-        End With
-    End With
+    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Abschlussrate", 10, False, RGB(107, 114, 128)
+    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, Format(abschlussRate, "0.0%"), 28, True, RGB(16, 185, 129)
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 4, yPos + 10, 4, CH - 20)
     shp.Fill.ForeColor.RGB = RGB(16, 185, 129)
@@ -292,21 +266,8 @@ NextRow:
     xPos = xPos + CW + CG
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, xPos, yPos, CW, CH)
     FormatCard shp
-    With shp.TextFrame2
-        .VerticalAnchor = msoAnchorTop
-        .MarginLeft = 20: .MarginTop = 15: .MarginRight = 10
-        .WordWrap = msoTrue
-        .TextRange.Text = "Abspruenge" & vbLf & CStr(totalDropped)
-        With .TextRange.Paragraphs(1).Font
-            .Size = 10: .Fill.ForeColor.RGB = RGB(107, 114, 128)
-            .Name = "Avenir Next"
-        End With
-        With .TextRange.Paragraphs(2).Font
-            .Size = 28: .Bold = msoTrue
-            .Fill.ForeColor.RGB = RGB(239, 68, 68)
-            .Name = "Avenir Next"
-        End With
-    End With
+    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Abspruenge", 10, False, RGB(107, 114, 128)
+    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalDropped), 28, True, RGB(239, 68, 68)
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 4, yPos + 10, 4, CH - 20)
     shp.Fill.ForeColor.RGB = RGB(239, 68, 68)
@@ -316,21 +277,8 @@ NextRow:
     xPos = xPos + CW + CG
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, xPos, yPos, CW, CH)
     FormatCard shp
-    With shp.TextFrame2
-        .VerticalAnchor = msoAnchorTop
-        .MarginLeft = 20: .MarginTop = 15: .MarginRight = 10
-        .WordWrap = msoTrue
-        .TextRange.Text = "Laufend" & vbLf & CStr(totalLaufend)
-        With .TextRange.Paragraphs(1).Font
-            .Size = 10: .Fill.ForeColor.RGB = RGB(107, 114, 128)
-            .Name = "Avenir Next"
-        End With
-        With .TextRange.Paragraphs(2).Font
-            .Size = 28: .Bold = msoTrue
-            .Fill.ForeColor.RGB = RGB(59, 130, 246)
-            .Name = "Avenir Next"
-        End With
-    End With
+    AddLabel ws, xPos + 20, yPos + 12, CW - 30, 16, "Laufend", 10, False, RGB(107, 114, 128)
+    AddLabel ws, xPos + 20, yPos + 32, CW - 30, 40, CStr(totalLaufend), 28, True, RGB(59, 130, 246)
     Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
         xPos + 4, yPos + 10, 4, CH - 20)
     shp.Fill.ForeColor.RGB = RGB(59, 130, 246)
