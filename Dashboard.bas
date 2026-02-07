@@ -295,7 +295,7 @@ NextRow:
         ws.Cells(1 + i, dataCol + 2).Value = mClosed(i)
         ws.Cells(1 + i, dataCol + 3).Value = mDropped(i)
     Next i
-    ws.Columns(dataCol).Resize(, 4).Hidden = True
+    ' Columns bleiben sichtbar bis Charts erstellt sind
 
     ' ===== CHARTS SECTION =====
     yPos = yPos + CH + SG
@@ -395,13 +395,20 @@ NextRow:
         End With
     End If
 
+    ' Jetzt Daten-Spalten verstecken (nach Chart-Erstellung)
+    ws.Columns(dataCol).Resize(, 4).Hidden = True
+
     ' ===== BOTTOM ROW 1: Absprunggruende + Insights =====
     yPos = yPos + CHH + SG
 
     ' -- Absprunggruende Card --
     xPos = LM
+    maxR = rCount: If maxR > 9 Then maxR = 9
+    Dim abgCardH As Double
+    abgCardH = 50 + maxR * (rowH + 2) + 10
+    If abgCardH < TH Then abgCardH = TH
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
-        xPos, yPos, CHW, TH)
+        xPos, yPos, CHW, abgCardH)
     FormatCard shp
     AddLabel ws, xPos + 15, yPos + 10, 260, 20, _
         "Absprunggruende", 13, True, RGB(31, 41, 55)
@@ -420,7 +427,6 @@ NextRow:
     shp.Line.Visible = msoFalse
 
     For i = 1 To rCount: totalReasons = totalReasons + rCounts(i): Next i
-    maxR = rCount: If maxR > 9 Then maxR = 9
     For i = 1 To maxR
         ry = tblTop + rowH + 4 + (i - 1) * (rowH + 2)
         AddLabel ws, xPos + 15, ry, 260, rowH, _
@@ -437,7 +443,7 @@ NextRow:
     ' -- Insights Card --
     xPos = LM + CHW + CG
     Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
-        xPos, yPos, CHW, TH)
+        xPos, yPos, CHW, abgCardH)
     FormatCard shp
     AddLabel ws, xPos + 15, yPos + 10, 300, 20, _
         "Insights & Empfehlungen", 13, True, RGB(31, 41, 55)
@@ -493,7 +499,7 @@ NextRow:
     End If
 
     ' ===== BOTTOM ROW 2: Abgesprungen nach + Monatsuebersicht =====
-    yPos = yPos + TH + SG
+    yPos = yPos + abgCardH + SG
 
     ' -- Abgesprungen nach Zeitpunkt --
     xPos = LM
