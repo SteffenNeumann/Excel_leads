@@ -6,7 +6,7 @@ Option Explicit
 ' Dieses Modul liest Apple Mail oder Outlook Nachrichten mit den Schlagworten "Lead" oder
 ' "Neue Anfrage", parst die Inhalte und schreibt die Daten in die intelligente
 ' Tabelle "Kundenliste" auf dem Blatt "Pipeline".
-' Mail-App konfigurierbar über LEAD_MAIL_APP ("Apple Mail" oder "Outlook").
+' Mail-App wird automatisch erkannt: LEAD_MAILBOX mit "@" -> Outlook, sonst Apple Mail.
 '
 ' Fokus: clean, simpel, skalierbar
 ' - klare Unterfunktionen
@@ -37,15 +37,14 @@ Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
 Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 
 ' Zielordner in Apple Mail / Outlook
-' LEAD_FOLDER muss exakter Ordnername sein (z. B. "Archiv")
-' Optional: LEAD_MAILBOX leer lassen, um global zu suchen.
-' LEAD_MAIL_APP: "Apple Mail" (Default) oder "Outlook"
+' LEAD_FOLDER muss exakter Ordnername sein (z. B. "Archiv", "Leads", "Posteingang")
+' LEAD_MAILBOX bestimmt automatisch die Mail-App:
+'   - Enthält "@" oder "outlook" oder "exchange" -> Microsoft Outlook
+'   - Sonst (z.B. "iCloud") -> Apple Mail
 Private Const SETTINGS_SHEET As String = "Berechnung"
-Private Const NAME_LEAD_MAIL_APP As String = "LEAD_MAIL_APP"
 Private Const NAME_LEAD_MAILBOX As String = "LEAD_MAILBOX"
 Private Const NAME_LEAD_FOLDER As String = "LEAD_FOLDER"
 Private Const NAME_MAILPATH As String = "mailpath"
-Private Const LEAD_MAIL_APP_DEFAULT As String = "Apple Mail"
 Private Const LEAD_MAILBOX_DEFAULT As String = "iCloud"
 Private Const LEAD_FOLDER_DEFAULT As String = "Leads"
 
@@ -64,7 +63,7 @@ Private gLeadSourceNote As String
 ' FetchAppleMailMessages: Baut AppleScript (Apple Mail oder Outlook), ruft AppleScriptTask; liefert zusammengefasste Roh-Nachrichten.
 ' BuildAppleMailScript: Generiert AppleScript für Apple Mail.
 ' BuildOutlookScript: Generiert AppleScript für Microsoft Outlook.
-' IsOutlookMode / GetLeadMailApp: Prüft/liefert konfigurierte Mail-App.
+' IsOutlookMode: Erkennt anhand LEAD_MAILBOX ob Outlook oder Apple Mail (@ -> Outlook).
 ' DebugPrintAppleMailFolders: Debug-Ausgabe der Ordner; nutzt FetchAppleMailFolderList.
 ' FetchAppleMailFolderList: Baut AppleScript, ruft AppleScriptTask; liefert Ordnerliste als Text.
 ' EnsureAppleScriptInstalled / GetAppleScriptTargetPath / InstallAppleScript / EnsureFolderExists: Helfer zum Installieren des AppleScripts. Rückgabe: Pfade oder Seiteneffekt.
@@ -239,12 +238,21 @@ Private Function GetSettingValue(ByVal namedRange As String, ByVal defaultValue 
     End If
 End Function
 
-Private Function GetLeadMailApp() As String
-    GetLeadMailApp = GetSettingValue(NAME_LEAD_MAIL_APP, LEAD_MAIL_APP_DEFAULT)
-End Function
-
 Private Function IsOutlookMode() As Boolean
-    IsOutlookMode = (InStr(1, LCase$(GetLeadMailApp()), "outlook") > 0)
+    ' Zweck: Erkennt anhand LEAD_MAILBOX ob Outlook oder Apple Mail.
+    ' E-Mail-Adresse (@) oder "outlook"/"exchange" im Namen -> Outlook.
+    ' Sonst -> Apple Mail.
+    Dim mb As String
+    mb = LCase$(GetLeadMailbox())
+    If InStr(1, mb, "@") > 0 Then
+        IsOutlookMode = True
+    ElseIf InStr(1, mb, "outlook") > 0 Then
+        IsOutlookMode = True
+    ElseIf InStr(1, mb, "exchange") > 0 Then
+        IsOutlookMode = True
+    Else
+        IsOutlookMode = False
+    End If
 End Function
 
 Private Function GetLeadMailbox() As String
