@@ -104,10 +104,75 @@ Private gLeadSourceNote As String
 ' =========================
 ' Public Entry
 ' =========================
+Private Function ValidateMailSettings() As Boolean
+    ' Zweck: Prüft ob mindestens eine Mail-Quelle konfiguriert ist.
+    ' Zeigt MsgBox und springt zum Einstellungs-Sheet wenn nicht.
+    ' Rückgabe: True wenn OK, False wenn Einstellungen fehlen.
+    Dim mailbox As String
+    Dim folder As String
+    Dim mailPath As String
+    Dim missingFields As String
+
+    mailbox = Trim$(GetSettingValue(NAME_LEAD_MAILBOX, vbNullString))
+    folder = Trim$(GetSettingValue(NAME_LEAD_FOLDER, vbNullString))
+    mailPath = Trim$(GetMailPath())
+
+    ' Mindestens mailpath ODER (mailbox + folder) muss gesetzt sein
+    If Len(mailPath) > 0 Then
+        ' mailpath ist gesetzt -> OK auch ohne mailbox/folder
+        ValidateMailSettings = True
+        Exit Function
+    End If
+
+    ' Kein mailpath -> mailbox und folder müssen gesetzt sein
+    If Len(mailbox) = 0 Then
+        missingFields = missingFields & "  - LEAD_MAILBOX (Account-Name oder E-Mail)" & vbLf
+    End If
+    If Len(folder) = 0 Then
+        missingFields = missingFields & "  - LEAD_FOLDER (Ordnername, z.B. Leads oder Posteingang)" & vbLf
+    End If
+
+    If Len(missingFields) > 0 Then
+        MsgBox "Import nicht möglich – fehlende Einstellungen:" & vbLf & vbLf & _
+               missingFields & vbLf & _
+               "Bitte auf dem Blatt '" & SETTINGS_SHEET & "' ergänzen." & vbLf & _
+               "Alternativ kann 'mailpath' als lokaler Ordnerpfad gesetzt werden.", _
+               vbExclamation, "Fehlende Mail-Konfiguration"
+        GoToSettingsSheet
+        ValidateMailSettings = False
+        Exit Function
+    End If
+
+    ValidateMailSettings = True
+End Function
+
+Private Sub GoToSettingsSheet()
+    ' Zweck: Zum Einstellungs-Sheet springen und erste relevante Zelle aktivieren.
+    Dim ws As Worksheet
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(SETTINGS_SHEET)
+    On Error GoTo 0
+
+    If ws Is Nothing Then
+        MsgBox "Blatt '" & SETTINGS_SHEET & "' nicht gefunden.", vbExclamation
+        Exit Sub
+    End If
+
+    ws.Activate
+    On Error Resume Next
+    ws.Range("A1").Select
+    On Error GoTo 0
+End Sub
+
 Public Sub ImportLeadsFromAppleMail()
     ' Zweck: Apple-Mail-Leads abrufen, parsen und in die Tabelle schreiben.
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
+
+    ' --- Eingabeprüfung ---
+    If Not ValidateMailSettings() Then Exit Sub
+
     If AUTO_INSTALL_APPLESCRIPT Then
         EnsureAppleScriptInstalled
     End If
