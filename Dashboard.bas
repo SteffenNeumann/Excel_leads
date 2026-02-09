@@ -69,6 +69,10 @@ Public Sub BuildDashboard()
     Dim totalDropped As Long, totalLaufend As Long
     Dim curYM As Long, curMLeads As Long, curMClosed As Long, curMDropped As Long
 
+    ' Status Pipeline
+    Dim stLabels(1 To 6) As String, stCounts(1 To 6) As Long, stTotal As Long
+    Dim statusVal As String, colX As Double
+
     ' Layout (points)
     Dim LM As Double: LM = 20
     Dim CW As Double: CW = 195
@@ -125,6 +129,14 @@ Public Sub BuildDashboard()
     Next c
 
     curYM = Year(Date) * 100 + Month(Date)
+
+    ' Status Pipeline Labels initialisieren
+    stLabels(1) = "Lead erhalten"
+    stLabels(2) = "Nicht erreicht"
+    stLabels(3) = "Standby nach Anruf"
+    stLabels(4) = "Ersttermin"
+    stLabels(5) = "Standby nach Ersttermin"
+    stLabels(6) = "Geschlossen"
 
     For r = 1 To nRows
         rowDate = dataArr(r, cMonat)
@@ -194,6 +206,17 @@ Public Sub BuildDashboard()
                 aCount = aCount + 1
                 aLabels(aCount) = abgNach: aCounts(aCount) = 1
             End If
+        End If
+
+        ' Status Pipeline zaehlen
+        If cStatus > 0 Then
+            statusVal = Trim(CStr(dataArr(r, cStatus) & ""))
+            For idx = 1 To 6
+                If statusVal = stLabels(idx) Then
+                    stCounts(idx) = stCounts(idx) + 1
+                    Exit For
+                End If
+            Next idx
         End If
 NextRow:
     Next r
@@ -568,6 +591,57 @@ NextRow:
                 9, False, RGB(65, 85, 110)
         End If
     Next i
+
+    ' ===== STATUS PIPELINE WIDGET =====
+    yPos = yPos + TH + SG
+    xPos = LM
+    Dim spW As Double: spW = CHW * 2 + CG
+    Dim spH As Double: spH = 105
+    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
+        xPos, yPos, spW, spH)
+    FormatCard shp
+    AddLabel ws, xPos + 15, yPos + 10, 300, 20, _
+        "Status Pipeline", 13, True, RGB(25, 55, 95)
+
+    stTotal = 0
+    For i = 1 To 6: stTotal = stTotal + stCounts(i): Next i
+
+    Dim spColW As Double: spColW = (spW - 105) / 7
+    Dim spStartX As Double: spStartX = xPos + 105
+
+    ' Zeilen-Labels
+    AddLabel ws, xPos + 15, yPos + 35, 85, rowH, _
+        "Phase", 8, True, RGB(25, 55, 95)
+    AddLabel ws, xPos + 15, yPos + 57, 85, rowH, _
+        "Anzahl", 9, True, RGB(100, 120, 150)
+    AddLabel ws, xPos + 15, yPos + 75, 85, rowH, _
+        "%", 9, True, RGB(100, 120, 150)
+
+    ' Separator
+    Set shp = ws.Shapes.AddShape(msoShapeRectangle, _
+        spStartX - 2, yPos + 54, spColW * 7 + 4, 1)
+    shp.Fill.ForeColor.RGB = RGB(215, 225, 235)
+    shp.Line.Visible = msoFalse
+
+    ' Status-Spalten
+    For i = 1 To 6
+        colX = spStartX + (i - 1) * spColW
+        AddLabel ws, colX + 3, yPos + 35, spColW - 6, rowH, _
+            stLabels(i), 8, True, RGB(50, 110, 165)
+        AddLabel ws, colX + 3, yPos + 57, spColW - 6, rowH, _
+            CStr(stCounts(i)), 9, False, RGB(65, 85, 110)
+        If stTotal > 0 Then
+            AddLabel ws, colX + 3, yPos + 75, spColW - 6, rowH, _
+                Format(stCounts(i) / stTotal, "0.0%"), 9, False, RGB(65, 85, 110)
+        End If
+    Next i
+
+    ' Gesamt-Spalte
+    colX = spStartX + 6 * spColW
+    AddLabel ws, colX + 3, yPos + 35, spColW - 6, rowH, _
+        "Gesamt", 8, True, RGB(50, 110, 165)
+    AddLabel ws, colX + 3, yPos + 57, spColW - 6, rowH, _
+        CStr(stTotal), 9, True, RGB(25, 55, 95)
 
     Application.ScreenUpdating = True
 End Sub
