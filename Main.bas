@@ -653,68 +653,118 @@ End Function
 
 Private Function BuildOutlookScript(ByVal mailboxName As String, ByVal folderName As String, ByVal keywordA As String, ByVal keywordB As String) As String
     ' Zweck: AppleScript für Microsoft Outlook generieren.
-    ' LEAD_MAILBOX = Outlook-Account-Name (z. B. "Outlook", "Exchange", E-Mail-Adresse).
-    ' LEAD_FOLDER = Ordnername in Outlook (z. B. "Leads", "Posteingang").
+    ' LEAD_MAILBOX = Outlook-Account-Name oder E-Mail-Adresse.
+    ' LEAD_FOLDER = Ordnername in Outlook (z. B. "Leads", "Posteingang", "Inbox").
+    ' Hinweis: "Posteingang"/"Inbox" wird auf die inbox-Property gemappt.
     ' Rückgabe: Fertiges Script als String.
     Dim script As String
     Dim q As String
+    Dim isInbox As Boolean
     q = Chr$(34)
+
+    ' Prüfen ob der Ordner ein Posteingang ist
+    isInbox = (LCase$(Trim$(folderName)) = "posteingang" Or _
+               LCase$(Trim$(folderName)) = "inbox" Or _
+               LCase$(Trim$(folderName)) = "posteingang (inbox)")
 
     script = ""
     script = script & "with timeout of 60 seconds" & vbLf
     script = script & "tell application ""Microsoft Outlook""" & vbLf
 
-    ' --- Zielordner finden ---
+    ' --- Account finden ---
+    script = script & "set targetAcct to missing value" & vbLf
     script = script & "set targetFolder to missing value" & vbLf
 
-    ' Versuch 1: Account-Name matchen und darin Ordner suchen
     If Len(Trim$(mailboxName)) > 0 Then
         script = script & "set targetAccountName to " & q & mailboxName & q & vbLf
+
+        ' Helper: Account matchen per Name ODER E-Mail-Adresse
+        ' Exchange Accounts
         script = script & "try" & vbLf
         script = script & "repeat with acct in exchange accounts" & vbLf
-        script = script & "if (name of acct) contains targetAccountName then" & vbLf
+        script = script & "set matchFound to false" & vbLf
+        script = script & "if (name of acct) contains targetAccountName then set matchFound to true" & vbLf
         script = script & "try" & vbLf
-        script = script & "set targetFolder to mail folder " & q & folderName & q & " of acct" & vbLf
-        script = script & "exit repeat" & vbLf
+        script = script & "if (email address of acct) contains targetAccountName then set matchFound to true" & vbLf
         script = script & "end try" & vbLf
+        script = script & "if matchFound then" & vbLf
+        script = script & "set targetAcct to acct" & vbLf
+        script = script & "exit repeat" & vbLf
         script = script & "end if" & vbLf
         script = script & "end repeat" & vbLf
         script = script & "end try" & vbLf
 
-        ' Auch IMAP/POP Accounts pruefen
-        script = script & "if targetFolder is missing value then" & vbLf
+        ' IMAP Accounts
+        script = script & "if targetAcct is missing value then" & vbLf
         script = script & "try" & vbLf
         script = script & "repeat with acct in imap accounts" & vbLf
-        script = script & "if (name of acct) contains targetAccountName then" & vbLf
+        script = script & "set matchFound to false" & vbLf
+        script = script & "if (name of acct) contains targetAccountName then set matchFound to true" & vbLf
         script = script & "try" & vbLf
-        script = script & "set targetFolder to mail folder " & q & folderName & q & " of acct" & vbLf
-        script = script & "exit repeat" & vbLf
+        script = script & "if (email address of acct) contains targetAccountName then set matchFound to true" & vbLf
         script = script & "end try" & vbLf
+        script = script & "if matchFound then" & vbLf
+        script = script & "set targetAcct to acct" & vbLf
+        script = script & "exit repeat" & vbLf
         script = script & "end if" & vbLf
         script = script & "end repeat" & vbLf
         script = script & "end try" & vbLf
         script = script & "end if" & vbLf
 
-        script = script & "if targetFolder is missing value then" & vbLf
+        ' POP Accounts
+        script = script & "if targetAcct is missing value then" & vbLf
         script = script & "try" & vbLf
         script = script & "repeat with acct in pop accounts" & vbLf
-        script = script & "if (name of acct) contains targetAccountName then" & vbLf
+        script = script & "set matchFound to false" & vbLf
+        script = script & "if (name of acct) contains targetAccountName then set matchFound to true" & vbLf
         script = script & "try" & vbLf
-        script = script & "set targetFolder to mail folder " & q & folderName & q & " of acct" & vbLf
-        script = script & "exit repeat" & vbLf
+        script = script & "if (email address of acct) contains targetAccountName then set matchFound to true" & vbLf
         script = script & "end try" & vbLf
+        script = script & "if matchFound then" & vbLf
+        script = script & "set targetAcct to acct" & vbLf
+        script = script & "exit repeat" & vbLf
         script = script & "end if" & vbLf
         script = script & "end repeat" & vbLf
         script = script & "end try" & vbLf
         script = script & "end if" & vbLf
     End If
 
-    ' Versuch 2: Fallback auf Default-Account
-    script = script & "if targetFolder is missing value then" & vbLf
+    ' Fallback: Default Account
+    script = script & "if targetAcct is missing value then" & vbLf
     script = script & "try" & vbLf
-    script = script & "set targetFolder to mail folder " & q & folderName & q & " of default account" & vbLf
+    script = script & "set targetAcct to default account" & vbLf
     script = script & "end try" & vbLf
     script = script & "end if" & vbLf
+
+    script = script & "if targetAcct is missing value then error ""Outlook-Account nicht gefunden: " & mailboxName & """" & vbLf
+
+    ' --- Ordner im Account finden ---
+    If isInbox Then
+        ' Posteingang/Inbox: direkt die inbox-Property nutzen
+        script = script & "try" & vbLf
+        script = script & "set targetFolder to inbox of targetAcct" & vbLf
+        script = script & "end try" & vbLf
+    Else
+        ' Benannter Ordner
+        script = script & "try" & vbLf
+        script = script & "set targetFolder to mail folder " & q & folderName & q & " of targetAcct" & vbLf
+        script = script & "end try" & vbLf
+    End If
+
+    ' Fallback: auch den anderen Weg versuchen
+    If isInbox Then
+        script = script & "if targetFolder is missing value then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set targetFolder to mail folder " & q & folderName & q & " of targetAcct" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
+    Else
+        script = script & "if targetFolder is missing value then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set targetFolder to inbox of targetAcct" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
+    End If
 
     script = script & "if targetFolder is missing value then error ""Outlook-Ordner nicht gefunden: " & folderName & """" & vbLf
 
@@ -891,64 +941,78 @@ End Function
 
 Private Function FetchOutlookFolderList() As String
     ' Zweck: Ordnerliste aus Microsoft Outlook via AppleScript abrufen.
+    ' Listet ALLE Accounts und deren Ordner (Debug-Funktion).
     ' Abhängigkeiten: AppleScriptTask.
     ' Rückgabe: Textliste der Ordner oder Leerstring bei Fehler.
     Dim script As String
     Dim result As String
     Dim q As String
-    Dim mailboxName As String
 
     q = Chr$(34)
-    mailboxName = GetLeadMailbox()
 
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
     script = script & "tell application ""Microsoft Outlook""" & vbLf
-    script = script & "set targetAccountName to " & q & mailboxName & q & vbLf
     script = script & "set outText to " & q & q & vbLf
 
     ' Exchange Accounts
     script = script & "repeat with acct in exchange accounts" & vbLf
     script = script & "set aName to (name of acct)" & vbLf
-    script = script & "if (targetAccountName is " & q & q & ") or (aName contains targetAccountName) then" & vbLf
-    script = script & "set outText to outText & " & q & "ACCOUNT (Exchange): " & q & " & aName & linefeed" & vbLf
+    script = script & "set aAddr to " & q & q & vbLf
+    script = script & "try" & vbLf
+    script = script & "set aAddr to email address of acct" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "set outText to outText & " & q & "ACCOUNT (Exchange): " & q & " & aName & " & q & " [" & q & " & aAddr & " & q & "]" & q & " & linefeed" & vbLf
+    script = script & "try" & vbLf
+    script = script & "set outText to outText & " & q & "  -> inbox (Posteingang)" & q & " & linefeed" & vbLf
+    script = script & "end try" & vbLf
     script = script & "try" & vbLf
     script = script & "repeat with f in mail folders of acct" & vbLf
-    script = script & "set outText to outText & (name of f) & linefeed" & vbLf
+    script = script & "set outText to outText & " & q & "  " & q & " & (name of f) & linefeed" & vbLf
     script = script & "end repeat" & vbLf
     script = script & "end try" & vbLf
     script = script & "set outText to outText & linefeed" & vbLf
-    script = script & "end if" & vbLf
     script = script & "end repeat" & vbLf
 
     ' IMAP Accounts
     script = script & "repeat with acct in imap accounts" & vbLf
     script = script & "set aName to (name of acct)" & vbLf
-    script = script & "if (targetAccountName is " & q & q & ") or (aName contains targetAccountName) then" & vbLf
-    script = script & "set outText to outText & " & q & "ACCOUNT (IMAP): " & q & " & aName & linefeed" & vbLf
+    script = script & "set aAddr to " & q & q & vbLf
+    script = script & "try" & vbLf
+    script = script & "set aAddr to email address of acct" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "set outText to outText & " & q & "ACCOUNT (IMAP): " & q & " & aName & " & q & " [" & q & " & aAddr & " & q & "]" & q & " & linefeed" & vbLf
+    script = script & "try" & vbLf
+    script = script & "set outText to outText & " & q & "  -> inbox (Posteingang)" & q & " & linefeed" & vbLf
+    script = script & "end try" & vbLf
     script = script & "try" & vbLf
     script = script & "repeat with f in mail folders of acct" & vbLf
-    script = script & "set outText to outText & (name of f) & linefeed" & vbLf
+    script = script & "set outText to outText & " & q & "  " & q & " & (name of f) & linefeed" & vbLf
     script = script & "end repeat" & vbLf
     script = script & "end try" & vbLf
     script = script & "set outText to outText & linefeed" & vbLf
-    script = script & "end if" & vbLf
     script = script & "end repeat" & vbLf
 
     ' POP Accounts
     script = script & "repeat with acct in pop accounts" & vbLf
     script = script & "set aName to (name of acct)" & vbLf
-    script = script & "if (targetAccountName is " & q & q & ") or (aName contains targetAccountName) then" & vbLf
-    script = script & "set outText to outText & " & q & "ACCOUNT (POP): " & q & " & aName & linefeed" & vbLf
+    script = script & "set aAddr to " & q & q & vbLf
+    script = script & "try" & vbLf
+    script = script & "set aAddr to email address of acct" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "set outText to outText & " & q & "ACCOUNT (POP): " & q & " & aName & " & q & " [" & q & " & aAddr & " & q & "]" & q & " & linefeed" & vbLf
+    script = script & "try" & vbLf
+    script = script & "set outText to outText & " & q & "  -> inbox (Posteingang)" & q & " & linefeed" & vbLf
+    script = script & "end try" & vbLf
     script = script & "try" & vbLf
     script = script & "repeat with f in mail folders of acct" & vbLf
-    script = script & "set outText to outText & (name of f) & linefeed" & vbLf
+    script = script & "set outText to outText & " & q & "  " & q & " & (name of f) & linefeed" & vbLf
     script = script & "end repeat" & vbLf
     script = script & "end try" & vbLf
     script = script & "set outText to outText & linefeed" & vbLf
-    script = script & "end if" & vbLf
     script = script & "end repeat" & vbLf
 
+    script = script & "if outText is " & q & q & " then set outText to " & q & "Keine Outlook-Accounts gefunden." & q & " & linefeed" & vbLf
     script = script & "return outText" & vbLf
     script = script & "end tell" & vbLf
     script = script & "end timeout"
