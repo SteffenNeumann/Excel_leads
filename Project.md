@@ -13,9 +13,14 @@ E-Mails in Apple Mail oder Microsoft Outlook mit den Schlägwörtern **„Lead�
 ## Einstellungen (Sheet "Berechnung")
 | Benannter Bereich | Default | Beschreibung |
 |---|---|---|
-| `LEAD_MAILBOX` | `iCloud` | Account-Name. Enthält `@` oder `outlook`/`exchange` → Outlook, sonst → Apple Mail |
-| `LEAD_FOLDER` | `Leads` | Ordnername im Account (z.B. `Leads`, `Posteingang`) |
+| `LEAD_MAILBOX` | `iCloud` | Account-Name(n), per `;` trennbar. Enthält `@`/`outlook`/`exchange` → Outlook, sonst → Apple Mail |
+| `LEAD_FOLDER` | `Leads` | Ordnername(n), per `;` trennbar (gleiche Reihenfolge wie LEAD_MAILBOX) |
 | `mailpath` | *(leer)* | Optionaler lokaler Pfad zu .eml-Dateien |
+
+**Beispiel für beide Apps gleichzeitig:**
+- `LEAD_MAILBOX` = `iCloud;steffen.neumann@dlh.de`
+- `LEAD_FOLDER` = `Leads;Posteingang`
+- → Sucht in Apple Mail (iCloud/Leads) **und** Outlook (steffen.neumann@dlh.de/Posteingang)
 
 ## Datenfelder (Zielspalten)
 - Kontakt: Anrede, Vorname, Nachname, Name (falls als Vollname), Mobil, E-Mail-Adresse, Erreichbarkeit

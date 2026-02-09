@@ -63,7 +63,7 @@ Private gLeadSourceNote As String
 ' FetchAppleMailMessages: Baut AppleScript (Apple Mail oder Outlook), ruft AppleScriptTask; liefert zusammengefasste Roh-Nachrichten.
 ' BuildAppleMailScript: Generiert AppleScript für Apple Mail.
 ' BuildOutlookScript: Generiert AppleScript für Microsoft Outlook.
-' IsOutlookMode: Erkennt anhand LEAD_MAILBOX ob Outlook oder Apple Mail (@ -> Outlook).
+' IsOutlookMailbox: Erkennt pro Mailbox-Eintrag ob Outlook oder Apple Mail (@ -> Outlook).
 ' DebugPrintAppleMailFolders: Debug-Ausgabe der Ordner; nutzt FetchAppleMailFolderList.
 ' FetchAppleMailFolderList: Baut AppleScript, ruft AppleScriptTask; liefert Ordnerliste als Text.
 ' EnsureAppleScriptInstalled / GetAppleScriptTargetPath / InstallAppleScript / EnsureFolderExists: Helfer zum Installieren des AppleScripts. Rückgabe: Pfade oder Seiteneffekt.
@@ -238,20 +238,20 @@ Private Function GetSettingValue(ByVal namedRange As String, ByVal defaultValue 
     End If
 End Function
 
-Private Function IsOutlookMode() As Boolean
-    ' Zweck: Erkennt anhand LEAD_MAILBOX ob Outlook oder Apple Mail.
+Private Function IsOutlookMailbox(ByVal mailboxName As String) As Boolean
+    ' Zweck: Erkennt anhand eines einzelnen Mailbox-Namens ob Outlook oder Apple Mail.
     ' E-Mail-Adresse (@) oder "outlook"/"exchange" im Namen -> Outlook.
     ' Sonst -> Apple Mail.
     Dim mb As String
-    mb = LCase$(GetLeadMailbox())
+    mb = LCase$(Trim$(mailboxName))
     If InStr(1, mb, "@") > 0 Then
-        IsOutlookMode = True
+        IsOutlookMailbox = True
     ElseIf InStr(1, mb, "outlook") > 0 Then
-        IsOutlookMode = True
+        IsOutlookMailbox = True
     ElseIf InStr(1, mb, "exchange") > 0 Then
-        IsOutlookMode = True
+        IsOutlookMailbox = True
     Else
-        IsOutlookMode = False
+        IsOutlookMailbox = False
     End If
 End Function
 
@@ -501,29 +501,33 @@ Private Function ExtractIdFromNotes(ByVal noteText As String) As String
 End Function
 
 Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB As String) As String
-    ' Zweck: Mail-Nachrichten per AppleScript als Text abrufen (Apple Mail oder Outlook).
-    ' Abhängigkeiten: AppleScriptTask, BuildAppleMailScript, BuildOutlookScript, IsOutlookMode.
+    ' Zweck: Mail-Nachrichten per AppleScript abrufen. Unterstützt mehrere Quellen (Apple Mail + Outlook).
+    ' LEAD_MAILBOX und LEAD_FOLDER können per ";" getrennt mehrere Einträge enthalten.
+    ' Jeder Eintrag wird anhand des Mailbox-Namens automatisch der richtigen App zugeordnet.
+    ' Abhängigkeiten: AppleScriptTask, BuildAppleMailScript, BuildOutlookScript, IsOutlookMailbox.
     ' Rückgabe: zusammengeführter Nachrichtentext oder Leerstring bei Fehler.
-    Dim script As String
     Dim result As String
-    Dim q As String
-    Dim mailboxName As String
-    Dim folderName As String
     Dim mailPath As String
     Dim pathResult As String
     Dim usedFile As Boolean
-    Dim usedMailbox As Boolean
+
+    Dim mailboxRaw As String
+    Dim folderRaw As String
+    Dim mailboxes() As String
+    Dim folders() As String
+    Dim i As Long
+    Dim mbName As String
+    Dim flName As String
+    Dim isOutlook As Boolean
+    Dim script As String
     Dim mailResult As String
-    Dim useOutlook As Boolean
+    Dim sourceLabels As String
+    Dim appLabel As String
 
-    q = Chr$(34)
-    mailboxName = GetLeadMailbox()
-    folderName = GetLeadFolder()
     mailPath = GetMailPath()
-    useOutlook = IsOutlookMode()
-
     result = vbNullString
 
+    ' --- 1. Dateiordner (mailpath) ---
     If Len(Trim$(mailPath)) > 0 Then
         If FolderExists(mailPath) Then
             pathResult = FetchMailMessagesFromPath(mailPath)
@@ -537,48 +541,66 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
         End If
     End If
 
-    If Len(Trim$(mailboxName)) > 0 And Len(Trim$(folderName)) > 0 Then
+    ' --- 2. Mail-Quellen (LEAD_MAILBOX;LEAD_FOLDER Paare) ---
+    mailboxRaw = GetLeadMailbox()
+    folderRaw = GetLeadFolder()
 
-    If useOutlook Then
-        script = BuildOutlookScript(mailboxName, folderName, keywordA, keywordB)
-    Else
-        script = BuildAppleMailScript(mailboxName, folderName, keywordA, keywordB)
-    End If
+    mailboxes = Split(mailboxRaw, ";")
+    folders = Split(folderRaw, ";")
 
-        On Error GoTo ErrHandler
+    For i = LBound(mailboxes) To UBound(mailboxes)
+        mbName = Trim$(mailboxes(i))
+        If Len(mbName) = 0 Then GoTo NextMailbox
+
+        ' Zugehörigen Folder holen (gleicher Index, oder letzten wiederverwenden)
+        If i <= UBound(folders) Then
+            flName = Trim$(folders(i))
+        Else
+            flName = Trim$(folders(UBound(folders)))
+        End If
+        If Len(flName) = 0 Then flName = LEAD_FOLDER_DEFAULT
+
+        isOutlook = IsOutlookMailbox(mbName)
+
+        If isOutlook Then
+            script = BuildOutlookScript(mbName, flName, keywordA, keywordB)
+            appLabel = "Outlook"
+        Else
+            script = BuildAppleMailScript(mbName, flName, keywordA, keywordB)
+            appLabel = "Apple Mail"
+        End If
+
+        On Error GoTo MailboxError
         mailResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
         If Left$(mailResult, 6) = "ERROR:" Then
-            MsgBox "AppleScript-Fehler: " & Mid$(mailResult, 7), vbExclamation
-            LogImportError "AppleScript-Fehler", Mid$(mailResult, 7)
-            FetchAppleMailMessages = vbNullString
-            Exit Function
+            LogImportError "AppleScript-Fehler (" & appLabel & ", " & mbName & ")", Mid$(mailResult, 7)
+            GoTo NextMailbox
         End If
         result = result & mailResult
-        usedMailbox = True
-    End If
 
+        ' Source-Label sammeln
+        If Len(sourceLabels) > 0 Then sourceLabels = sourceLabels & " | "
+        sourceLabels = sourceLabels & appLabel & ": " & BuildMailboxSourceLabel(mbName, flName)
+        GoTo NextMailbox
+
+MailboxError:
+        LogImportError "AppleScriptTask-Fehler (" & appLabel & ", " & mbName & ")", Err.Description
+        Err.Clear
+        Resume NextMailbox
+
+NextMailbox:
+        On Error GoTo 0
+    Next i
+
+    ' --- 3. Source-Note zusammenbauen ---
     gLeadSourceNote = vbNullString
     If usedFile Then gLeadSourceNote = "Dateiordner: " & mailPath
-    If usedMailbox Then
+    If Len(sourceLabels) > 0 Then
         If Len(gLeadSourceNote) > 0 Then gLeadSourceNote = gLeadSourceNote & " | "
-        Dim appLabel As String
-        If useOutlook Then appLabel = "Outlook" Else appLabel = "Apple Mail"
-        gLeadSourceNote = gLeadSourceNote & appLabel & ": " & BuildMailboxSourceLabel(mailboxName, folderName)
+        gLeadSourceNote = gLeadSourceNote & sourceLabels
     End If
 
     FetchAppleMailMessages = result
-    Exit Function
-
-ErrHandler:
-    ' Häufige Ursachen:
-    ' 1) Script nicht installiert: ~/Library/Application Scripts/com.microsoft.Excel/MailReader.scpt
-    ' 2) Fehlende Automation-Rechte (Systemeinstellungen > Datenschutz & Sicherheit > Automation)
-    ' Excel muss die jeweilige Mail-App steuern dürfen.
-    Dim appName As String
-    If useOutlook Then appName = "Microsoft Outlook" Else appName = "Apple Mail"
-    MsgBox "AppleScriptTask-Fehler (" & appName & "). Prüfe Script-Installation und Automation-Rechte.", vbExclamation
-    LogImportError "AppleScriptTask-Fehler (" & appName & ")", Err.Description
-    FetchAppleMailMessages = vbNullString
 End Function
 
 Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderName As String, ByVal keywordA As String, ByVal keywordB As String) As String
@@ -749,29 +771,47 @@ Private Function BuildMailboxSourceLabel(ByVal mailboxName As String, ByVal fold
 End Function
 
 Public Sub DebugPrintAppleMailFolders()
-    ' Zweck: Mailbox-Ordnerstruktur im Direktfenster ausgeben (Apple Mail oder Outlook).
-    ' Abhängigkeiten: FetchMailFolderList, IsOutlookMode.
+    ' Zweck: Mailbox-Ordnerstruktur im Direktfenster ausgeben (alle konfigurierten Quellen).
+    ' Abhängigkeiten: FetchAppleMailFolderList, FetchOutlookFolderList, IsOutlookMailbox.
     ' Rückgabe: keine (Debug.Print Ausgabe).
     Dim folderText As String
     Dim lines() As String
     Dim i As Long
+    Dim mailboxes() As String
+    Dim mbName As String
+    Dim hasAppleMail As Boolean
+    Dim hasOutlook As Boolean
 
-    If IsOutlookMode() Then
-        Debug.Print "=== Outlook Ordner ==="
-        folderText = FetchOutlookFolderList()
-    Else
-        Debug.Print "=== Apple Mail Ordner ==="
-        folderText = FetchAppleMailFolderList()
-    End If
-    If Len(folderText) = 0 Then Exit Sub
-
-    lines = Split(folderText, vbLf)
-    For i = LBound(lines) To UBound(lines)
-        ' Schleife: jede Zeile der Ordnerliste ausgeben.
-        If Len(Trim$(lines(i))) > 0 Then
-            Debug.Print Trim$(lines(i))
+    mailboxes = Split(GetLeadMailbox(), ";")
+    For i = LBound(mailboxes) To UBound(mailboxes)
+        mbName = Trim$(mailboxes(i))
+        If Len(mbName) > 0 Then
+            If IsOutlookMailbox(mbName) Then hasOutlook = True Else hasAppleMail = True
         End If
     Next i
+
+    If hasAppleMail Then
+        Debug.Print "=== Apple Mail Ordner ==="
+        folderText = FetchAppleMailFolderList()
+        If Len(folderText) > 0 Then
+            lines = Split(folderText, vbLf)
+            For i = LBound(lines) To UBound(lines)
+                If Len(Trim$(lines(i))) > 0 Then Debug.Print Trim$(lines(i))
+            Next i
+        End If
+        Debug.Print ""
+    End If
+
+    If hasOutlook Then
+        Debug.Print "=== Outlook Ordner ==="
+        folderText = FetchOutlookFolderList()
+        If Len(folderText) > 0 Then
+            lines = Split(folderText, vbLf)
+            For i = LBound(lines) To UBound(lines)
+                If Len(Trim$(lines(i))) > 0 Then Debug.Print Trim$(lines(i))
+            Next i
+        End If
+    End If
 End Sub
 
 Private Function FetchAppleMailFolderList() As String
