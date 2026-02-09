@@ -1,14 +1,22 @@
-# Workflow: Apple Mail Leads → Excel (macOS, Excel VBA)
+# Workflow: Apple Mail / Outlook Leads → Excel (macOS, Excel VBA)
 
 ## Ziel
-E-Mails in Apple Mail mit den Schlagwörtern **„Lead“** oder **„Neue Anfrage“** finden, Inhalte analysieren, strukturierte Daten extrahieren und in eine Excel-Tabelle in die nächste freie Zeile einfügen.
+E-Mails in Apple Mail oder Microsoft Outlook mit den Schlägwörtern **„Lead“** oder **„Neue Anfrage“** finden, Inhalte analysieren, strukturierte Daten extrahieren und in eine Excel-Tabelle in die nächste freie Zeile einfügen.
 
 ## Voraussetzungen
-- macOS, Apple Mail, Microsoft Excel (Mac)
+- macOS, Apple Mail **oder** Microsoft Outlook, Microsoft Excel (Mac)
 - Excel-Datei mit Tabelle (ListObject) und fixen Spaltenüberschriften
 - Arbeitsblatt: **Pipeline**
 - Tabellenname: **Kundenliste** (intelligente Tabelle)
 - Makros aktiviert
+
+## Einstellungen (Sheet "Berechnung")
+| Benannter Bereich | Default | Beschreibung |
+|---|---|---|
+| `LEAD_MAIL_APP` | `Apple Mail` | Mail-App: `Apple Mail` oder `Outlook` |
+| `LEAD_MAILBOX` | `iCloud` | Account-Name in der Mail-App |
+| `LEAD_FOLDER` | `Leads` | Ordnername im Account |
+| `mailpath` | *(leer)* | Optionaler lokaler Pfad zu .eml-Dateien |
 
 ## Datenfelder (Zielspalten)
 - Kontakt: Anrede, Vorname, Nachname, Name (falls als Vollname), Mobil, E-Mail-Adresse, Erreichbarkeit
@@ -16,10 +24,13 @@ E-Mails in Apple Mail mit den Schlagwörtern **„Lead“** oder **„Neue Anfra
 - Anfrage: PLZ, Nutzer, Alltagshilfe Aufgaben, Alltagshilfe Häufigkeit, ID (falls vorhanden)
 
 ## Workflow-Schritte
-1) **Apple Mail durchsuchen**
-	- Filter: Betreff oder Body enthält **„Lead“** oder **„Neue Anfrage“**.
+1) **Mail-App durchsuchen (Apple Mail oder Outlook)**
+	- Gesteuert über `LEAD_MAIL_APP` Einstellung im Sheet "Berechnung".
+	- Filter: Betreff enthält **„Lead“** oder **„Neue Anfrage“**.
 	- Nur ungelesene oder letzte 24/48h (optional) zur Duplikatvermeidung.
 	- Ergebnis: Liste der passenden Nachrichten inkl. Absender, Datum, Betreff, Body.
+	- **Apple Mail**: `tell application "Mail"` – durchsucht `mailbox` im Account.
+	- **Outlook**: `tell application "Microsoft Outlook"` – durchsucht `mail folder` im Account (Exchange/IMAP/POP).
 
 2) **Nachrichteninhalt extrahieren**
 	- Body als reiner Text lesen.

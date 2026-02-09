@@ -3,9 +3,10 @@ Option Explicit
 ' =========================
 ' Code Description
 ' =========================
-' Dieses Modul liest Apple Mail Nachrichten mit den Schlagworten "Lead" oder
+' Dieses Modul liest Apple Mail oder Outlook Nachrichten mit den Schlagworten "Lead" oder
 ' "Neue Anfrage", parst die Inhalte und schreibt die Daten in die intelligente
 ' Tabelle "Kundenliste" auf dem Blatt "Pipeline".
+' Mail-App konfigurierbar über LEAD_MAIL_APP ("Apple Mail" oder "Outlook").
 '
 ' Fokus: clean, simpel, skalierbar
 ' - klare Unterfunktionen
@@ -35,13 +36,16 @@ Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
 Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
 Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
 
-' Zielordner in Apple Mail
+' Zielordner in Apple Mail / Outlook
 ' LEAD_FOLDER muss exakter Ordnername sein (z. B. "Archiv")
 ' Optional: LEAD_MAILBOX leer lassen, um global zu suchen.
+' LEAD_MAIL_APP: "Apple Mail" (Default) oder "Outlook"
 Private Const SETTINGS_SHEET As String = "Berechnung"
+Private Const NAME_LEAD_MAIL_APP As String = "LEAD_MAIL_APP"
 Private Const NAME_LEAD_MAILBOX As String = "LEAD_MAILBOX"
 Private Const NAME_LEAD_FOLDER As String = "LEAD_FOLDER"
 Private Const NAME_MAILPATH As String = "mailpath"
+Private Const LEAD_MAIL_APP_DEFAULT As String = "Apple Mail"
 Private Const LEAD_MAILBOX_DEFAULT As String = "iCloud"
 Private Const LEAD_FOLDER_DEFAULT As String = "Leads"
 
@@ -57,7 +61,10 @@ Private gLeadSourceNote As String
 ' Funktionsübersicht & Abhängigkeiten
 ' =========================
 ' ImportLeadsFromAppleMail: Einstiegspunkt; ruft FetchAppleMailMessages, ParseMessageBlock, ParseLeadContent, LeadAlreadyExists, AddLeadRow. Rückgabe: Sub, schreibt Zeilen.
-' FetchAppleMailMessages: Baut AppleScript, ruft AppleScriptTask; liefert zusammengefasste Roh-Nachrichten.
+' FetchAppleMailMessages: Baut AppleScript (Apple Mail oder Outlook), ruft AppleScriptTask; liefert zusammengefasste Roh-Nachrichten.
+' BuildAppleMailScript: Generiert AppleScript für Apple Mail.
+' BuildOutlookScript: Generiert AppleScript für Microsoft Outlook.
+' IsOutlookMode / GetLeadMailApp: Prüft/liefert konfigurierte Mail-App.
 ' DebugPrintAppleMailFolders: Debug-Ausgabe der Ordner; nutzt FetchAppleMailFolderList.
 ' FetchAppleMailFolderList: Baut AppleScript, ruft AppleScriptTask; liefert Ordnerliste als Text.
 ' EnsureAppleScriptInstalled / GetAppleScriptTargetPath / InstallAppleScript / EnsureFolderExists: Helfer zum Installieren des AppleScripts. Rückgabe: Pfade oder Seiteneffekt.
@@ -85,7 +92,7 @@ Private gLeadSourceNote As String
 '
 ' Abhängigkeitsgraph (vereinfacht)
 ' ImportLeadsFromAppleMail
-'   -> FetchAppleMailMessages -> AppleScriptTask
+'   -> FetchAppleMailMessages -> BuildAppleMailScript / BuildOutlookScript -> AppleScriptTask
 '   -> ParseMessageBlock -> ParseAppleMailDate -> GermanMonthToNumber
 '   -> ResolveLeadType
 '   -> ParseLeadContent -> MapLabelValue / MapInlinePair -> SetBedarfsort -> FilterDigits
@@ -230,6 +237,14 @@ Private Function GetSettingValue(ByVal namedRange As String, ByVal defaultValue 
     Else
         GetSettingValue = Trim$(CStr(v))
     End If
+End Function
+
+Private Function GetLeadMailApp() As String
+    GetLeadMailApp = GetSettingValue(NAME_LEAD_MAIL_APP, LEAD_MAIL_APP_DEFAULT)
+End Function
+
+Private Function IsOutlookMode() As Boolean
+    IsOutlookMode = (InStr(1, LCase$(GetLeadMailApp()), "outlook") > 0)
 End Function
 
 Private Function GetLeadMailbox() As String
@@ -478,9 +493,8 @@ Private Function ExtractIdFromNotes(ByVal noteText As String) As String
 End Function
 
 Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB As String) As String
-    ' Zweck: Apple-Mail-Nachrichten per AppleScript als Text abrufen.
-    ' Abhängigkeiten: AppleScriptTask, Konstanten für Tags/Delim, ParseAppleMailDate (indirekt via ParseMessageBlock später).
-    ' Rückgabe: zusammengeführter Nachrichtentext oder Leerstring bei Fehler.
+    ' Zweck: Mail-Nachrichten per AppleScript als Text abrufen (Apple Mail oder Outlook).
+    ' Abhängigkeiten: AppleScriptTask, BuildAppleMailScript, BuildOutlookScript, IsOutlookMode.
     ' Rückgabe: zusammengeführter Nachrichtentext oder Leerstring bei Fehler.
     Dim script As String
     Dim result As String
@@ -492,11 +506,13 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     Dim usedFile As Boolean
     Dim usedMailbox As Boolean
     Dim mailResult As String
+    Dim useOutlook As Boolean
 
     q = Chr$(34)
     mailboxName = GetLeadMailbox()
     folderName = GetLeadFolder()
     mailPath = GetMailPath()
+    useOutlook = IsOutlookMode()
 
     result = vbNullString
 
@@ -514,6 +530,55 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     End If
 
     If Len(Trim$(mailboxName)) > 0 And Len(Trim$(folderName)) > 0 Then
+
+    If useOutlook Then
+        script = BuildOutlookScript(mailboxName, folderName, keywordA, keywordB)
+    Else
+        script = BuildAppleMailScript(mailboxName, folderName, keywordA, keywordB)
+    End If
+
+        On Error GoTo ErrHandler
+        mailResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+        If Left$(mailResult, 6) = "ERROR:" Then
+            MsgBox "AppleScript-Fehler: " & Mid$(mailResult, 7), vbExclamation
+            LogImportError "AppleScript-Fehler", Mid$(mailResult, 7)
+            FetchAppleMailMessages = vbNullString
+            Exit Function
+        End If
+        result = result & mailResult
+        usedMailbox = True
+    End If
+
+    gLeadSourceNote = vbNullString
+    If usedFile Then gLeadSourceNote = "Dateiordner: " & mailPath
+    If usedMailbox Then
+        If Len(gLeadSourceNote) > 0 Then gLeadSourceNote = gLeadSourceNote & " | "
+        Dim appLabel As String
+        If useOutlook Then appLabel = "Outlook" Else appLabel = "Apple Mail"
+        gLeadSourceNote = gLeadSourceNote & appLabel & ": " & BuildMailboxSourceLabel(mailboxName, folderName)
+    End If
+
+    FetchAppleMailMessages = result
+    Exit Function
+
+ErrHandler:
+    ' Häufige Ursachen:
+    ' 1) Script nicht installiert: ~/Library/Application Scripts/com.microsoft.Excel/MailReader.scpt
+    ' 2) Fehlende Automation-Rechte (Systemeinstellungen > Datenschutz & Sicherheit > Automation)
+    ' Excel muss die jeweilige Mail-App steuern dürfen.
+    Dim appName As String
+    If useOutlook Then appName = "Microsoft Outlook" Else appName = "Apple Mail"
+    MsgBox "AppleScriptTask-Fehler (" & appName & "). Prüfe Script-Installation und Automation-Rechte.", vbExclamation
+    LogImportError "AppleScriptTask-Fehler (" & appName & ")", Err.Description
+    FetchAppleMailMessages = vbNullString
+End Function
+
+Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderName As String, ByVal keywordA As String, ByVal keywordB As String) As String
+    ' Zweck: AppleScript für Apple Mail generieren.
+    ' Rückgabe: Fertiges Script als String.
+    Dim script As String
+    Dim q As String
+    q = Chr$(34)
 
     script = ""
     script = script & "with timeout of 30 seconds" & vbLf
@@ -553,36 +618,112 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
     script = script & "end tell" & vbLf
     script = script & "end timeout"
 
-        On Error GoTo ErrHandler
-        mailResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
-        If Left$(mailResult, 6) = "ERROR:" Then
-            MsgBox "AppleScript-Fehler: " & Mid$(mailResult, 7), vbExclamation
-            LogImportError "AppleScript-Fehler", Mid$(mailResult, 7)
-            FetchAppleMailMessages = vbNullString
-            Exit Function
-        End If
-        result = result & mailResult
-        usedMailbox = True
+    BuildAppleMailScript = script
+End Function
+
+Private Function BuildOutlookScript(ByVal mailboxName As String, ByVal folderName As String, ByVal keywordA As String, ByVal keywordB As String) As String
+    ' Zweck: AppleScript für Microsoft Outlook generieren.
+    ' LEAD_MAILBOX = Outlook-Account-Name (z. B. "Outlook", "Exchange", E-Mail-Adresse).
+    ' LEAD_FOLDER = Ordnername in Outlook (z. B. "Leads", "Posteingang").
+    ' Rückgabe: Fertiges Script als String.
+    Dim script As String
+    Dim q As String
+    q = Chr$(34)
+
+    script = ""
+    script = script & "with timeout of 60 seconds" & vbLf
+    script = script & "tell application ""Microsoft Outlook""" & vbLf
+
+    ' --- Zielordner finden ---
+    script = script & "set targetFolder to missing value" & vbLf
+
+    ' Versuch 1: Account-Name matchen und darin Ordner suchen
+    If Len(Trim$(mailboxName)) > 0 Then
+        script = script & "set targetAccountName to " & q & mailboxName & q & vbLf
+        script = script & "try" & vbLf
+        script = script & "repeat with acct in exchange accounts" & vbLf
+        script = script & "if (name of acct) contains targetAccountName then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set targetFolder to mail folder " & q & folderName & q & " of acct" & vbLf
+        script = script & "exit repeat" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
+        script = script & "end repeat" & vbLf
+        script = script & "end try" & vbLf
+
+        ' Auch IMAP/POP Accounts pruefen
+        script = script & "if targetFolder is missing value then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "repeat with acct in imap accounts" & vbLf
+        script = script & "if (name of acct) contains targetAccountName then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set targetFolder to mail folder " & q & folderName & q & " of acct" & vbLf
+        script = script & "exit repeat" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
+        script = script & "end repeat" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
+
+        script = script & "if targetFolder is missing value then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "repeat with acct in pop accounts" & vbLf
+        script = script & "if (name of acct) contains targetAccountName then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set targetFolder to mail folder " & q & folderName & q & " of acct" & vbLf
+        script = script & "exit repeat" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
+        script = script & "end repeat" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
     End If
 
-    gLeadSourceNote = vbNullString
-    If usedFile Then gLeadSourceNote = "Dateiordner: " & mailPath
-    If usedMailbox Then
-        If Len(gLeadSourceNote) > 0 Then gLeadSourceNote = gLeadSourceNote & " | "
-        gLeadSourceNote = gLeadSourceNote & "E-Mail Postfach: " & BuildMailboxSourceLabel(mailboxName, folderName)
-    End If
+    ' Versuch 2: Fallback auf Default-Account
+    script = script & "if targetFolder is missing value then" & vbLf
+    script = script & "try" & vbLf
+    script = script & "set targetFolder to mail folder " & q & folderName & q & " of default account" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "end if" & vbLf
 
-    FetchAppleMailMessages = result
-    Exit Function
+    script = script & "if targetFolder is missing value then error ""Outlook-Ordner nicht gefunden: " & folderName & """" & vbLf
 
-ErrHandler:
-    ' Häufige Ursachen:
-    ' 1) Script nicht installiert: ~/Library/Application Scripts/com.microsoft.Excel/MailReader.scpt
-    ' 2) Fehlende Automation-Rechte (Systemeinstellungen > Datenschutz & Sicherheit > Automation)
-    ' Excel muss Apple Mail steuern dürfen.
-    MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
-    LogImportError "AppleScriptTask-Fehler", Err.Description
-    FetchAppleMailMessages = vbNullString
+    ' --- Nachrichten filtern ---
+    script = script & "set theMessages to (every message of targetFolder whose subject contains " & q & keywordA & q & " or subject contains " & q & keywordB & q & ")" & vbLf
+    script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
+
+    ' --- Nachrichten ausgeben ---
+    script = script & "set outText to """"" & vbLf
+    script = script & "repeat with m in theMessages" & vbLf
+        script = script & "set outText to outText & """ & MSG_DELIM & """ & linefeed" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set outText to outText & """ & DATE_TAG & """ & (time sent of m) & linefeed" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set senderAddr to " & q & q & vbLf
+        script = script & "set senderObj to sender of m" & vbLf
+        script = script & "set senderAddr to address of senderObj" & vbLf
+        script = script & "set outText to outText & """ & FROM_TAG & """ & (name of senderObj) & "" <"" & senderAddr & "">"" & linefeed" & vbLf
+        script = script & "on error" & vbLf
+        script = script & "set outText to outText & """ & FROM_TAG & """  & linefeed" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set bodyText to plain text content of m" & vbLf
+        script = script & "on error" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set bodyText to content of m" & vbLf
+        script = script & "on error" & vbLf
+        script = script & "set bodyText to " & q & q & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "set outText to outText & " & q & BODY_TAG & q & " & bodyText & linefeed" & vbLf
+    script = script & "end repeat" & vbLf
+    script = script & "return outText" & vbLf
+    script = script & "end tell" & vbLf
+    script = script & "end timeout"
+
+    BuildOutlookScript = script
 End Function
 
 Private Function BuildMailboxSourceLabel(ByVal mailboxName As String, ByVal folderName As String) As String
@@ -600,14 +741,20 @@ Private Function BuildMailboxSourceLabel(ByVal mailboxName As String, ByVal fold
 End Function
 
 Public Sub DebugPrintAppleMailFolders()
-    ' Zweck: Mailbox-Ordnerstruktur im Direktfenster ausgeben.
-    ' Abhängigkeiten: FetchAppleMailFolderList.
+    ' Zweck: Mailbox-Ordnerstruktur im Direktfenster ausgeben (Apple Mail oder Outlook).
+    ' Abhängigkeiten: FetchMailFolderList, IsOutlookMode.
     ' Rückgabe: keine (Debug.Print Ausgabe).
     Dim folderText As String
     Dim lines() As String
     Dim i As Long
 
-    folderText = FetchAppleMailFolderList()
+    If IsOutlookMode() Then
+        Debug.Print "=== Outlook Ordner ==="
+        folderText = FetchOutlookFolderList()
+    Else
+        Debug.Print "=== Apple Mail Ordner ==="
+        folderText = FetchAppleMailFolderList()
+    End If
     If Len(folderText) = 0 Then Exit Sub
 
     lines = Split(folderText, vbLf)
@@ -692,6 +839,87 @@ ErrHandler:
     MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
     LogImportError "AppleScriptTask-Fehler", Err.Description
     FetchAppleMailFolderList = vbNullString
+End Function
+
+Private Function FetchOutlookFolderList() As String
+    ' Zweck: Ordnerliste aus Microsoft Outlook via AppleScript abrufen.
+    ' Abhängigkeiten: AppleScriptTask.
+    ' Rückgabe: Textliste der Ordner oder Leerstring bei Fehler.
+    Dim script As String
+    Dim result As String
+    Dim q As String
+    Dim mailboxName As String
+
+    q = Chr$(34)
+    mailboxName = GetLeadMailbox()
+
+    script = ""
+    script = script & "with timeout of 30 seconds" & vbLf
+    script = script & "tell application ""Microsoft Outlook""" & vbLf
+    script = script & "set targetAccountName to " & q & mailboxName & q & vbLf
+    script = script & "set outText to " & q & q & vbLf
+
+    ' Exchange Accounts
+    script = script & "repeat with acct in exchange accounts" & vbLf
+    script = script & "set aName to (name of acct)" & vbLf
+    script = script & "if (targetAccountName is " & q & q & ") or (aName contains targetAccountName) then" & vbLf
+    script = script & "set outText to outText & " & q & "ACCOUNT (Exchange): " & q & " & aName & linefeed" & vbLf
+    script = script & "try" & vbLf
+    script = script & "repeat with f in mail folders of acct" & vbLf
+    script = script & "set outText to outText & (name of f) & linefeed" & vbLf
+    script = script & "end repeat" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "set outText to outText & linefeed" & vbLf
+    script = script & "end if" & vbLf
+    script = script & "end repeat" & vbLf
+
+    ' IMAP Accounts
+    script = script & "repeat with acct in imap accounts" & vbLf
+    script = script & "set aName to (name of acct)" & vbLf
+    script = script & "if (targetAccountName is " & q & q & ") or (aName contains targetAccountName) then" & vbLf
+    script = script & "set outText to outText & " & q & "ACCOUNT (IMAP): " & q & " & aName & linefeed" & vbLf
+    script = script & "try" & vbLf
+    script = script & "repeat with f in mail folders of acct" & vbLf
+    script = script & "set outText to outText & (name of f) & linefeed" & vbLf
+    script = script & "end repeat" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "set outText to outText & linefeed" & vbLf
+    script = script & "end if" & vbLf
+    script = script & "end repeat" & vbLf
+
+    ' POP Accounts
+    script = script & "repeat with acct in pop accounts" & vbLf
+    script = script & "set aName to (name of acct)" & vbLf
+    script = script & "if (targetAccountName is " & q & q & ") or (aName contains targetAccountName) then" & vbLf
+    script = script & "set outText to outText & " & q & "ACCOUNT (POP): " & q & " & aName & linefeed" & vbLf
+    script = script & "try" & vbLf
+    script = script & "repeat with f in mail folders of acct" & vbLf
+    script = script & "set outText to outText & (name of f) & linefeed" & vbLf
+    script = script & "end repeat" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "set outText to outText & linefeed" & vbLf
+    script = script & "end if" & vbLf
+    script = script & "end repeat" & vbLf
+
+    script = script & "return outText" & vbLf
+    script = script & "end tell" & vbLf
+    script = script & "end timeout"
+
+    On Error GoTo ErrOutlook
+    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    If Left$(result, 6) = "ERROR:" Then
+        MsgBox "AppleScript-Fehler (Outlook): " & Mid$(result, 7), vbExclamation
+        LogImportError "AppleScript-Fehler (Outlook)", Mid$(result, 7)
+        FetchOutlookFolderList = vbNullString
+        Exit Function
+    End If
+    FetchOutlookFolderList = result
+    Exit Function
+
+ErrOutlook:
+    MsgBox "AppleScriptTask-Fehler (Outlook). Prüfe Script-Installation und Automation-Rechte.", vbExclamation
+    LogImportError "AppleScriptTask-Fehler (Outlook)", Err.Description
+    FetchOutlookFolderList = vbNullString
 End Function
 
 ' =========================
