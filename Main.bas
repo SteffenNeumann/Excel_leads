@@ -410,17 +410,305 @@ Private Function ExtractHeaderValue(ByVal contentText As String, ByVal headerNam
 End Function
 
 Private Function ExtractBodyFromEmail(ByVal contentText As String) As String
-    Dim splitMarker As String
-    Dim pos As Long
+    ' Bevorzugt text/plain, unterstützt base64 und quoted-printable; fällt auf text/html zurück.
+    Dim bodyText As String
 
     contentText = NormalizeLineEndings(contentText)
+
+    bodyText = ParseMimeBody(contentText, "text/plain")
+    If Len(bodyText) = 0 Then
+        bodyText = ParseMimeBody(contentText, "text/html")
+        If Len(bodyText) > 0 Then bodyText = HtmlToText(bodyText)
+    End If
+
+    If Len(bodyText) = 0 Then bodyText = LegacyExtractBody(contentText)
+
+    ExtractBodyFromEmail = bodyText
+End Function
+
+Private Function ParseMimeBody(ByVal contentText As String, ByVal desiredType As String) As String
+    Dim lines() As String
+    Dim i As Long
+    Dim lineText As String
+    Dim inTarget As Boolean
+    Dim collecting As Boolean
+    Dim encoding As String
+    Dim collected As String
+    Dim charset As String
+
+    lines = Split(contentText, vbLf)
+    charset = "utf-8"
+
+    For i = LBound(lines) To UBound(lines)
+        lineText = lines(i)
+
+        If collecting Then
+            If Left$(Trim$(lineText), 2) = "--" Then Exit For
+            collected = collected & lineText & vbLf
+            GoTo NextLine
+        End If
+
+        If InStr(1, lineText, "Content-Type:", vbTextCompare) > 0 Then
+            inTarget = (InStr(1, lineText, desiredType, vbTextCompare) > 0)
+            encoding = vbNullString
+            collected = vbNullString
+            charset = ExtractCharset(lineText, charset)
+        ElseIf inTarget And InStr(1, lineText, "Content-Transfer-Encoding:", vbTextCompare) > 0 Then
+            If InStr(1, lineText, "base64", vbTextCompare) > 0 Then encoding = "base64"
+            If InStr(1, lineText, "quoted-printable", vbTextCompare) > 0 Then encoding = "qp"
+        ElseIf inTarget And Len(Trim$(lineText)) = 0 Then
+            collecting = True
+        End If
+NextLine:
+    Next i
+
+    If Len(collected) = 0 Then Exit Function
+
+    Select Case encoding
+        Case "base64": ParseMimeBody = DecodeBase64ToString(collected, charset)
+        Case "qp": ParseMimeBody = DecodeQuotedPrintable(collected, charset)
+        Case Else: ParseMimeBody = collected
+    End Select
+End Function
+
+Private Function ExtractCharset(ByVal headerLine As String, ByVal defaultCharset As String) As String
+    Dim p As Long
+    Dim part As String
+    Dim c As String
+
+    ExtractCharset = defaultCharset
+
+    p = InStr(1, headerLine, "charset=", vbTextCompare)
+    If p = 0 Then Exit Function
+
+    part = Mid$(headerLine, p + 8)
+    part = Trim$(part)
+    If Left$(part, 1) = Chr$(34) Or Left$(part, 1) = "'" Then
+        c = Mid$(part, 2)
+        p = InStr(c, Left$(part, 1))
+        If p > 0 Then c = Left$(c, p - 1)
+    Else
+        c = part
+    End If
+
+    If Len(c) > 0 Then ExtractCharset = c
+End Function
+
+Private Function HtmlToText(ByVal html As String) As String
+    html = Replace(html, "<br>", vbLf, , , vbTextCompare)
+    html = Replace(html, "<br/>", vbLf, , , vbTextCompare)
+    html = Replace(html, "<br />", vbLf, , , vbTextCompare)
+    html = Replace(html, "</p>", vbLf, , , vbTextCompare)
+    html = Replace(html, "</div>", vbLf, , , vbTextCompare)
+
+    Dim i As Long, ch As String, inTag As Boolean, outText As String
+    For i = 1 To Len(html)
+        ch = Mid$(html, i, 1)
+        If ch = "<" Then
+            inTag = True
+        ElseIf ch = ">" Then
+            inTag = False
+        ElseIf Not inTag Then
+            outText = outText & ch
+        End If
+    Next i
+    HtmlToText = outText
+End Function
+
+Private Function LegacyExtractBody(ByVal contentText As String) As String
+    Dim splitMarker As String
+    Dim pos As Long
 
     splitMarker = vbLf & vbLf
     pos = InStr(1, contentText, splitMarker)
     If pos > 0 Then
-        ExtractBodyFromEmail = Mid$(contentText, pos + Len(splitMarker))
+        LegacyExtractBody = Mid$(contentText, pos + Len(splitMarker))
     Else
-        ExtractBodyFromEmail = vbNullString
+        LegacyExtractBody = vbNullString
+    End If
+End Function
+
+Private Function DecodeBase64ToString(ByVal base64Data As String, ByVal charset As String) As String
+    Dim clean As String
+    Dim base64Chars As String
+    Dim i As Long
+    Dim ch As String
+    Dim c0 As Long, c1 As Long, c2 As Long, c3 As Long
+    Dim padBlock As Long
+    Dim out() As Byte
+    Dim outPos As Long
+    Dim totalLen As Long
+
+    base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+    ' nur gültige Zeichen behalten (inkl. "=")
+    For i = 1 To Len(base64Data)
+        ch = Mid$(base64Data, i, 1)
+        Select Case ch
+            Case "A" To "Z", "a" To "z", "0" To "9", "+", "/", "="
+                clean = clean & ch
+            Case vbCr, vbLf, vbTab, " "
+                ' ignorieren
+            Case Else
+                ' ignorieren
+        End Select
+    Next i
+
+    If Len(clean) Mod 4 <> 0 Then Exit Function
+
+    totalLen = (Len(clean) \ 4) * 3
+    If totalLen = 0 Then Exit Function
+    ReDim out(totalLen - 1)
+
+    For i = 1 To Len(clean) Step 4
+        padBlock = 0
+
+        c0 = InStr(1, base64Chars, Mid$(clean, i, 1), vbBinaryCompare) - 1
+        c1 = InStr(1, base64Chars, Mid$(clean, i + 1, 1), vbBinaryCompare) - 1
+
+        ch = Mid$(clean, i + 2, 1)
+        If ch = "=" Then
+            c2 = 0: padBlock = padBlock + 1
+        Else
+            c2 = InStr(1, base64Chars, ch, vbBinaryCompare) - 1
+        End If
+
+        ch = Mid$(clean, i + 3, 1)
+        If ch = "=" Then
+            c3 = 0: padBlock = padBlock + 1
+        Else
+            c3 = InStr(1, base64Chars, ch, vbBinaryCompare) - 1
+        End If
+
+        If c0 < 0 Or c1 < 0 Or c2 < 0 Or c3 < 0 Then Exit Function
+
+        If outPos <= UBound(out) Then
+            out(outPos) = (c0 * 4 + c1 \ 16) And &HFF
+            outPos = outPos + 1
+        End If
+        If padBlock < 2 And outPos <= UBound(out) Then
+            out(outPos) = ((c1 And &HF) * 16 + c2 \ 4) And &HFF
+            outPos = outPos + 1
+        End If
+        If padBlock = 0 And outPos <= UBound(out) Then
+            out(outPos) = ((c2 And 3) * 64 + c3) And &HFF
+            outPos = outPos + 1
+        End If
+    Next i
+
+    DecodeBase64ToString = DecodeBytesToString(out, outPos, charset)
+End Function
+
+Private Function DecodeQuotedPrintable(ByVal qpText As String, ByVal charset As String) As String
+    Dim i As Long
+    Dim ch As String
+    Dim next2 As String
+    Dim bytes() As Byte
+    Dim outPos As Long
+
+    qpText = Replace(qpText, "=" & vbCrLf, "")
+    qpText = Replace(qpText, "=" & vbLf, "")
+
+    ReDim bytes(Len(qpText)) ' worst case
+    i = 1
+    Do While i <= Len(qpText)
+        ch = Mid$(qpText, i, 1)
+        If ch = "=" And i + 2 <= Len(qpText) Then
+            next2 = Mid$(qpText, i + 1, 2)
+            If IsHexPair(next2) Then
+                bytes(outPos) = CByte(CLng("&H" & next2))
+                outPos = outPos + 1
+                i = i + 3
+                GoTo NextChar
+            End If
+        End If
+        bytes(outPos) = Asc(ch) And &HFF
+        outPos = outPos + 1
+        i = i + 1
+NextChar:
+    Loop
+
+    DecodeQuotedPrintable = DecodeBytesToString(bytes, outPos, charset)
+End Function
+
+Private Function IsHexPair(ByVal txt As String) As Boolean
+    Dim i As Long
+    If Len(txt) <> 2 Then Exit Function
+    For i = 1 To 2
+        Select Case Mid$(txt, i, 1)
+            Case "0" To "9", "A" To "F", "a" To "f"
+            Case Else: Exit Function
+        End Select
+    Next i
+    IsHexPair = True
+End Function
+
+Private Function Utf8BytesToString(ByRef bytes() As Byte, ByVal lengthBytes As Long) As String
+    Dim i As Long
+    Dim b1 As Long, b2 As Long, b3 As Long, b4 As Long
+    Dim codePoint As Long
+    Dim resultText As String
+
+    If lengthBytes = 0 Then Exit Function
+
+    i = LBound(bytes)
+    Do While i < lengthBytes
+        b1 = bytes(i)
+        Select Case b1
+            Case Is < &H80
+                resultText = resultText & SafeChrW(b1)
+            Case &HC0 To &HDF
+                If i + 1 >= lengthBytes Then Exit Do
+                b2 = bytes(i + 1)
+                codePoint = ((b1 And &H1F) * 64) + (b2 And &H3F)
+                resultText = resultText & SafeChrW(codePoint)
+                i = i + 1
+            Case &HE0 To &HEF
+                If i + 2 >= lengthBytes Then Exit Do
+                b2 = bytes(i + 1)
+                b3 = bytes(i + 2)
+                codePoint = ((b1 And &HF) * 4096) + ((b2 And &H3F) * 64) + (b3 And &H3F)
+                resultText = resultText & SafeChrW(codePoint)
+                i = i + 2
+            Case Else
+                If i + 3 >= lengthBytes Then Exit Do
+                b2 = bytes(i + 1)
+                b3 = bytes(i + 2)
+                b4 = bytes(i + 3)
+                codePoint = ((b1 And &H7) * 262144) + ((b2 And &H3F) * 4096) + ((b3 And &H3F) * 64) + (b4 And &H3F)
+                resultText = resultText & SafeChrW(codePoint)
+                i = i + 3
+        End Select
+        i = i + 1
+    Loop
+
+    Utf8BytesToString = resultText
+End Function
+
+Private Function Latin1BytesToString(ByRef bytes() As Byte, ByVal lengthBytes As Long) As String
+    Dim i As Long
+    Dim s As String
+    If lengthBytes = 0 Then Exit Function
+    For i = 0 To lengthBytes - 1
+        s = s & ChrW$(bytes(i))
+    Next i
+    Latin1BytesToString = s
+End Function
+
+Private Function DecodeBytesToString(ByRef bytes() As Byte, ByVal lengthBytes As Long, ByVal charset As String) As String
+    If lengthBytes = 0 Then Exit Function
+    If InStr(1, charset, "utf-8", vbTextCompare) > 0 Then
+        DecodeBytesToString = Utf8BytesToString(bytes, lengthBytes)
+    Else
+        DecodeBytesToString = Latin1BytesToString(bytes, lengthBytes)
+    End If
+End Function
+
+Private Function SafeChrW(ByVal codePoint As Long) As String
+    If codePoint < 0 Or codePoint > &HFFFF& Then
+        SafeChrW = "?"
+    Else
+        SafeChrW = ChrW$(codePoint)
     End If
 End Function
 
