@@ -1271,6 +1271,10 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
     SetKV payload, "From", vbNullString
     SetKV payload, "Body", vbNullString
 
+    ' Zeilenenden normalisieren (CRLF/CR -> LF) um \r-Artefakte zu vermeiden
+    blockText = Replace(blockText, vbCrLf, vbLf)
+    blockText = Replace(blockText, vbCr, vbLf)
+
     lines = Split(blockText, vbLf)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: jede Zeile des Message-Blocks auswerten.
@@ -1405,6 +1409,10 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
 
     workText = bodyText
 
+    ' Zeilenenden normalisieren (CRLF/CR -> LF) um \r-Artefakte zu vermeiden
+    workText = Replace(workText, vbCrLf, vbLf)
+    workText = Replace(workText, vbCr, vbLf)
+
     lines = Split(workText, vbLf)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
@@ -1485,9 +1493,10 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
             Else
                 SetKV fields, "Kontakt_Name", valueNorm
             End If
-        Case "mobil", "telefonnummer": SetKV fields, "Kontakt_Mobil", valueNorm
+        Case "mobil", "telefonnummer", "festnetz": SetKV fields, "Kontakt_Mobil", valueNorm
         Case "e-mail", "e-mail-adresse": SetKV fields, "Kontakt_Email", valueNorm
         Case "erreichbarkeit": SetKV fields, "Kontakt_Erreichbarkeit", valueNorm
+        Case "anschrift": SetKV fields, "Kontakt_Anschrift", valueNorm
         Case "beziehung": SetKV fields, "Senior_Beziehung", valueNorm
         Case "alter": SetKV fields, "Senior_Alter", valueNorm
         Case "pflegegrad status": SetKV fields, "Senior_Pflegegrad_Status", valueNorm
@@ -1512,7 +1521,9 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "bedarf": SetKV fields, "Bedarf", valueNorm
         Case "anfragedetails": SetKV fields, "Anfragedetails", valueNorm
         Case "anfragen-nr:": SetKV fields, "Anfrage_ID", valueNorm
-        Case "id": SetKV fields, "Anfrage_ID", valueNorm
+        Case "id", "d": SetKV fields, "Anfrage_ID", valueNorm
+        Case "budgetrahmen": SetKV fields, "Budgetrahmen", valueNorm
+        Case "geschlecht der betreuungskraft": SetKV fields, "Geschlecht_Betreuungskraft", valueNorm
     End Select
 End Sub
 
@@ -1661,13 +1672,38 @@ End Function
 Private Function ResolveLeadSource(ByVal fields As Object) As String
     ' Zweck: Lead-Quelle aus Absender nutzen, Fallback auf Default.
     ' Abhängigkeiten: GetField.
-    ' Rückgabe: Absender oder LEAD_SOURCE.
+    ' Rückgabe: Bereinigter Absendername oder LEAD_SOURCE.
     Dim fromVal As String
+    Dim sourceName As String
+
     fromVal = GetField(fields, "From")
+
     If Len(Trim$(fromVal)) = 0 Then
         ResolveLeadSource = LEAD_SOURCE
+        Exit Function
+    End If
+
+    ' Absendernamen extrahieren (ohne E-Mail-Adresse in spitzen Klammern)
+    sourceName = ExtractSenderName(fromVal)
+
+    ' Falls Ergebnis immer noch eine E-Mail-Adresse ist, Domain extrahieren
+    If InStr(sourceName, "@") > 0 Then
+        Dim atPos As Long
+        Dim domainPart As String
+        Dim dotPos As Long
+        atPos = InStr(sourceName, "@")
+        domainPart = Mid$(sourceName, atPos + 1)
+        dotPos = InStrRev(domainPart, ".")
+        If dotPos > 1 Then
+            domainPart = Left$(domainPart, dotPos - 1)
+        End If
+        sourceName = domainPart
+    End If
+
+    If Len(Trim$(sourceName)) = 0 Then
+        ResolveLeadSource = LEAD_SOURCE
     Else
-        ResolveLeadSource = fromVal
+        ResolveLeadSource = Trim$(sourceName)
     End If
 End Function
 
@@ -1784,6 +1820,9 @@ Private Function BuildNotes(ByVal fields As Object) As String
     notes = AppendNote(notes, "Weitere Details", GetField(fields, "Weitere_Details"))
     notes = AppendNote(notes, "Bedarf", GetField(fields, "Bedarf"))
     notes = AppendNote(notes, "Bedarfsort Ort", GetField(fields, "Bedarfsort_Ort"))
+    notes = AppendNote(notes, "Anschrift", GetField(fields, "Kontakt_Anschrift"))
+    notes = AppendNote(notes, "Budgetrahmen", GetField(fields, "Budgetrahmen"))
+    notes = AppendNote(notes, "Geschlecht Betreuungskraft", GetField(fields, "Geschlecht_Betreuungskraft"))
     notes = AppendNote(notes, "ID", GetField(fields, "Anfrage_ID"))
 
     BuildNotes = notes
