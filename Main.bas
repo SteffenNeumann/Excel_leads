@@ -628,15 +628,20 @@ End Function
 
 Private Function ConvertHtmlIfNeeded(ByVal textIn As String) As String
     ' Zweck: Falls der Text HTML enthält, in Klartext konvertieren.
-    ' Erkennung: Prüft ob der Text HTML-Tags wie <html>, <body>, <div>, <table> enthält.
+    ' Erkennung: Prüft den gesamten Text auf HTML-Tags und -Entities.
     ' Rückgabe: Klartext oder unveränderter Text wenn kein HTML erkannt.
-    Dim trimCheck As String
-    trimCheck = LCase$(Left$(Trim$(textIn), 500))
+    Dim lowerText As String
+    lowerText = LCase$(textIn)
 
-    If InStr(1, trimCheck, "<html", vbTextCompare) > 0 _
-       Or InStr(1, trimCheck, "<body", vbTextCompare) > 0 _
-       Or InStr(1, trimCheck, "<table", vbTextCompare) > 0 _
-       Or InStr(1, trimCheck, "<!doctype", vbTextCompare) > 0 Then
+    If InStr(1, lowerText, "<html", vbBinaryCompare) > 0 _
+       Or InStr(1, lowerText, "<body", vbBinaryCompare) > 0 _
+       Or InStr(1, lowerText, "<table", vbBinaryCompare) > 0 _
+       Or InStr(1, lowerText, "<!doctype", vbBinaryCompare) > 0 _
+       Or InStr(1, lowerText, "<div", vbBinaryCompare) > 0 _
+       Or InStr(1, lowerText, "<td", vbBinaryCompare) > 0 _
+       Or InStr(1, lowerText, "<span", vbBinaryCompare) > 0 _
+       Or InStr(1, lowerText, "&nbsp;", vbBinaryCompare) > 0 _
+       Or InStr(1, lowerText, "&#", vbBinaryCompare) > 0 Then
         Debug.Print "[ConvertHtml] HTML erkannt -> HtmlToText"
         ConvertHtmlIfNeeded = HtmlToText(textIn)
     Else
@@ -748,12 +753,28 @@ Private Function ExtractCharset(ByVal headerLine As String, ByVal defaultCharset
 End Function
 
 Private Function HtmlToText(ByVal html As String) As String
+    ' Zweck: HTML in Klartext konvertieren.
+    ' Unterstützt: br, p, div, td, tr, th, li, table + HTML-Entities.
+
+    ' Zeilenumbrüche für Block-/Tabellen-Elemente einfügen
     html = Replace(html, "<br>", vbLf, , , vbTextCompare)
     html = Replace(html, "<br/>", vbLf, , , vbTextCompare)
     html = Replace(html, "<br />", vbLf, , , vbTextCompare)
     html = Replace(html, "</p>", vbLf, , , vbTextCompare)
     html = Replace(html, "</div>", vbLf, , , vbTextCompare)
+    html = Replace(html, "</td>", vbLf, , , vbTextCompare)
+    html = Replace(html, "</th>", vbLf, , , vbTextCompare)
+    html = Replace(html, "</tr>", vbLf, , , vbTextCompare)
+    html = Replace(html, "</li>", vbLf, , , vbTextCompare)
+    html = Replace(html, "</h1>", vbLf, , , vbTextCompare)
+    html = Replace(html, "</h2>", vbLf, , , vbTextCompare)
+    html = Replace(html, "</h3>", vbLf, , , vbTextCompare)
 
+    ' <style>...</style> und <script>...</script> Blöcke entfernen
+    html = StripHtmlBlock(html, "style")
+    html = StripHtmlBlock(html, "script")
+
+    ' HTML-Tags entfernen
     Dim i As Long, ch As String, inTag As Boolean, outText As String
     For i = 1 To Len(html)
         ch = Mid$(html, i, 1)
@@ -765,7 +786,115 @@ Private Function HtmlToText(ByVal html As String) As String
             outText = outText & ch
         End If
     Next i
+
+    ' HTML-Entities dekodieren
+    outText = DecodeHtmlEntities(outText)
+
+    ' Mehrfache Leerzeilen zusammenfassen (max 2 aufeinander)
+    outText = Replace(outText, vbCrLf, vbLf)
+    outText = Replace(outText, vbCr, vbLf)
+    Do While InStr(1, outText, vbLf & vbLf & vbLf) > 0
+        outText = Replace(outText, vbLf & vbLf & vbLf, vbLf & vbLf)
+    Loop
+
     HtmlToText = outText
+End Function
+
+Private Function StripHtmlBlock(ByVal html As String, ByVal tagName As String) As String
+    ' Zweck: Kompletten HTML-Block entfernen (z.B. <style>...</style>).
+    Dim openTag As String
+    Dim closeTag As String
+    Dim posOpen As Long
+    Dim posClose As Long
+
+    openTag = "<" & tagName
+    closeTag = "</" & tagName & ">"
+
+    Do
+        posOpen = InStr(1, html, openTag, vbTextCompare)
+        If posOpen = 0 Then Exit Do
+        posClose = InStr(posOpen, html, closeTag, vbTextCompare)
+        If posClose = 0 Then Exit Do
+        html = Left$(html, posOpen - 1) & Mid$(html, posClose + Len(closeTag))
+    Loop
+
+    StripHtmlBlock = html
+End Function
+
+Private Function DecodeHtmlEntities(ByVal textIn As String) As String
+    ' Zweck: Gängige HTML-Entities dekodieren.
+    Dim s As String
+    s = textIn
+
+    ' Benannte Entities
+    s = Replace(s, "&nbsp;", " ", , , vbTextCompare)
+    s = Replace(s, "&amp;", "&", , , vbTextCompare)
+    s = Replace(s, "&lt;", "<", , , vbTextCompare)
+    s = Replace(s, "&gt;", ">", , , vbTextCompare)
+    s = Replace(s, "&quot;", Chr$(34), , , vbTextCompare)
+    s = Replace(s, "&apos;", "'", , , vbTextCompare)
+    s = Replace(s, "&shy;", "", , , vbTextCompare)
+    s = Replace(s, "&ndash;", ChrW$(8211), , , vbTextCompare)
+    s = Replace(s, "&mdash;", ChrW$(8212), , , vbTextCompare)
+    s = Replace(s, "&ouml;", ChrW$(246), , , vbTextCompare)
+    s = Replace(s, "&auml;", ChrW$(228), , , vbTextCompare)
+    s = Replace(s, "&uuml;", ChrW$(252), , , vbTextCompare)
+    s = Replace(s, "&Ouml;", ChrW$(214), , , vbTextCompare)
+    s = Replace(s, "&Auml;", ChrW$(196), , , vbTextCompare)
+    s = Replace(s, "&Uuml;", ChrW$(220), , , vbTextCompare)
+    s = Replace(s, "&szlig;", ChrW$(223), , , vbTextCompare)
+    s = Replace(s, "&euro;", ChrW$(8364), , , vbTextCompare)
+
+    ' Numerische Entities: &#NNN; und &#xHH;
+    s = DecodeNumericEntities(s)
+
+    ' Soft-Hyphens entfernen (U+00AD)
+    s = Replace(s, ChrW$(&HAD), "")
+
+    DecodeHtmlEntities = s
+End Function
+
+Private Function DecodeNumericEntities(ByVal textIn As String) As String
+    ' Zweck: Numerische HTML-Entities (&#NNN; und &#xHH;) dekodieren.
+    Dim result As String
+    Dim i As Long
+    Dim semiPos As Long
+    Dim entityText As String
+    Dim codeVal As Long
+
+    result = vbNullString
+    i = 1
+    Do While i <= Len(textIn)
+        If Mid$(textIn, i, 2) = "&#" Then
+            semiPos = InStr(i + 2, textIn, ";")
+            If semiPos > 0 And semiPos - i <= 8 Then
+                entityText = Mid$(textIn, i + 2, semiPos - i - 2)
+                On Error Resume Next
+                If Left$(entityText, 1) = "x" Or Left$(entityText, 1) = "X" Then
+                    codeVal = CLng("&H" & Mid$(entityText, 2))
+                Else
+                    codeVal = CLng(entityText)
+                End If
+                If Err.Number = 0 And codeVal > 0 And codeVal <= &HFFFF& Then
+                    result = result & ChrW$(codeVal)
+                    i = semiPos + 1
+                Else
+                    Err.Clear
+                    result = result & Mid$(textIn, i, 1)
+                    i = i + 1
+                End If
+                On Error GoTo 0
+            Else
+                result = result & Mid$(textIn, i, 1)
+                i = i + 1
+            End If
+        Else
+            result = result & Mid$(textIn, i, 1)
+            i = i + 1
+        End If
+    Loop
+
+    DecodeNumericEntities = result
 End Function
 
 Private Function LegacyExtractBody(ByVal contentText As String) As String
@@ -1997,6 +2126,9 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     ' Zeilenenden normalisieren (CRLF/CR -> LF) um \r-Artefakte zu vermeiden
     workText = Replace(workText, vbCrLf, vbLf)
     workText = Replace(workText, vbCr, vbLf)
+
+    ' Soft-Hyphens (U+00AD) entfernen, die Sektionserkennung stören können
+    workText = Replace(workText, ChrW$(&HAD), "")
 
     lines = Split(workText, vbLf)
     For i = LBound(lines) To UBound(lines)
