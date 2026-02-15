@@ -2758,4 +2758,254 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
     Next i
 End Function
 
+' =========================
+' Smoke Test
+' =========================
+Public Sub SmokeTestExtraction()
+    ' Zweck: Automatisierter Smoke-Test der Extraktionspipeline.
+    ' Prüft 6 Mail-Formate: Klartext, HTML-Tabelle, QP-kodiert, Soft-Hyphen, Inline, HTML+Entities.
+    ' Ausgabe: Debug.Print (Direktfenster Ctrl+G).
+    Dim passCount As Long
+    Dim failCount As Long
+    Dim totalCount As Long
 
+    passCount = 0
+    failCount = 0
+
+    Debug.Print "=============================="
+    Debug.Print "SMOKE TEST - Extraktion"
+    Debug.Print "=============================="
+    Debug.Print ""
+
+    ' --- Test 1: Klartext (Label/Value auf separaten Zeilen) ---
+    Dim body1 As String
+    body1 = "Kontaktinformationen des Interessenten" & vbLf & _
+            "Vor- und Nachname:" & vbLf & _
+            "Max Mustermann" & vbLf & _
+            "Mobil:" & vbLf & _
+            "+49 171 1234567" & vbLf & _
+            "E-Mail-Adresse:" & vbLf & _
+            "max@beispiel.de" & vbLf & _
+            "Erreichbarkeit:" & vbLf & _
+            "vormittags" & vbLf & _
+            "Bedarfsort:" & vbLf & _
+            "80331 Muenchen" & vbLf & _
+            "Informationen zum Senior" & vbLf & _
+            "Name:" & vbLf & _
+            "Erna Mustermann" & vbLf & _
+            "Pflegegrad:" & vbLf & _
+            "Pflegegrad 3" & vbLf & _
+            "Anfragen-Nr.:" & vbLf & _
+            "12345"
+
+    totalCount = totalCount + RunSingleSmokeTest("1: Klartext Label/Value", body1, _
+        "Max Mustermann", "+49 171 1234567", "max@beispiel.de", "vormittags", _
+        "80331", "Erna Mustermann", "3", "12345", passCount, failCount)
+
+    ' --- Test 2: HTML-Tabelle (SendGrid-Style) ---
+    Dim body2 As String
+    body2 = "<html><body>" & _
+            "<h2>Neue Anfrage</h2>" & _
+            "<table>" & _
+            "<tr><td colspan='2'><b>Kontakt" & ChrW$(&HAD) & "informationen des Interessenten</b></td></tr>" & _
+            "<tr><td>Vor- und Nachname:</td><td>Anna Schmidt</td></tr>" & _
+            "<tr><td>Mobil:</td><td>+49 160 9876543<tel:+49%20160%209876543></td></tr>" & _
+            "<tr><td>E-Mail-Adresse:</td><td>anna@schmidt.de<mailto:anna@schmidt.de></td></tr>" & _
+            "<tr><td>Erreichbarkeit:</td><td>nachmittags</td></tr>" & _
+            "<tr><td>Bedarfsort:</td><td>50667 K&ouml;ln</td></tr>" & _
+            "<tr><td colspan='2'><b>Informationen zum Senior</b></td></tr>" & _
+            "<tr><td>Name:</td><td>Helga Schmidt</td></tr>" & _
+            "<tr><td>Pflegegrad:</td><td>Pflegegrad 2</td></tr>" & _
+            "<tr><td>Anfragen-Nr.:</td><td>67890</td></tr>" & _
+            "</table></body></html>"
+
+    totalCount = totalCount + RunSingleSmokeTest("2: HTML-Tabelle (SendGrid)", body2, _
+        "Anna Schmidt", "+49 160 9876543", "anna@schmidt.de", "nachmittags", _
+        "50667", "Helga Schmidt", "2", "67890", passCount, failCount)
+
+    ' --- Test 3: Quoted-Printable Body ---
+    Dim body3 As String
+    body3 = "Kontaktinformationen des Interessenten" & vbLf & _
+            "Vor- und Nachname:" & vbLf & _
+            "Peter M=C3=BCller" & vbLf & _
+            "Mobil:" & vbLf & _
+            "+49 152 5551234" & vbLf & _
+            "E-Mail-Adresse:" & vbLf & _
+            "peter@m=C3=BCller.de" & vbLf & _
+            "Erreichbarkeit:" & vbLf & _
+            "ganzt=C3=A4gig" & vbLf & _
+            "Bedarfsort:" & vbLf & _
+            "10115 Berlin" & vbLf & _
+            "Informationen zum Senior" & vbLf & _
+            "Name:" & vbLf & _
+            "Gerda M=C3=BCller" & vbLf & _
+            "Pflegegrad:" & vbLf & _
+            "Pflegegrad 4" & vbLf & _
+            "Anfragen-Nr.:" & vbLf & _
+            "24680"
+
+    totalCount = totalCount + RunSingleSmokeTest("3: Quoted-Printable", body3, _
+        "Peter M" & ChrW$(252) & "ller", "+49 152 5551234", "peter@m" & ChrW$(252) & "ller.de", _
+        "ganzt" & ChrW$(228) & "gig", "10115", "Gerda M" & ChrW$(252) & "ller", "4", "24680", _
+        passCount, failCount)
+
+    ' --- Test 4: Soft-Hyphen in Sektionsheader ---
+    Dim body4 As String
+    body4 = "Kontakt" & ChrW$(&HAD) & "informationen des Interessenten" & vbLf & _
+            "Vor- und Nachname:" & vbLf & _
+            "Lisa Weber" & vbLf & _
+            "Mobil:" & vbLf & _
+            "+49 176 9998877" & vbLf & _
+            "E-Mail-Adresse:" & vbLf & _
+            "lisa@weber.de" & vbLf & _
+            "Informationen zum Senior" & vbLf & _
+            "Name:" & vbLf & _
+            "Otto Weber" & vbLf & _
+            "Pflegegrad:" & vbLf & _
+            "Pflegegrad 1"
+
+    totalCount = totalCount + RunSingleSmokeTest("4: Soft-Hyphen Header", body4, _
+        "Lisa Weber", "+49 176 9998877", "lisa@weber.de", "", _
+        "", "Otto Weber", "1", "", passCount, failCount)
+
+    ' --- Test 5: Inline-Format (key: value auf gleicher Zeile) ---
+    Dim body5 As String
+    body5 = "Kontaktinformationen" & vbLf & _
+            "Vor- und Nachname: Karl Braun" & vbLf & _
+            "Mobil: +49 151 2223344" & vbLf & _
+            "E-Mail-Adresse: karl@braun.de" & vbLf & _
+            "Erreichbarkeit: abends" & vbLf & _
+            "Bedarfsort: 20095 Hamburg" & vbLf & _
+            "Informationen zum Senior" & vbLf & _
+            "Name: Gisela Braun" & vbLf & _
+            "Pflegegrad: Pflegegrad 5" & vbLf & _
+            "Anfragen-Nr.: 99999"
+
+    totalCount = totalCount + RunSingleSmokeTest("5: Inline key: value", body5, _
+        "Karl Braun", "+49 151 2223344", "karl@braun.de", "abends", _
+        "20095", "Gisela Braun", "5", "99999", passCount, failCount)
+
+    ' --- Test 6: HTML mit Entities (&#NNN; und benannte Entities) ---
+    Dim body6 As String
+    body6 = "<html><body>" & _
+            "<div>Kontaktinformationen des Interessenten</div>" & _
+            "<div>Vor- und Nachname:</div><div>Hans M&uuml;ller</div>" & _
+            "<div>Mobil:</div><div>+49 170 1112233</div>" & _
+            "<div>E-Mail-Adresse:</div><div>hans@mueller.de</div>" & _
+            "<div>Bedarfsort:</div><div>60311 Frankfurt&nbsp;am&nbsp;Main</div>" & _
+            "<div>Informationen zum Senior</div>" & _
+            "<div>Name:</div><div>Inge M&uuml;ller</div>" & _
+            "<div>Pflegegrad:</div><div>Pflegegrad 3</div>" & _
+            "</body></html>"
+
+    totalCount = totalCount + RunSingleSmokeTest("6: HTML + Entities", body6, _
+        "Hans M" & ChrW$(252) & "ller", "+49 170 1112233", "hans@mueller.de", "", _
+        "60311", "Inge M" & ChrW$(252) & "ller", "3", "", passCount, failCount)
+
+    ' --- Zusammenfassung ---
+    Debug.Print ""
+    Debug.Print "=============================="
+    Debug.Print "ERGEBNIS: " & passCount & " PASS / " & failCount & " FAIL (von " & totalCount & " Pruefungen)"
+    Debug.Print "=============================="
+
+    If failCount = 0 Then
+        MsgBox "Smoke Test BESTANDEN: Alle " & totalCount & " Pruefungen OK.", vbInformation, "Smoke Test"
+    Else
+        MsgBox "Smoke Test: " & failCount & " von " & totalCount & " Pruefungen FEHLGESCHLAGEN." & vbLf & _
+               "Details im Direktfenster (Ctrl+G).", vbExclamation, "Smoke Test"
+    End If
+End Sub
+
+Private Function RunSingleSmokeTest( _
+        ByVal testName As String, _
+        ByVal bodyText As String, _
+        ByVal expectName As String, _
+        ByVal expectMobil As String, _
+        ByVal expectEmail As String, _
+        ByVal expectErreichbarkeit As String, _
+        ByVal expectPLZ As String, _
+        ByVal expectSeniorName As String, _
+        ByVal expectPflegegrad As String, _
+        ByVal expectAnfrageID As String, _
+        ByRef passCount As Long, _
+        ByRef failCount As Long _
+    ) As Long
+    ' Zweck: Einzelnen Smoke-Test durchlaufen lassen.
+    ' Rückgabe: Anzahl der Prüfungen (pass+fail inkrementiert via ByRef).
+    Dim decoded As String
+    Dim fields As Object
+    Dim checks As Long
+
+    Debug.Print "--- " & testName & " ---"
+
+    decoded = DecodeBodyIfNeeded(bodyText)
+    Set fields = ParseLeadContent(decoded)
+
+    checks = 0
+    checks = checks + AssertField(fields, "Kontakt_Name", expectName, testName, passCount, failCount)
+    checks = checks + AssertField(fields, "Kontakt_Mobil", expectMobil, testName, passCount, failCount)
+    checks = checks + AssertField(fields, "Kontakt_Email", expectEmail, testName, passCount, failCount)
+    If Len(expectErreichbarkeit) > 0 Then
+        checks = checks + AssertField(fields, "Kontakt_Erreichbarkeit", expectErreichbarkeit, testName, passCount, failCount)
+    End If
+    If Len(expectPLZ) > 0 Then
+        checks = checks + AssertField(fields, "PLZ", expectPLZ, testName, passCount, failCount)
+    End If
+    checks = checks + AssertField(fields, "Senior_Name", expectSeniorName, testName, passCount, failCount)
+    If Len(expectPflegegrad) > 0 Then
+        checks = checks + AssertFieldContains(fields, "Senior_Pflegegrad", expectPflegegrad, testName, passCount, failCount)
+    End If
+    If Len(expectAnfrageID) > 0 Then
+        checks = checks + AssertField(fields, "Anfrage_ID", expectAnfrageID, testName, passCount, failCount)
+    End If
+
+    Debug.Print ""
+    RunSingleSmokeTest = checks
+End Function
+
+Private Function AssertField( _
+        ByVal fields As Object, _
+        ByVal fieldName As String, _
+        ByVal expected As String, _
+        ByVal testName As String, _
+        ByRef passCount As Long, _
+        ByRef failCount As Long _
+    ) As Long
+    ' Zweck: Einzelnes Feld prüfen (exakter Vergleich, trimmed).
+    ' Rückgabe: 1 (Prüfung gezählt).
+    Dim actual As String
+    actual = Trim$(GetField(fields, fieldName))
+    expected = Trim$(expected)
+
+    If StrComp(actual, expected, vbTextCompare) = 0 Then
+        Debug.Print "  PASS: " & fieldName & " = """ & actual & """"
+        passCount = passCount + 1
+    Else
+        Debug.Print "  FAIL: " & fieldName & " erwartet """ & expected & """ aber """ & actual & """"
+        failCount = failCount + 1
+    End If
+    AssertField = 1
+End Function
+
+Private Function AssertFieldContains( _
+        ByVal fields As Object, _
+        ByVal fieldName As String, _
+        ByVal expectedPart As String, _
+        ByVal testName As String, _
+        ByRef passCount As Long, _
+        ByRef failCount As Long _
+    ) As Long
+    ' Zweck: Prüft ob ein Feld den erwarteten Teilstring enthält.
+    ' Rückgabe: 1 (Prüfung gezählt).
+    Dim actual As String
+    actual = Trim$(GetField(fields, fieldName))
+
+    If InStr(1, actual, expectedPart, vbTextCompare) > 0 Then
+        Debug.Print "  PASS: " & fieldName & " enthaelt """ & expectedPart & """ (= """ & actual & """)"
+        passCount = passCount + 1
+    Else
+        Debug.Print "  FAIL: " & fieldName & " erwartet """ & expectedPart & """ enthalten, aber """ & actual & """"
+        failCount = failCount + 1
+    End If
+    AssertFieldContains = 1
+End Function
