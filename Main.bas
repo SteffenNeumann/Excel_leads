@@ -68,7 +68,7 @@ Private gLeadSourceNote As String
 ' FetchAppleMailFolderList: Baut AppleScript, ruft AppleScriptTask; liefert Ordnerliste als Text.
 ' EnsureAppleScriptInstalled / GetAppleScriptTargetPath / InstallAppleScript / EnsureFolderExists: Helfer zum Installieren des AppleScripts. Rückgabe: Pfade oder Seiteneffekt.
 ' NewKeyValueStore / keyNorm / SetKV / TryGetKV: Plattform-sicherer Key/Value-Store. Rückgabe: Collection/Dictionary oder Boolean.
-' ParseMessageBlock: Zerlegt einen Nachrichtenblock in Date/Subject/From/Body; nutzt ParseAppleMailDate.
+' ParseMessageBlock: Zerlegt einen Nachrichtenblock in Date/Subject/From/Body; nutzt ParseAppleMailDate. Nach BODY:-Tag werden alle Folgezeilen dem Body zugeordnet.
 ' ParseAppleMailDate / GermanMonthToNumber: Robust Datum parsen aus Apple Mail Text.
 ' ResolveLeadType: Leitet Lead-Typ aus Betreff/Body ab.
 ' ParseLeadContent: Parst Body in Felder; nutzt MapLabelValue, MapInlinePair, SetBedarfsort.
@@ -1545,13 +1545,16 @@ End Function
 ' =========================
 Private Function ParseMessageBlock(ByVal blockText As String) As Object
     ' Zweck: Datum/Betreff/Body aus einem Message-Block extrahieren.
-    ' Abhängigkeiten: NewKeyValueStore, ParseAppleMailDate, SetKV, TryGetKV.
+    ' Abhängigkeiten: NewKeyValueStore, ParseAppleMailDate, SetKV.
     ' Rückgabe: Key/Value-Store mit "Date", "Subject", "Body", "From".
-    ' Rückgabe: Key/Value-Store mit "Date", "Subject", "Body".
+    ' Fix: Nach BODY:-Tag werden ALLE Folgezeilen dem Body zugeordnet,
+    '       ohne erneute Tag-Prüfung. Leerzeilen im Body bleiben erhalten.
     Dim lines() As String
     Dim i As Long
     Dim lineText As String
     Dim payload As Object
+    Dim inBody As Boolean
+    Dim bodyAccum As String
 
     Set payload = NewKeyValueStore()
     SetKV payload, "Date", Date
@@ -1563,26 +1566,37 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
     blockText = Replace(blockText, vbCrLf, vbLf)
     blockText = Replace(blockText, vbCr, vbLf)
 
+    inBody = False
+    bodyAccum = vbNullString
+
     lines = Split(blockText, vbLf)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: jede Zeile des Message-Blocks auswerten.
-        lineText = Trim$(lines(i))
-        If Len(lineText) > 0 Then
-            If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
-                SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
-            ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
-                SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
-            ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
-                SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
-            ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
-                SetKV payload, "Body", Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
-            Else
-                Dim curBody As Variant
-                If Not TryGetKV(payload, "Body", curBody) Then curBody = vbNullString
-                SetKV payload, "Body", CStr(curBody) & lineText & vbLf
-            End If
+
+        If inBody Then
+            ' Nach BODY:-Tag: ALLE Zeilen sind Body-Inhalt (inkl. Leerzeilen)
+            bodyAccum = bodyAccum & lines(i) & vbLf
+            GoTo NextParseLine
         End If
+
+        ' Header-Bereich: Tags prüfen
+        lineText = Trim$(lines(i))
+        If Len(lineText) = 0 Then GoTo NextParseLine
+
+        If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
+            SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
+        ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
+            SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
+        ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
+            SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
+        ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
+            bodyAccum = Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
+            inBody = True
+        End If
+NextParseLine:
     Next i
+
+    SetKV payload, "Body", bodyAccum
 
     Set ParseMessageBlock = payload
 End Function
