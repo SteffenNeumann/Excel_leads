@@ -555,9 +555,75 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
         Exit Function
     End If
 
+    ' Fall 4: Rohes Quoted-Printable (ohne MIME-Header, aber =XX Sequenzen im Text)
+    If IsLikelyQuotedPrintable(trimmed) Then
+        Debug.Print "[DecodeBody] Quoted-Printable erkannt -> DecodeQuotedPrintable"
+        decoded = DecodeQuotedPrintable(trimmed, "utf-8")
+        Debug.Print "[DecodeBody] QP-Ergebnis Länge: " & Len(decoded)
+        If Len(Trim$(decoded)) > 0 Then
+            Debug.Print "[DecodeBody] QP dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
+            DecodeBodyIfNeeded = ConvertHtmlIfNeeded(decoded)
+        Else
+            DecodeBodyIfNeeded = bodyText
+        End If
+        Exit Function
+    End If
+
     Debug.Print "[DecodeBody] Kein Encoding erkannt -> Original beibehalten"
-    ' Fall 4: Kein Encoding erkannt -> Original zurückgeben
+    ' Fall 5: Kein Encoding erkannt -> Original zurückgeben
     DecodeBodyIfNeeded = bodyText
+End Function
+
+Private Function IsLikelyQuotedPrintable(ByVal textIn As String) As Boolean
+    ' Zweck: Erkennt ob ein Text Quoted-Printable kodiert ist (ohne MIME-Header).
+    ' Prüft auf typische QP-Muster: =XX Hex-Sequenzen und Soft-Linebreaks (= am Zeilenende).
+    ' Rückgabe: True wenn Text QP-kodiert erscheint.
+    Dim lines() As String
+    Dim i As Long
+    Dim lineText As String
+    Dim qpHitCount As Long
+    Dim checkedCount As Long
+    Dim j As Long
+    Dim ch As String
+    Dim next2 As String
+    Const MAX_CHECK As Long = 30
+
+    textIn = Replace(textIn, vbCrLf, vbLf)
+    textIn = Replace(textIn, vbCr, vbLf)
+
+    lines = Split(textIn, vbLf)
+    For i = LBound(lines) To UBound(lines)
+        lineText = lines(i)
+        If Len(lineText) > 0 Then
+            checkedCount = checkedCount + 1
+            If checkedCount > MAX_CHECK Then Exit For
+
+            ' Soft-Linebreak: Zeile endet mit "="
+            If Right$(lineText, 1) = "=" Then
+                qpHitCount = qpHitCount + 1
+            End If
+
+            ' =XX Hex-Sequenzen suchen (z.B. =20, =C3, =BC)
+            j = 1
+            Do While j <= Len(lineText) - 2
+                ch = Mid$(lineText, j, 1)
+                If ch = "=" Then
+                    next2 = Mid$(lineText, j + 1, 2)
+                    If IsHexPair(next2) Then
+                        qpHitCount = qpHitCount + 1
+                        j = j + 3
+                    Else
+                        j = j + 1
+                    End If
+                Else
+                    j = j + 1
+                End If
+            Loop
+        End If
+    Next i
+
+    ' Mindestens 3 QP-Treffer in den ersten 30 Zeilen -> wahrscheinlich QP
+    IsLikelyQuotedPrintable = (qpHitCount >= 3)
 End Function
 
 Private Function ConvertHtmlIfNeeded(ByVal textIn As String) As String
