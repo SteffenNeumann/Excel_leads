@@ -778,6 +778,14 @@ Private Function HtmlToText(ByVal html As String) As String
     html = StripHtmlBlock(html, "style")
     html = StripHtmlBlock(html, "script")
 
+    ' Debug: tel: Vorkommen im HTML vor Extraktion
+    Dim telDebugPos As Long
+    telDebugPos = InStr(1, html, "tel:", vbTextCompare)
+    Do While telDebugPos > 0
+        Debug.Print "[HtmlToText] tel: bei Pos " & telDebugPos & ": '" & Mid$(html, IIf(telDebugPos > 20, telDebugPos - 20, 1), 80) & "'"
+        telDebugPos = InStr(telDebugPos + 4, html, "tel:", vbTextCompare)
+    Loop
+
     ' Tel/Mailto-Links: href-Werte als Text sichern bevor Tags entfernt werden
     html = ExtractTelMailtoLinks(html)
 
@@ -872,39 +880,46 @@ Private Function ExtractTelMailtoLinks(ByVal html As String) As String
         Else
             hrefStart = pos + 6
             hrefEnd = InStr(hrefStart, html, quoteChar)
-            If hrefEnd = 0 Then Exit Do
-
-            hrefVal = Mid$(html, hrefStart, hrefEnd - hrefStart)
-
-            If LCase$(Left$(hrefVal, 4)) = "tel:" Then
-                hrefVal = Mid$(hrefVal, 5)
-                hrefVal = Replace(hrefVal, "%20", " ")
-
-                tagStart = InStrRev(html, "<", pos)
-                closeAnchor = InStr(hrefEnd, html, "</a>", vbTextCompare)
-
-                If tagStart > 0 And closeAnchor > 0 Then
-                    html = Left$(html, tagStart - 1) & " " & hrefVal & " " & Mid$(html, closeAnchor + 4)
-                    pos = tagStart + Len(hrefVal) + 2
-                Else
-                    pos = hrefEnd + 1
-                End If
-
-            ElseIf LCase$(Left$(hrefVal, 7)) = "mailto:" Then
-                hrefVal = Mid$(hrefVal, 8)
-                hrefVal = Replace(hrefVal, "%20", " ")
-
-                tagStart = InStrRev(html, "<", pos)
-                closeAnchor = InStr(hrefEnd, html, "</a>", vbTextCompare)
-
-                If tagStart > 0 And closeAnchor > 0 Then
-                    html = Left$(html, tagStart - 1) & " " & hrefVal & " " & Mid$(html, closeAnchor + 4)
-                    pos = tagStart + Len(hrefVal) + 2
-                Else
-                    pos = hrefEnd + 1
-                End If
+            If hrefEnd = 0 Then
+                ' Kein schliessendes Anfuehrungszeichen -> weiter statt abbrechen
+                pos = pos + 5
             Else
-                pos = hrefEnd + 1
+                hrefVal = Mid$(html, hrefStart, hrefEnd - hrefStart)
+
+                If LCase$(Left$(hrefVal, 4)) = "tel:" Then
+                    Dim telExtracted As String
+                    telExtracted = Mid$(hrefVal, 5)
+                    telExtracted = Replace(telExtracted, "%20", " ")
+                    Debug.Print "[ExtractTelMailto] tel: gefunden -> '" & telExtracted & "'"
+
+                    tagStart = InStrRev(html, "<", pos)
+                    closeAnchor = InStr(hrefEnd, html, "</a>", vbTextCompare)
+
+                    If tagStart > 0 And closeAnchor > 0 Then
+                        html = Left$(html, tagStart - 1) & " " & telExtracted & " " & Mid$(html, closeAnchor + 4)
+                        pos = tagStart + Len(telExtracted) + 2
+                    Else
+                        pos = hrefEnd + 1
+                    End If
+
+                ElseIf LCase$(Left$(hrefVal, 7)) = "mailto:" Then
+                    Dim mailExtracted As String
+                    mailExtracted = Mid$(hrefVal, 8)
+                    mailExtracted = Replace(mailExtracted, "%20", " ")
+                    Debug.Print "[ExtractTelMailto] mailto: gefunden -> '" & mailExtracted & "'"
+
+                    tagStart = InStrRev(html, "<", pos)
+                    closeAnchor = InStr(hrefEnd, html, "</a>", vbTextCompare)
+
+                    If tagStart > 0 And closeAnchor > 0 Then
+                        html = Left$(html, tagStart - 1) & " " & mailExtracted & " " & Mid$(html, closeAnchor + 4)
+                        pos = tagStart + Len(mailExtracted) + 2
+                    Else
+                        pos = hrefEnd + 1
+                    End If
+                Else
+                    pos = hrefEnd + 1
+                End If
             End If
         End If
     Loop
@@ -2276,8 +2291,26 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                 MapLabelValue result, pendingKey, lineText, currentSection
                 pendingKey = vbNullString
             ElseIf InStr(lineText, ":") > 0 Then
-                Debug.Print "[ParseLead] Inline: '" & Left$(lineText, 80) & "' [" & currentSection & "] (Zeile " & i & ")"
-                MapInlinePair result, lineText, currentSection
+                ' tel:NUMBER Pattern in Kontakt-Sektion extrahieren
+                Dim telPosInline As Long
+                telPosInline = InStr(1, lineText, "tel:", vbTextCompare)
+                If telPosInline > 0 And currentSection = "Kontakt" Then
+                    Dim telNumInline As String
+                    telNumInline = Trim$(Mid$(lineText, telPosInline + 4))
+                    telNumInline = Replace(telNumInline, ")", "")
+                    telNumInline = Replace(telNumInline, "(", "")
+                    telNumInline = Trim$(telNumInline)
+                    If IsLikelyPhoneNumber(telNumInline) And Len(GetField(result, "Kontakt_Mobil")) = 0 Then
+                        Debug.Print "[ParseLead] Tel-Pattern: '" & telNumInline & "' (Zeile " & i & ")"
+                        SetKV result, "Kontakt_Mobil", CleanLinkedValue(telNumInline)
+                    Else
+                        Debug.Print "[ParseLead] Inline: '" & Left$(lineText, 80) & "' [" & currentSection & "] (Zeile " & i & ")"
+                        MapInlinePair result, lineText, currentSection
+                    End If
+                Else
+                    Debug.Print "[ParseLead] Inline: '" & Left$(lineText, 80) & "' [" & currentSection & "] (Zeile " & i & ")"
+                    MapInlinePair result, lineText, currentSection
+                End If
             ElseIf currentSection = "Kontakt" And IsLikelyPhoneNumber(lineText) Then
                 If Len(GetField(result, "Kontakt_Mobil")) = 0 Then
                     Debug.Print "[ParseLead] Auto-Mobil: '" & lineText & "' (Zeile " & i & ")"
@@ -2359,7 +2392,12 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "pflegedienst vorhanden": SetKV fields, "Pflegedienst_Vorhanden", valueNorm
         Case "anfragedetails": SetKV fields, "Anfragedetails", valueNorm
         Case "anfragen-nr", "anfragen-nr.", "anfragen nr": SetKV fields, "Anfrage_ID", valueNorm
-        Case "weitere details": SetKV fields, "Weitere_Details", valueNorm
+        Case "weitere details"
+            SetKV fields, "Weitere_Details", valueNorm
+            ' Eingebettete Key:Value-Paare parsen (z.B. "Pflegegrad/-stufe: 1")
+            If InStr(valueNorm, ":") > 0 Then
+                MapInlinePair fields, valueNorm, sectionName
+            End If
         Case "bedarf": SetKV fields, "Bedarf", valueNorm
         Case "anfragedetails": SetKV fields, "Anfragedetails", valueNorm
         Case "anfragen-nr:": SetKV fields, "Anfrage_ID", valueNorm
