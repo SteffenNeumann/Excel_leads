@@ -414,15 +414,20 @@ End Function
 
 Private Function IsLikelyBase64(ByVal textIn As String) As Boolean
     ' Zweck: Erkennt ob ein Text reines Base64 ist (z.B. MIME-kodierter E-Mail-Body).
-    ' Base64 enthält nur A-Z, a-z, 0-9, +, /, = und Whitespace.
+    ' Prüft die ersten 20 nicht-leeren Zeilen. Wenn >=80% gültig und >=2 lange Zeilen -> True.
     ' Rückgabe: True wenn Text Base64-kodiert erscheint.
     Dim clean As String
     Dim i As Long
     Dim ch As String
     Dim longLineCount As Long
+    Dim validLineCount As Long
+    Dim checkedLineCount As Long
+    Dim invalidLineCount As Long
     Dim lines() As String
     Dim lineText As String
     Dim j As Long
+    Dim lineOk As Boolean
+    Const MAX_CHECK_LINES As Long = 20
 
     clean = Replace(textIn, vbCrLf, vbLf)
     clean = Replace(clean, vbCr, vbLf)
@@ -435,21 +440,35 @@ Private Function IsLikelyBase64(ByVal textIn As String) As Boolean
         lineText = Trim$(lines(i))
         If Len(lineText) = 0 Then GoTo NextB64Line
 
+        checkedLineCount = checkedLineCount + 1
+        If checkedLineCount > MAX_CHECK_LINES Then Exit For
+
+        lineOk = True
         For j = 1 To Len(lineText)
             ch = Mid$(lineText, j, 1)
             Select Case ch
                 Case "A" To "Z", "a" To "z", "0" To "9", "+", "/", "="
                 Case Else
-                    Exit Function
+                    lineOk = False
+                    Exit For
             End Select
         Next j
 
-        If Len(lineText) >= 40 Then longLineCount = longLineCount + 1
+        If lineOk Then
+            validLineCount = validLineCount + 1
+            If Len(lineText) >= 40 Then longLineCount = longLineCount + 1
+        Else
+            invalidLineCount = invalidLineCount + 1
+        End If
 NextB64Line:
     Next i
 
-    ' Mindestens 2 lange Zeilen (Base64 bricht typisch bei 76 Zeichen um)
-    If longLineCount >= 2 Then IsLikelyBase64 = True
+    ' Mindestens 80% gültige Zeilen und mindestens 2 lange Zeilen
+    If checkedLineCount > 0 And longLineCount >= 2 Then
+        If (validLineCount / checkedLineCount) >= 0.8 Then
+            IsLikelyBase64 = True
+        End If
+    End If
 End Function
 
 Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
@@ -461,13 +480,18 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
 
     trimmed = Trim$(bodyText)
     If Len(trimmed) = 0 Then
+        Debug.Print "[DecodeBody] Body ist leer -> übersprungen"
         DecodeBodyIfNeeded = bodyText
         Exit Function
     End If
 
+    Debug.Print "[DecodeBody] Body-Länge: " & Len(trimmed) & ", erste 80 Zeichen: " & Left$(trimmed, 80)
+
     ' Fall 1: MIME-Struktur erkannt (Content-Type Header)
     If InStr(1, trimmed, "Content-Type:", vbTextCompare) > 0 Then
+        Debug.Print "[DecodeBody] MIME-Struktur erkannt -> ExtractBodyFromEmail"
         decoded = ExtractBodyFromEmail(trimmed)
+        Debug.Print "[DecodeBody] MIME-Ergebnis Länge: " & Len(decoded)
         If Len(Trim$(decoded)) > 0 Then
             DecodeBodyIfNeeded = decoded
         Else
@@ -478,15 +502,20 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
 
     ' Fall 2: Reines Base64
     If IsLikelyBase64(trimmed) Then
+        Debug.Print "[DecodeBody] Base64 erkannt -> DecodeBase64ToString"
         decoded = DecodeBase64ToString(trimmed, "utf-8")
+        Debug.Print "[DecodeBody] Base64-Ergebnis Länge: " & Len(decoded)
         If Len(Trim$(decoded)) > 0 Then
+            Debug.Print "[DecodeBody] Dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
             DecodeBodyIfNeeded = decoded
         Else
+            Debug.Print "[DecodeBody] WARNUNG: Base64-Dekodierung lieferte leeren String!"
             DecodeBodyIfNeeded = bodyText
         End If
         Exit Function
     End If
 
+    Debug.Print "[DecodeBody] Kein Encoding erkannt -> Original beibehalten"
     ' Fall 3: Kein Encoding erkannt -> Original zurückgeben
     DecodeBodyIfNeeded = bodyText
 End Function
@@ -623,20 +652,32 @@ Private Function DecodeBase64ToString(ByVal base64Data As String, ByVal charset 
 
     base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-    ' nur gültige Zeichen behalten (inkl. "=")
-    For i = 1 To Len(base64Data)
-        ch = Mid$(base64Data, i, 1)
-        Select Case ch
-            Case "A" To "Z", "a" To "z", "0" To "9", "+", "/", "="
-                clean = clean & ch
-            Case vbCr, vbLf, vbTab, " "
-                ' ignorieren
+    ' nur gültige Zeichen behalten (inkl. "=") - performant via Byte-Array
+    Dim srcBytes() As Byte
+    Dim cleanBuf() As Byte
+    Dim cleanPos As Long
+    Dim b As Byte
+    srcBytes = StrConv(base64Data, vbFromUnicode)
+    ReDim cleanBuf(UBound(srcBytes))
+    cleanPos = 0
+    For i = 0 To UBound(srcBytes)
+        b = srcBytes(i)
+        Select Case b
+            Case 65 To 90, 97 To 122, 48 To 57, 43, 47, 61  ' A-Z, a-z, 0-9, +, /, =
+                cleanBuf(cleanPos) = b
+                cleanPos = cleanPos + 1
             Case Else
-                ' ignorieren
+                ' ignorieren (CR, LF, Tab, Space, etc.)
         End Select
     Next i
+    If cleanPos = 0 Then Exit Function
+    ReDim Preserve cleanBuf(cleanPos - 1)
+    clean = StrConv(cleanBuf, vbUnicode)
 
-    If Len(clean) Mod 4 <> 0 Then Exit Function
+    ' Base64-Padding ergänzen falls nötig (statt Exit)
+    Do While Len(clean) Mod 4 <> 0
+        clean = clean & "="
+    Loop
 
     totalLen = (Len(clean) \ 4) * 3
     If totalLen = 0 Then Exit Function
