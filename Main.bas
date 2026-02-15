@@ -504,6 +504,16 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
 
     Debug.Print "[DecodeBody] Body-Länge: " & Len(trimmed) & ", erste 80 Zeichen: " & Left$(trimmed, 80)
 
+    ' .emlx-Datei: Erste Zeile ist Byte-Zahl -> entfernen
+    If IsNumeric(Left$(trimmed, InStr(trimmed, vbLf) - 1)) Then
+        Dim emlxStart As Long
+        emlxStart = InStr(trimmed, vbLf) + 1
+        If emlxStart > 1 And emlxStart < Len(trimmed) Then
+            Debug.Print "[DecodeBody] .emlx Byte-Header erkannt -> Strip"
+            trimmed = Mid$(trimmed, emlxStart)
+        End If
+    End If
+
     ' Fall 1: Volle MIME-Struktur erkannt (Content-Type Header)
     If InStr(1, trimmed, "Content-Type:", vbTextCompare) > 0 Then
         Debug.Print "[DecodeBody] MIME-Struktur erkannt -> ExtractBodyFromEmail"
@@ -1513,11 +1523,32 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
         script = script & "set outText to outText & """ & DATE_TAG & """ & (date sent of m) & linefeed" & vbLf
         script = script & "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf
         script = script & "set outText to outText & """ & FROM_TAG & """ & (sender of m) & linefeed" & vbLf
+        script = script & "set bodyText to """"" & vbLf
+        ' Strategie 1: source of m -> voller MIME-Rohtext (bevorzugt, hat text/plain Part)
         script = script & "try" & vbLf
-            script = script & "set bodyText to (source of m)" & vbLf
-        script = script & "on error" & vbLf
-            script = script & "set bodyText to (content of m)" & vbLf
+        script = script & "set srcText to (source of m)" & vbLf
+        script = script & "if length of srcText > 100 then" & vbLf
+        script = script & "set bodyText to srcText" & vbLf
+        script = script & "end if" & vbLf
+        script = script & "on error errMsg" & vbLf
+        script = script & "-- source nicht verfuegbar, weiter zu Strategie 2" & vbLf
         script = script & "end try" & vbLf
+        ' Strategie 2: .emlx Datei direkt lesen (Apple Mail ID -> Dateisuche)
+        script = script & "if bodyText is """" then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set msgId to id of m" & vbLf
+        script = script & "set emlxPath to do shell script ""find ~/Library/Mail -name '"" & msgId & "".emlx' -type f 2>/dev/null | head -1""" & vbLf
+        script = script & "if emlxPath is not """" then" & vbLf
+        script = script & "set bodyText to do shell script ""cat "" & quoted form of emlxPath" & vbLf
+        script = script & "end if" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
+        ' Strategie 3: content of m -> Fallback
+        script = script & "if bodyText is """" then" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set bodyText to (content of m)" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "end if" & vbLf
         script = script & "set outText to outText & " & q & BODY_TAG & q & " & bodyText & linefeed" & vbLf
     script = script & "end repeat" & vbLf
     script = script & "return outText" & vbLf
