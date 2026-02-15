@@ -868,8 +868,13 @@ Private Function ExtractTelMailtoLinks(ByVal html As String) As String
     Dim hrefVal As String
     Dim tagStart As Long
     Dim closeAnchor As Long
+    Dim telExtracted As String
+    Dim mailExtracted As String
+    Dim matchCount As Long
 
+    matchCount = 0
     pos = 1
+    Debug.Print "[ExtractTelMailto] Start, HTML-Laenge: " & Len(html)
     Do
         pos = InStr(pos, html, "href=", vbTextCompare)
         If pos = 0 Then Exit Do
@@ -881,16 +886,15 @@ Private Function ExtractTelMailtoLinks(ByVal html As String) As String
             hrefStart = pos + 6
             hrefEnd = InStr(hrefStart, html, quoteChar)
             If hrefEnd = 0 Then
-                ' Kein schliessendes Anfuehrungszeichen -> weiter statt abbrechen
                 pos = pos + 5
             Else
                 hrefVal = Mid$(html, hrefStart, hrefEnd - hrefStart)
 
                 If LCase$(Left$(hrefVal, 4)) = "tel:" Then
-                    Dim telExtracted As String
                     telExtracted = Mid$(hrefVal, 5)
                     telExtracted = Replace(telExtracted, "%20", " ")
-                    Debug.Print "[ExtractTelMailto] tel: gefunden -> '" & telExtracted & "'"
+                    matchCount = matchCount + 1
+                    Debug.Print "[ExtractTelMailto] tel: gefunden -> '" & telExtracted & "' (Pos " & pos & ")"
 
                     tagStart = InStrRev(html, "<", pos)
                     closeAnchor = InStr(hrefEnd, html, "</a>", vbTextCompare)
@@ -903,10 +907,10 @@ Private Function ExtractTelMailtoLinks(ByVal html As String) As String
                     End If
 
                 ElseIf LCase$(Left$(hrefVal, 7)) = "mailto:" Then
-                    Dim mailExtracted As String
                     mailExtracted = Mid$(hrefVal, 8)
                     mailExtracted = Replace(mailExtracted, "%20", " ")
-                    Debug.Print "[ExtractTelMailto] mailto: gefunden -> '" & mailExtracted & "'"
+                    matchCount = matchCount + 1
+                    Debug.Print "[ExtractTelMailto] mailto: gefunden -> '" & mailExtracted & "' (Pos " & pos & ")"
 
                     tagStart = InStrRev(html, "<", pos)
                     closeAnchor = InStr(hrefEnd, html, "</a>", vbTextCompare)
@@ -924,6 +928,7 @@ Private Function ExtractTelMailtoLinks(ByVal html As String) As String
         End If
     Loop
 
+    Debug.Print "[ExtractTelMailto] Ende, " & matchCount & " tel/mailto-Links extrahiert"
     ExtractTelMailtoLinks = html
 End Function
 
@@ -2282,9 +2287,20 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                 pendingKey = vbNullString
                 Debug.Print "[ParseLead] Sektion: Senior (Zeile " & i & ")"
             ElseIf Right$(lineText, 1) = ":" And Len(lineText) > 1 Then
-                pendingKey = Trim$(Left$(lineText, Len(lineText) - 1))
-                If Len(pendingKey) > 0 Then
-                    Debug.Print "[ParseLead] PendingKey: '" & pendingKey & "' (Zeile " & i & ")"
+                Dim candidateKey As String
+                candidateKey = Trim$(Left$(lineText, Len(lineText) - 1))
+                ' Wenn der "Key" wie eine Telefonnummer aussieht, direkt als Mobil speichern
+                If currentSection = "Kontakt" And IsLikelyPhoneNumber(candidateKey) Then
+                    If Len(GetField(result, "Kontakt_Mobil")) = 0 Then
+                        Debug.Print "[ParseLead] Tel-als-Label: '" & candidateKey & "' (Zeile " & i & ")"
+                        SetKV result, "Kontakt_Mobil", CleanLinkedValue(candidateKey)
+                    End If
+                    pendingKey = vbNullString
+                Else
+                    pendingKey = candidateKey
+                    If Len(pendingKey) > 0 Then
+                        Debug.Print "[ParseLead] PendingKey: '" & pendingKey & "' (Zeile " & i & ")"
+                    End If
                 End If
             ElseIf Len(pendingKey) > 0 Then
                 Debug.Print "[ParseLead] MapLabel: '" & pendingKey & "' -> '" & Left$(lineText, 60) & "' [" & currentSection & "] (Zeile " & i & ")"
