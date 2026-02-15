@@ -1513,7 +1513,11 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
         script = script & "set outText to outText & """ & DATE_TAG & """ & (date sent of m) & linefeed" & vbLf
         script = script & "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf
         script = script & "set outText to outText & """ & FROM_TAG & """ & (sender of m) & linefeed" & vbLf
+        script = script & "try" & vbLf
+            script = script & "set bodyText to (source of m)" & vbLf
+        script = script & "on error" & vbLf
             script = script & "set bodyText to (content of m)" & vbLf
+        script = script & "end try" & vbLf
         script = script & "set outText to outText & " & q & BODY_TAG & q & " & bodyText & linefeed" & vbLf
     script = script & "end repeat" & vbLf
     script = script & "return outText" & vbLf
