@@ -1524,31 +1524,45 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
         script = script & "set outText to outText & """ & SUBJECT_TAG & """ & (subject of m) & linefeed" & vbLf
         script = script & "set outText to outText & """ & FROM_TAG & """ & (sender of m) & linefeed" & vbLf
         script = script & "set bodyText to """"" & vbLf
+        script = script & "set stratDebug to """"" & vbLf
         ' Strategie 1: source of m -> voller MIME-Rohtext (bevorzugt, hat text/plain Part)
         script = script & "try" & vbLf
         script = script & "set srcText to (source of m)" & vbLf
         script = script & "if length of srcText > 100 then" & vbLf
         script = script & "set bodyText to srcText" & vbLf
+        script = script & "set stratDebug to ""1-source:OK,len="" & (length of srcText)" & vbLf
+        script = script & "else" & vbLf
+        script = script & "set stratDebug to ""1-source:zu_kurz,len="" & (length of srcText) & "";""" & vbLf
         script = script & "end if" & vbLf
         script = script & "on error errMsg" & vbLf
-        script = script & "-- source nicht verfuegbar, weiter zu Strategie 2" & vbLf
+        script = script & "set stratDebug to ""1-source:ERR="" & errMsg & "";""" & vbLf
         script = script & "end try" & vbLf
         ' Strategie 2: .emlx Datei direkt lesen (Apple Mail ID -> Dateisuche)
         script = script & "if bodyText is """" then" & vbLf
         script = script & "try" & vbLf
         script = script & "set msgId to id of m" & vbLf
-        script = script & "set emlxPath to do shell script ""find ~/Library/Mail -name '"" & msgId & "".emlx' -type f 2>/dev/null | head -1""" & vbLf
+        script = script & "set emlxCmd to ""find ~/Library/Mail -name '"" & msgId & "".emlx' -type f 2>/dev/null | head -1""" & vbLf
+        script = script & "set emlxPath to do shell script emlxCmd" & vbLf
         script = script & "if emlxPath is not """" then" & vbLf
         script = script & "set bodyText to do shell script ""cat "" & quoted form of emlxPath" & vbLf
+        script = script & "set stratDebug to stratDebug & ""2-emlx:OK,id="" & msgId & "",path="" & emlxPath" & vbLf
+        script = script & "else" & vbLf
+        script = script & "set stratDebug to stratDebug & ""2-emlx:nicht_gefunden,id="" & msgId & "";""" & vbLf
         script = script & "end if" & vbLf
+        script = script & "on error errMsg" & vbLf
+        script = script & "set stratDebug to stratDebug & ""2-emlx:ERR="" & errMsg & "";""" & vbLf
         script = script & "end try" & vbLf
         script = script & "end if" & vbLf
         ' Strategie 3: content of m -> Fallback
         script = script & "if bodyText is """" then" & vbLf
         script = script & "try" & vbLf
         script = script & "set bodyText to (content of m)" & vbLf
+        script = script & "set stratDebug to stratDebug & ""3-content:OK""" & vbLf
+        script = script & "on error errMsg" & vbLf
+        script = script & "set stratDebug to stratDebug & ""3-content:ERR="" & errMsg" & vbLf
         script = script & "end try" & vbLf
         script = script & "end if" & vbLf
+        script = script & "set outText to outText & ""SRCSTRAT:"" & stratDebug & linefeed" & vbLf
         script = script & "set outText to outText & " & q & BODY_TAG & q & " & bodyText & linefeed" & vbLf
     script = script & "end repeat" & vbLf
     script = script & "return outText" & vbLf
@@ -2148,6 +2162,8 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
                     SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
                 ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
                     SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
+                ElseIf Left$(lineText, 9) = "SRCSTRAT:" Then
+                    Debug.Print "[AppleScript] " & lineText
                 ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
                     bodyAccum = Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
                     inBody = True
