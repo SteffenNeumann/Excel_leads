@@ -778,6 +778,9 @@ Private Function HtmlToText(ByVal html As String) As String
     html = StripHtmlBlock(html, "style")
     html = StripHtmlBlock(html, "script")
 
+    ' Tel/Mailto-Links: href-Werte als Text sichern bevor Tags entfernt werden
+    html = ExtractTelMailtoLinks(html)
+
     ' HTML-Tags entfernen
     Dim i As Long, ch As String, inTag As Boolean, outText As String
     For i = 1 To Len(html)
@@ -844,6 +847,91 @@ Private Function StripHtmlBlock(ByVal html As String, ByVal tagName As String) A
     Loop
 
     StripHtmlBlock = html
+End Function
+
+Private Function ExtractTelMailtoLinks(ByVal html As String) As String
+    ' Zweck: Tel/Mailto-Werte aus <a href="tel:..."> und <a href="mailto:..."> extrahieren.
+    '         Ersetzt das gesamte <a>...</a> durch den href-Wert (Telefonnummer/E-Mail).
+    '         Muss VOR dem Tag-Stripping aufgerufen werden.
+    Dim pos As Long
+    Dim quoteChar As String
+    Dim hrefStart As Long
+    Dim hrefEnd As Long
+    Dim hrefVal As String
+    Dim tagStart As Long
+    Dim closeAnchor As Long
+
+    pos = 1
+    Do
+        pos = InStr(pos, html, "href=", vbTextCompare)
+        If pos = 0 Then Exit Do
+
+        quoteChar = Mid$(html, pos + 5, 1)
+        If quoteChar <> Chr$(34) And quoteChar <> "'" Then
+            pos = pos + 5
+        Else
+            hrefStart = pos + 6
+            hrefEnd = InStr(hrefStart, html, quoteChar)
+            If hrefEnd = 0 Then Exit Do
+
+            hrefVal = Mid$(html, hrefStart, hrefEnd - hrefStart)
+
+            If LCase$(Left$(hrefVal, 4)) = "tel:" Then
+                hrefVal = Mid$(hrefVal, 5)
+                hrefVal = Replace(hrefVal, "%20", " ")
+
+                tagStart = InStrRev(html, "<", pos)
+                closeAnchor = InStr(hrefEnd, html, "</a>", vbTextCompare)
+
+                If tagStart > 0 And closeAnchor > 0 Then
+                    html = Left$(html, tagStart - 1) & " " & hrefVal & " " & Mid$(html, closeAnchor + 4)
+                    pos = tagStart + Len(hrefVal) + 2
+                Else
+                    pos = hrefEnd + 1
+                End If
+
+            ElseIf LCase$(Left$(hrefVal, 7)) = "mailto:" Then
+                hrefVal = Mid$(hrefVal, 8)
+                hrefVal = Replace(hrefVal, "%20", " ")
+
+                tagStart = InStrRev(html, "<", pos)
+                closeAnchor = InStr(hrefEnd, html, "</a>", vbTextCompare)
+
+                If tagStart > 0 And closeAnchor > 0 Then
+                    html = Left$(html, tagStart - 1) & " " & hrefVal & " " & Mid$(html, closeAnchor + 4)
+                    pos = tagStart + Len(hrefVal) + 2
+                Else
+                    pos = hrefEnd + 1
+                End If
+            Else
+                pos = hrefEnd + 1
+            End If
+        End If
+    Loop
+
+    ExtractTelMailtoLinks = html
+End Function
+
+Private Function IsLikelyPhoneNumber(ByVal textIn As String) As Boolean
+    ' Zweck: Erkennt ob ein Text wie eine Telefonnummer aussieht.
+    ' Prüft: Länge 6-25, beginnt mit +/0/(, mindestens 7 Ziffern.
+    Dim cleaned As String
+    Dim digitCount As Long
+    Dim j As Long
+
+    cleaned = Trim$(textIn)
+    If Len(cleaned) < 6 Or Len(cleaned) > 25 Then Exit Function
+    If Left$(cleaned, 1) <> "+" _
+       And Not (Left$(cleaned, 1) >= "0" And Left$(cleaned, 1) <= "9") _
+       And Left$(cleaned, 1) <> "(" Then Exit Function
+
+    For j = 1 To Len(cleaned)
+        If Mid$(cleaned, j, 1) >= "0" And Mid$(cleaned, j, 1) <= "9" Then
+            digitCount = digitCount + 1
+        End If
+    Next j
+
+    IsLikelyPhoneNumber = (digitCount >= 7)
 End Function
 
 Private Function DecodeHtmlEntities(ByVal textIn As String) As String
@@ -2166,6 +2254,9 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     For i = LBound(lines) To UBound(lines)
         ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
         lineText = Trim$(Replace(lines(i), ChrW$(160), " "))
+        ' Asterisken entfernen (HTML-Bold-Marker *Label:* aus SendGrid-Templates)
+        lineText = Replace(lineText, "*", "")
+        lineText = Trim$(lineText)
         If Len(lineText) > 0 Then
             If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
                 currentSection = "Kontakt"
@@ -2175,9 +2266,11 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                 currentSection = "Senior"
                 pendingKey = vbNullString
                 Debug.Print "[ParseLead] Sektion: Senior (Zeile " & i & ")"
-            ElseIf Right$(lineText, 1) = ":" Then
-                pendingKey = Left$(lineText, Len(lineText) - 1)
-                Debug.Print "[ParseLead] PendingKey: '" & pendingKey & "' (Zeile " & i & ")"
+            ElseIf Right$(lineText, 1) = ":" And Len(lineText) > 1 Then
+                pendingKey = Trim$(Left$(lineText, Len(lineText) - 1))
+                If Len(pendingKey) > 0 Then
+                    Debug.Print "[ParseLead] PendingKey: '" & pendingKey & "' (Zeile " & i & ")"
+                End If
             ElseIf Len(pendingKey) > 0 Then
                 Debug.Print "[ParseLead] MapLabel: '" & pendingKey & "' -> '" & Left$(lineText, 60) & "' [" & currentSection & "] (Zeile " & i & ")"
                 MapLabelValue result, pendingKey, lineText, currentSection
@@ -2185,6 +2278,11 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
             ElseIf InStr(lineText, ":") > 0 Then
                 Debug.Print "[ParseLead] Inline: '" & Left$(lineText, 80) & "' [" & currentSection & "] (Zeile " & i & ")"
                 MapInlinePair result, lineText, currentSection
+            ElseIf currentSection = "Kontakt" And IsLikelyPhoneNumber(lineText) Then
+                If Len(GetField(result, "Kontakt_Mobil")) = 0 Then
+                    Debug.Print "[ParseLead] Auto-Mobil: '" & lineText & "' (Zeile " & i & ")"
+                    SetKV result, "Kontakt_Mobil", CleanLinkedValue(lineText)
+                End If
             End If
         End If
     Next i
@@ -2943,6 +3041,31 @@ Public Sub SmokeTestExtraction()
     totalCount = totalCount + RunSingleSmokeTest("6: HTML + Entities", body6, _
         "Hans M" & ChrW$(252) & "ller", "+49 170 1112233", "hans@mueller.de", "", _
         "60311", "Inge M" & ChrW$(252) & "ller", "3", "", passCount, failCount)
+
+    ' --- Test 7: SendGrid Bold-Pattern (*Label:*) mit tel:-Link ---
+    Dim body7 As String
+    body7 = "<html><body>" & _
+            "<table>" & _
+            "<tr><td colspan=""2""><b>Kontaktinformationen des Interessenten</b></td></tr>" & _
+            "<tr><td><b>*Name:*</b></td></tr>" & _
+            "<tr><td>Peggy Kaiser</td></tr>" & _
+            "<tr><td><b>*<a href=""tel:+491601234567""></a>:*</b></td></tr>" & _
+            "<tr><td><b>*E-Mail-Adresse:*</b></td></tr>" & _
+            "<tr><td>peggy.kaiser@example.de</td></tr>" & _
+            "<tr><td><b>*Erreichbarkeit:*</b></td></tr>" & _
+            "<tr><td>Vormittags</td></tr>" & _
+            "<tr><td><b>*Bedarfsort:*</b></td></tr>" & _
+            "<tr><td>55128 Mainz</td></tr>" & _
+            "<tr><td colspan=""2""><b>Informationen zum Senior</b></td></tr>" & _
+            "<tr><td><b>*Name:*</b></td></tr>" & _
+            "<tr><td>Helga Kaiser</td></tr>" & _
+            "<tr><td>Pflegegrad/-stufe: 2</td></tr>" & _
+            "</table>" & _
+            "</body></html>"
+
+    totalCount = totalCount + RunSingleSmokeTest("7: SendGrid Bold *Label:* + tel:", body7, _
+        "Peggy Kaiser", "+491601234567", "peggy.kaiser@example.de", "Vormittags", _
+        "55128", "Helga Kaiser", "2", "", passCount, failCount)
 
     ' --- Zusammenfassung ---
     Debug.Print ""
