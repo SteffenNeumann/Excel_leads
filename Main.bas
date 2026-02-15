@@ -70,6 +70,8 @@ Private gLeadSourceNote As String
 ' NewKeyValueStore / keyNorm / SetKV / TryGetKV: Plattform-sicherer Key/Value-Store. Rückgabe: Collection/Dictionary oder Boolean.
 ' ParseMessageBlock: Zerlegt einen Nachrichtenblock in Date/Subject/From/Body; nutzt ParseAppleMailDate. Nach BODY:-Tag werden alle Folgezeilen dem Body zugeordnet.
 ' ParseAppleMailDate / GermanMonthToNumber: Robust Datum parsen aus Apple Mail Text.
+' IsLikelyBase64: Erkennt ob Text reines Base64 ist. Rückgabe: Boolean.
+' DecodeBodyIfNeeded: Dekodiert Body automatisch bei Base64/MIME-Kodierung; nutzt IsLikelyBase64, DecodeBase64ToString, ExtractBodyFromEmail.
 ' ResolveLeadType: Leitet Lead-Typ aus Betreff/Body ab.
 ' ParseLeadContent: Parst Body in Felder; nutzt MapLabelValue, MapInlinePair, SetBedarfsort.
 ' MapInlinePair: Teilt Inline "key: value" und delegiert an MapLabelValue.
@@ -237,6 +239,7 @@ Public Sub ImportLeadsFromAppleMail()
             If TryGetKV(payload, "Date", v) Then msgDate = CDate(v)
             If TryGetKV(payload, "Subject", v) Then msgSubject = CStr(v)
             If TryGetKV(payload, "Body", v) Then msgBody = CStr(v)
+            msgBody = DecodeBodyIfNeeded(msgBody)
             If TryGetKV(payload, "From", v) Then msgFrom = CStr(v)
 
             leadType = ResolveLeadType(msgSubject, msgBody)
@@ -407,6 +410,85 @@ Private Function ExtractHeaderValue(ByVal contentText As String, ByVal headerNam
             Exit Function
         End If
     Next i
+End Function
+
+Private Function IsLikelyBase64(ByVal textIn As String) As Boolean
+    ' Zweck: Erkennt ob ein Text reines Base64 ist (z.B. MIME-kodierter E-Mail-Body).
+    ' Base64 enthält nur A-Z, a-z, 0-9, +, /, = und Whitespace.
+    ' Rückgabe: True wenn Text Base64-kodiert erscheint.
+    Dim clean As String
+    Dim i As Long
+    Dim ch As String
+    Dim longLineCount As Long
+    Dim lines() As String
+    Dim lineText As String
+    Dim j As Long
+
+    clean = Replace(textIn, vbCrLf, vbLf)
+    clean = Replace(clean, vbCr, vbLf)
+    clean = Trim$(clean)
+
+    If Len(clean) < 40 Then Exit Function
+
+    lines = Split(clean, vbLf)
+    For i = LBound(lines) To UBound(lines)
+        lineText = Trim$(lines(i))
+        If Len(lineText) = 0 Then GoTo NextB64Line
+
+        For j = 1 To Len(lineText)
+            ch = Mid$(lineText, j, 1)
+            Select Case ch
+                Case "A" To "Z", "a" To "z", "0" To "9", "+", "/", "="
+                Case Else
+                    Exit Function
+            End Select
+        Next j
+
+        If Len(lineText) >= 40 Then longLineCount = longLineCount + 1
+NextB64Line:
+    Next i
+
+    ' Mindestens 2 lange Zeilen (Base64 bricht typisch bei 76 Zeichen um)
+    If longLineCount >= 2 Then IsLikelyBase64 = True
+End Function
+
+Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
+    ' Zweck: Body automatisch dekodieren falls er Base64-kodiert oder MIME-Rohtext ist.
+    ' Abhängigkeiten: IsLikelyBase64, DecodeBase64ToString, ExtractBodyFromEmail.
+    ' Rückgabe: Dekodierter Text oder Original falls keine Kodierung erkannt.
+    Dim trimmed As String
+    Dim decoded As String
+
+    trimmed = Trim$(bodyText)
+    If Len(trimmed) = 0 Then
+        DecodeBodyIfNeeded = bodyText
+        Exit Function
+    End If
+
+    ' Fall 1: MIME-Struktur erkannt (Content-Type Header)
+    If InStr(1, trimmed, "Content-Type:", vbTextCompare) > 0 Then
+        decoded = ExtractBodyFromEmail(trimmed)
+        If Len(Trim$(decoded)) > 0 Then
+            DecodeBodyIfNeeded = decoded
+        Else
+            DecodeBodyIfNeeded = bodyText
+        End If
+        Exit Function
+    End If
+
+    ' Fall 2: Reines Base64
+    If IsLikelyBase64(trimmed) Then
+        decoded = DecodeBase64ToString(trimmed, "utf-8")
+        If Len(Trim$(decoded)) > 0 Then
+            DecodeBodyIfNeeded = decoded
+        Else
+            DecodeBodyIfNeeded = bodyText
+        End If
+        Exit Function
+    End If
+
+    ' Fall 3: Kein Encoding erkannt -> Original zurückgeben
+    DecodeBodyIfNeeded = bodyText
 End Function
 
 Private Function ExtractBodyFromEmail(ByVal contentText As String) As String
