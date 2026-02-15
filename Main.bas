@@ -2160,7 +2160,17 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     SetCellByHeaderMap newRow, headerMap, "PLZ", CleanPostalCode(GetField(fields, "PLZ"))
     SetCellByHeaderMap newRow, headerMap, "PG", NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
     SetCellByHeaderMap newRow, headerMap, "Notizen", BuildNotes(fields)
-    SetCellByHeaderMap newRow, headerMap, "Info", GetField(fields, "MailBody")
+
+    ' Info-Spalte: Body mit Zeilenumbrüchen in die Zelle schreiben
+    Dim infoCell As Range
+    Dim infoBody As String
+    infoBody = GetField(fields, "MailBody")
+    ' Zeilenenden auf Chr(10) normalisieren (Excel-Zell-Zeilenumbruch)
+    infoBody = Replace(infoBody, vbCrLf, vbLf)
+    infoBody = Replace(infoBody, vbCr, vbLf)
+    SetCellByHeaderMap newRow, headerMap, "Info", infoBody
+    Set infoCell = GetCellByHeaderMap(newRow, headerMap, "Info")
+    If Not infoCell Is Nothing Then infoCell.WrapText = True
 End Sub
 
 Private Function FindTableByName(ByVal tableName As String) As ListObject
