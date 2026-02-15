@@ -1569,8 +1569,7 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
     script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: " & folderName & """" & vbLf
     script = script & "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf
     script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
-    ' Python MIME text/plain Extraktor (base64-kodiert um Quoting-Probleme zu vermeiden)
-    ' Dekodiert zu: import email, sys; ... extract text/plain from MIME ...
+    ' Python MIME text/plain Extraktor (base64-kodiert)
     Dim b64Py As String
     b64Py = "aW1wb3J0IGVtYWlsLCBzeXMKd2l0aCBvcGVuKHN5cy5hcmd2WzFdKSBhcyBmOgogICAgbXNnID0gZW1h" & _
             "aWwubWVzc2FnZV9mcm9tX2ZpbGUoZikKZm9yIHAgaW4gbXNnLndhbGsoKToKICAgIGlmIHAuZ2V0X2Nv" & _
@@ -1578,7 +1577,7 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
             "ZChkZWNvZGU9VHJ1ZSkKICAgICAgICBpZiBwYXlsb2FkOgogICAgICAgICAgICBzeXMuc3Rkb3V0Lndy" & _
             "aXRlKHBheWxvYWQuZGVjb2RlKCd1dGYtOCcsICdyZXBsYWNlJykpCiAgICAgICAgICAgIGJyZWFrCg=="
 
-    ' Python-Script VOR der Schleife einmalig auf Platte schreiben
+    ' Python-Script einmalig auf Platte schreiben
     script = script & "do shell script ""echo '" & b64Py & "' | base64 -D > /tmp/_ep.py""" & vbLf
 
     script = script & "set outText to """"" & vbLf
@@ -1589,85 +1588,55 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
         script = script & "set outText to outText & """ & FROM_TAG & """ & (sender of m) & linefeed" & vbLf
         script = script & "set bodyText to """"" & vbLf
         script = script & "set stratDebug to """"" & vbLf
+        script = script & "set srcText to """"" & vbLf
 
         ' =====================================================================
-        ' Strategie 1: source of m -> temp-Datei -> python3 text/plain Extraktion
+        ' Schritt A: source of m holen (flaches try, keine Verschachtelung)
         ' =====================================================================
         script = script & "try" & vbLf
         script = script & "set srcText to (source of m)" & vbLf
+        script = script & "set stratDebug to ""A:len="" & (length of srcText)" & vbLf
+        script = script & "on error errA" & vbLf
+        script = script & "set stratDebug to ""A:ERR="" & errA" & vbLf
+        script = script & "end try" & vbLf
+
+        ' =====================================================================
+        ' Schritt B: Falls source vorhanden -> python3 text/plain extrahieren
+        ' Datei via printf und quoted form schreiben, dann python3 separat
+        ' =====================================================================
         script = script & "if length of srcText > 100 then" & vbLf
-        ' MIME-Source in Temp-Datei schreiben (fuer python3 Parsing)
         script = script & "try" & vbLf
-        script = script & "set fRef to open for access POSIX file ""/tmp/_applemail_src.eml"" with write permission" & vbLf
-        script = script & "set eof fRef to 0" & vbLf
-        script = script & "write srcText to fRef" & vbLf
-        script = script & "close access fRef" & vbLf
-        ' Python3 extrahiert text/plain Part aus MIME-Struktur
-        script = script & "try" & vbLf
-        script = script & "set plainBody to do shell script ""python3 /tmp/_ep.py /tmp/_applemail_src.eml""" & vbLf
+        ' printf %s statt echo (binary-safe, kein trailing newline)
+        script = script & "do shell script ""printf '%s' "" & quoted form of srcText & "" > /tmp/_src.eml""" & vbLf
+        script = script & "set plainBody to do shell script ""python3 /tmp/_ep.py /tmp/_src.eml""" & vbLf
         script = script & "if length of plainBody > 50 then" & vbLf
         script = script & "set bodyText to plainBody" & vbLf
-        script = script & "set stratDebug to ""1-src+py:OK,len="" & (length of plainBody)" & vbLf
+        script = script & "set stratDebug to stratDebug & "";B:py_OK,len="" & (length of plainBody)" & vbLf
         script = script & "else" & vbLf
-        ' Python lieferte zu wenig -> rohen MIME-Source fuer VBA-Parsing nutzen
-        script = script & "set bodyText to srcText" & vbLf
-        script = script & "set stratDebug to ""1-src:raw,py_kurz="" & (length of plainBody) & "",len="" & (length of srcText)" & vbLf
+        script = script & "set stratDebug to stratDebug & "";B:py_kurz="" & (length of plainBody)" & vbLf
         script = script & "end if" & vbLf
-        script = script & "on error pyErr" & vbLf
-        ' Python-Fehler -> rohen MIME-Source fuer VBA-Parsing nutzen
-        script = script & "set bodyText to srcText" & vbLf
-        script = script & "set stratDebug to ""1-src:raw,py_err="" & pyErr" & vbLf
-        script = script & "end try" & vbLf
-        script = script & "on error fErr" & vbLf
-        ' Datei-Fehler -> rohen MIME-Source direkt nutzen
-        script = script & "set bodyText to srcText" & vbLf
-        script = script & "set stratDebug to ""1-src:raw,f_err="" & fErr" & vbLf
-        script = script & "end try" & vbLf
-        script = script & "else" & vbLf
-        script = script & "set stratDebug to ""1-src:zu_kurz,len="" & (length of srcText) & "";""" & vbLf
-        script = script & "end if" & vbLf
-        script = script & "on error errMsg" & vbLf
-        script = script & "set stratDebug to ""1-src:ERR="" & errMsg & "";""" & vbLf
-        script = script & "end try" & vbLf
-
-        ' =====================================================================
-        ' Strategie 2: .emlx Datei -> python3 text/plain Extraktion
-        ' =====================================================================
-        script = script & "if bodyText is """" then" & vbLf
-        script = script & "try" & vbLf
-        script = script & "set msgId to id of m" & vbLf
-        script = script & "set emlxPath to do shell script ""find ~/Library/Mail -name '"" & msgId & "".emlx' -type f 2>/dev/null | head -1""" & vbLf
-        script = script & "if emlxPath is not """" then" & vbLf
-        script = script & "try" & vbLf
-        script = script & "set plainBody to do shell script ""python3 /tmp/_ep.py "" & quoted form of emlxPath" & vbLf
-        script = script & "if length of plainBody > 50 then" & vbLf
-        script = script & "set bodyText to plainBody" & vbLf
-        script = script & "set stratDebug to stratDebug & ""2-emlx+py:OK,id="" & msgId" & vbLf
-        script = script & "else" & vbLf
-        script = script & "set bodyText to do shell script ""cat "" & quoted form of emlxPath" & vbLf
-        script = script & "set stratDebug to stratDebug & ""2-emlx:raw,id="" & msgId" & vbLf
-        script = script & "end if" & vbLf
-        script = script & "on error pyErr" & vbLf
-        script = script & "set bodyText to do shell script ""cat "" & quoted form of emlxPath" & vbLf
-        script = script & "set stratDebug to stratDebug & ""2-emlx:raw,py_err="" & pyErr" & vbLf
-        script = script & "end try" & vbLf
-        script = script & "else" & vbLf
-        script = script & "set stratDebug to stratDebug & ""2-emlx:n/a,id="" & msgId & "";""" & vbLf
-        script = script & "end if" & vbLf
-        script = script & "on error errMsg" & vbLf
-        script = script & "set stratDebug to stratDebug & ""2-emlx:ERR="" & errMsg & "";""" & vbLf
+        script = script & "on error errB" & vbLf
+        script = script & "set stratDebug to stratDebug & "";B:ERR="" & errB" & vbLf
         script = script & "end try" & vbLf
         script = script & "end if" & vbLf
 
         ' =====================================================================
-        ' Strategie 3: content of m -> Fallback (wie bisher)
+        ' Schritt C: Falls noch kein body -> source als MIME-raw fuer VBA nutzen
+        ' =====================================================================
+        script = script & "if bodyText is """" and length of srcText > 100 then" & vbLf
+        script = script & "set bodyText to srcText" & vbLf
+        script = script & "set stratDebug to stratDebug & "";C:raw""" & vbLf
+        script = script & "end if" & vbLf
+
+        ' =====================================================================
+        ' Schritt D: content of m -> Fallback
         ' =====================================================================
         script = script & "if bodyText is """" then" & vbLf
         script = script & "try" & vbLf
         script = script & "set bodyText to (content of m)" & vbLf
-        script = script & "set stratDebug to stratDebug & ""3-content:OK""" & vbLf
-        script = script & "on error errMsg" & vbLf
-        script = script & "set stratDebug to stratDebug & ""3-content:ERR="" & errMsg" & vbLf
+        script = script & "set stratDebug to stratDebug & "";D:content""" & vbLf
+        script = script & "on error errD" & vbLf
+        script = script & "set stratDebug to stratDebug & "";D:ERR="" & errD" & vbLf
         script = script & "end try" & vbLf
         script = script & "end if" & vbLf
 
