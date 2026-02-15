@@ -473,10 +473,11 @@ End Function
 
 Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
     ' Zweck: Body automatisch dekodieren falls er Base64-kodiert oder MIME-Rohtext ist.
-    ' Abhängigkeiten: IsLikelyBase64, DecodeBase64ToString, ExtractBodyFromEmail.
+    ' Abhängigkeiten: IsLikelyBase64, DecodeBase64ToString, ExtractBodyFromEmail, StripMimeHeaders.
     ' Rückgabe: Dekodierter Text oder Original falls keine Kodierung erkannt.
     Dim trimmed As String
     Dim decoded As String
+    Dim strippedBody As String
 
     trimmed = Trim$(bodyText)
     If Len(trimmed) = 0 Then
@@ -487,7 +488,7 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
 
     Debug.Print "[DecodeBody] Body-Länge: " & Len(trimmed) & ", erste 80 Zeichen: " & Left$(trimmed, 80)
 
-    ' Fall 1: MIME-Struktur erkannt (Content-Type Header)
+    ' Fall 1: Volle MIME-Struktur erkannt (Content-Type Header)
     If InStr(1, trimmed, "Content-Type:", vbTextCompare) > 0 Then
         Debug.Print "[DecodeBody] MIME-Struktur erkannt -> ExtractBodyFromEmail"
         decoded = ExtractBodyFromEmail(trimmed)
@@ -500,7 +501,31 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
         Exit Function
     End If
 
-    ' Fall 2: Reines Base64
+    ' Fall 2: MIME-Header ohne Content-Type (z.B. nur Content-Transfer-Encoding: base64)
+    '         Header strippen, dann Base64-Daten dekodieren
+    If InStr(1, trimmed, "Content-Transfer-Encoding:", vbTextCompare) > 0 Then
+        Debug.Print "[DecodeBody] Content-Transfer-Encoding Header gefunden -> Header strippen"
+        strippedBody = StripMimeHeaders(trimmed)
+        Debug.Print "[DecodeBody] Nach Header-Strip Länge: " & Len(strippedBody) & ", erste 80 Zeichen: " & Left$(strippedBody, 80)
+        If IsLikelyBase64(strippedBody) Then
+            Debug.Print "[DecodeBody] Gestripter Body ist Base64 -> dekodieren"
+            decoded = DecodeBase64ToString(strippedBody, "utf-8")
+            Debug.Print "[DecodeBody] Base64-Ergebnis Länge: " & Len(decoded)
+            If Len(Trim$(decoded)) > 0 Then
+                Debug.Print "[DecodeBody] Dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
+                DecodeBodyIfNeeded = decoded
+            Else
+                Debug.Print "[DecodeBody] WARNUNG: Base64-Dekodierung nach Strip lieferte leeren String!"
+                DecodeBodyIfNeeded = bodyText
+            End If
+        Else
+            Debug.Print "[DecodeBody] Gestripter Body ist kein Base64 -> Original beibehalten"
+            DecodeBodyIfNeeded = strippedBody
+        End If
+        Exit Function
+    End If
+
+    ' Fall 3: Reines Base64 (ohne jegliche Header)
     If IsLikelyBase64(trimmed) Then
         Debug.Print "[DecodeBody] Base64 erkannt -> DecodeBase64ToString"
         decoded = DecodeBase64ToString(trimmed, "utf-8")
@@ -516,8 +541,28 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
     End If
 
     Debug.Print "[DecodeBody] Kein Encoding erkannt -> Original beibehalten"
-    ' Fall 3: Kein Encoding erkannt -> Original zurückgeben
+    ' Fall 4: Kein Encoding erkannt -> Original zurückgeben
     DecodeBodyIfNeeded = bodyText
+End Function
+
+Private Function StripMimeHeaders(ByVal textIn As String) As String
+    ' Zweck: MIME-Header-Zeilen am Anfang des Textes entfernen.
+    '         Alles vor der ersten Leerzeile wird als Header betrachtet.
+    ' Rückgabe: Text nach den Headern.
+    Dim normalized As String
+    Dim pos As Long
+
+    normalized = Replace(textIn, vbCrLf, vbLf)
+    normalized = Replace(normalized, vbCr, vbLf)
+
+    ' Erste Leerzeile finden (trennt Header von Body)
+    pos = InStr(1, normalized, vbLf & vbLf)
+    If pos > 0 Then
+        StripMimeHeaders = Mid$(normalized, pos + 2)
+    Else
+        ' Kein Leerzeilen-Separator gefunden -> alles zurückgeben
+        StripMimeHeaders = normalized
+    End If
 End Function
 
 Private Function ExtractBodyFromEmail(ByVal contentText As String) As String
@@ -652,27 +697,22 @@ Private Function DecodeBase64ToString(ByVal base64Data As String, ByVal charset 
 
     base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-    ' nur gültige Zeichen behalten (inkl. "=") - performant via Byte-Array
-    Dim srcBytes() As Byte
-    Dim cleanBuf() As Byte
-    Dim cleanPos As Long
-    Dim b As Byte
-    srcBytes = StrConv(base64Data, vbFromUnicode)
-    ReDim cleanBuf(UBound(srcBytes))
-    cleanPos = 0
-    For i = 0 To UBound(srcBytes)
-        b = srcBytes(i)
-        Select Case b
-            Case 65 To 90, 97 To 122, 48 To 57, 43, 47, 61  ' A-Z, a-z, 0-9, +, /, =
-                cleanBuf(cleanPos) = b
-                cleanPos = cleanPos + 1
+    ' nur gültige Zeichen behalten (inkl. "=") - Mac-kompatibel via Mid$ (kein StrConv)
+    clean = String$(Len(base64Data), vbNullChar)
+    Dim cleanLen As Long
+    cleanLen = 0
+    For i = 1 To Len(base64Data)
+        ch = Mid$(base64Data, i, 1)
+        Select Case ch
+            Case "A" To "Z", "a" To "z", "0" To "9", "+", "/", "="
+                cleanLen = cleanLen + 1
+                Mid$(clean, cleanLen, 1) = ch
             Case Else
                 ' ignorieren (CR, LF, Tab, Space, etc.)
         End Select
     Next i
-    If cleanPos = 0 Then Exit Function
-    ReDim Preserve cleanBuf(cleanPos - 1)
-    clean = StrConv(cleanBuf, vbUnicode)
+    If cleanLen = 0 Then Exit Function
+    clean = Left$(clean, cleanLen)
 
     ' Base64-Padding ergänzen falls nötig (statt Exit)
     Do While Len(clean) Mod 4 <> 0
