@@ -569,9 +569,9 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
         Exit Function
     End If
 
-    Debug.Print "[DecodeBody] Kein Encoding erkannt -> Original beibehalten"
-    ' Fall 5: Kein Encoding erkannt -> Original zurückgeben
-    DecodeBodyIfNeeded = bodyText
+    Debug.Print "[DecodeBody] Kein Encoding erkannt -> ConvertHtmlIfNeeded prüfen"
+    ' Fall 5: Kein Encoding erkannt -> trotzdem auf HTML prüfen
+    DecodeBodyIfNeeded = ConvertHtmlIfNeeded(bodyText)
 End Function
 
 Private Function IsLikelyQuotedPrintable(ByVal textIn As String) As Boolean
@@ -643,7 +643,11 @@ Private Function ConvertHtmlIfNeeded(ByVal textIn As String) As String
        Or InStr(1, lowerText, "&nbsp;", vbBinaryCompare) > 0 _
        Or InStr(1, lowerText, "&#", vbBinaryCompare) > 0 Then
         Debug.Print "[ConvertHtml] HTML erkannt -> HtmlToText"
-        ConvertHtmlIfNeeded = HtmlToText(textIn)
+        Dim converted As String
+        converted = HtmlToText(textIn)
+        Debug.Print "[ConvertHtml] Ergebnis Länge: " & Len(converted) & ", erste 300 Zeichen:"
+        Debug.Print Left$(converted, 300)
+        ConvertHtmlIfNeeded = converted
     Else
         ConvertHtmlIfNeeded = textIn
     End If
@@ -2130,7 +2134,11 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     ' Soft-Hyphens (U+00AD) entfernen, die Sektionserkennung stören können
     workText = Replace(workText, ChrW$(&HAD), "")
 
+    Debug.Print "[ParseLead] Body-Länge: " & Len(workText) & ", erste 200 Zeichen:"
+    Debug.Print Left$(workText, 200)
+
     lines = Split(workText, vbLf)
+    Debug.Print "[ParseLead] Anzahl Zeilen: " & (UBound(lines) - LBound(lines) + 1)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
         lineText = Trim$(lines(i))
@@ -2138,15 +2146,20 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
             If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
                 currentSection = "Kontakt"
                 pendingKey = vbNullString
+                Debug.Print "[ParseLead] Sektion: Kontakt (Zeile " & i & ")"
             ElseIf InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 Then
                 currentSection = "Senior"
                 pendingKey = vbNullString
+                Debug.Print "[ParseLead] Sektion: Senior (Zeile " & i & ")"
             ElseIf Right$(lineText, 1) = ":" Then
                 pendingKey = Left$(lineText, Len(lineText) - 1)
+                Debug.Print "[ParseLead] PendingKey: '" & pendingKey & "' (Zeile " & i & ")"
             ElseIf Len(pendingKey) > 0 Then
+                Debug.Print "[ParseLead] MapLabel: '" & pendingKey & "' -> '" & Left$(lineText, 60) & "' [" & currentSection & "] (Zeile " & i & ")"
                 MapLabelValue result, pendingKey, lineText, currentSection
                 pendingKey = vbNullString
             ElseIf InStr(lineText, ":") > 0 Then
+                Debug.Print "[ParseLead] Inline: '" & Left$(lineText, 80) & "' [" & currentSection & "] (Zeile " & i & ")"
                 MapInlinePair result, lineText, currentSection
             End If
         End If
