@@ -246,6 +246,7 @@ Public Sub ImportLeadsFromAppleMail()
 
             Set parsed = ParseLeadContent(msgBody)
             SetKV parsed, "From", msgFrom
+            SetKV parsed, "MailBody", msgBody
 
             If Not LeadAlreadyExists(tbl, parsed, msgDate) Then
                 AddLeadRow tbl, parsed, msgDate, leadType
@@ -1958,8 +1959,8 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
             Else
                 SetKV fields, "Kontakt_Name", valueNorm
             End If
-        Case "mobil", "telefonnummer", "festnetz": SetKV fields, "Kontakt_Mobil", valueNorm
-        Case "e-mail", "e-mail-adresse": SetKV fields, "Kontakt_Email", valueNorm
+        Case "mobil", "telefonnummer", "festnetz": SetKV fields, "Kontakt_Mobil", CleanLinkedValue(valueNorm)
+        Case "e-mail", "e-mail-adresse": SetKV fields, "Kontakt_Email", CleanLinkedValue(valueNorm)
         Case "erreichbarkeit": SetKV fields, "Kontakt_Erreichbarkeit", valueNorm
         Case "anschrift": SetKV fields, "Kontakt_Anschrift", valueNorm
         Case "beziehung": SetKV fields, "Senior_Beziehung", valueNorm
@@ -2112,10 +2113,11 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     SetCellByHeaderMap newRow, headerMap, "Leadtyp", leadType
     SetCellByHeaderMap newRow, headerMap, "Status", "Lead erhalten"
     SetCellByHeaderMap newRow, headerMap, "Name", ResolveKontaktName(fields)
-    SetCellByHeaderMap newRow, headerMap, "Telefonnummer", GetField(fields, "Kontakt_Mobil")
+    SetCellByHeaderMap newRow, headerMap, "Telefonnummer", CleanPhoneNumber(GetField(fields, "Kontakt_Mobil"))
     SetCellByHeaderMap newRow, headerMap, "PLZ", CleanPostalCode(GetField(fields, "PLZ"))
     SetCellByHeaderMap newRow, headerMap, "PG", NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
     SetCellByHeaderMap newRow, headerMap, "Notizen", BuildNotes(fields)
+    SetCellByHeaderMap newRow, headerMap, "Info", GetField(fields, "MailBody")
 End Sub
 
 Private Function FindTableByName(ByVal tableName As String) As ListObject
@@ -2346,6 +2348,45 @@ Private Function CleanWhitespace(ByVal textIn As String) As String
         s = Replace(s, "  ", " ")
     Loop
     CleanWhitespace = Trim$(s)
+End Function
+
+Private Function CleanPhoneNumber(ByVal rawValue As String) As String
+    ' Zweck: Telefonnummer bereinigen.
+    ' Entfernt <tel:...> Suffix und URL-Encoding (%20 etc.).
+    ' Beispiel: "+49 16097008155<tel:+49%2016097008155>" -> "+49 16097008155"
+    Dim s As String
+    Dim p As Long
+    s = Trim$(rawValue)
+    ' <tel:...> Suffix entfernen
+    p = InStr(1, s, "<tel:", vbTextCompare)
+    If p > 0 Then
+        s = Left$(s, p - 1)
+    End If
+    ' <mailto:...> Suffix entfernen (falls versehentlich)
+    p = InStr(1, s, "<mailto:", vbTextCompare)
+    If p > 0 Then
+        s = Left$(s, p - 1)
+    End If
+    ' Allgemeines <...> Suffix entfernen
+    p = InStr(1, s, "<")
+    If p > 0 Then
+        s = Left$(s, p - 1)
+    End If
+    CleanPhoneNumber = Trim$(s)
+End Function
+
+Private Function CleanLinkedValue(ByVal rawValue As String) As String
+    ' Zweck: Werte mit angehaengten Link-Tags bereinigen.
+    ' Entfernt <tel:...>, <mailto:...> und sonstige <...> Suffixe.
+    ' Beispiel: "m.kaiser@meggy.com<mailto:m.kaiser@meggy.com>" -> "m.kaiser@meggy.com"
+    Dim s As String
+    Dim p As Long
+    s = Trim$(rawValue)
+    p = InStr(1, s, "<")
+    If p > 1 Then
+        s = Left$(s, p - 1)
+    End If
+    CleanLinkedValue = Trim$(s)
 End Function
 
 Private Function CleanPostalCode(ByVal rawValue As String) As String
