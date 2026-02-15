@@ -794,12 +794,33 @@ Private Function HtmlToText(ByVal html As String) As String
     ' HTML-Entities dekodieren
     outText = DecodeHtmlEntities(outText)
 
+    ' Non-Breaking Spaces (NBSP) in normale Spaces umwandeln
+    outText = Replace(outText, ChrW$(160), " ")
+
+    ' Mehrfache Spaces auf einer Zeile komprimieren
+    Do While InStr(1, outText, "  ") > 0
+        outText = Replace(outText, "  ", " ")
+    Loop
+
     ' Mehrfache Leerzeilen zusammenfassen (max 2 aufeinander)
     outText = Replace(outText, vbCrLf, vbLf)
     outText = Replace(outText, vbCr, vbLf)
     Do While InStr(1, outText, vbLf & vbLf & vbLf) > 0
         outText = Replace(outText, vbLf & vbLf & vbLf, vbLf & vbLf)
     Loop
+
+    ' Zeilen trimmen (je Zeile führende/abschließende Spaces entfernen)
+    Dim trimLines() As String
+    Dim tl As Long
+    trimLines = Split(outText, vbLf)
+    outText = vbNullString
+    For tl = LBound(trimLines) To UBound(trimLines)
+        If tl = LBound(trimLines) Then
+            outText = Trim$(trimLines(tl))
+        Else
+            outText = outText & vbLf & Trim$(trimLines(tl))
+        End If
+    Next tl
 
     HtmlToText = outText
 End Function
@@ -2134,6 +2155,9 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     ' Soft-Hyphens (U+00AD) entfernen, die Sektionserkennung stören können
     workText = Replace(workText, ChrW$(&HAD), "")
 
+    ' Non-Breaking Spaces (NBSP) in normale Spaces umwandeln
+    workText = Replace(workText, ChrW$(160), " ")
+
     Debug.Print "[ParseLead] Body-Länge: " & Len(workText) & ", erste 200 Zeichen:"
     Debug.Print Left$(workText, 200)
 
@@ -2141,7 +2165,7 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     Debug.Print "[ParseLead] Anzahl Zeilen: " & (UBound(lines) - LBound(lines) + 1)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
-        lineText = Trim$(lines(i))
+        lineText = Trim$(Replace(lines(i), ChrW$(160), " "))
         If Len(lineText) > 0 Then
             If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
                 currentSection = "Kontakt"
@@ -2251,11 +2275,16 @@ Private Function NormalizeKey(ByVal rawKey As String) As String
     ' Zweck: Schlüsseltext vereinheitlichen.
     ' Abhängigkeiten: Trim$, Replace, LCase$.
     ' Rückgabe: normalisierter Label-Text.
-    ' Rückgabe: normalisierte Zeichenkette.
     Dim k As String
-    k = LCase$(Trim$(rawKey))
+    k = rawKey
+    ' NBSP und andere Whitespace-Zeichen normalisieren
+    k = Replace(k, ChrW$(160), " ")
     k = Replace(k, vbTab, " ")
-    k = Replace(k, "  ", " ")
+    k = LCase$(Trim$(k))
+    ' Mehrfache Spaces komprimieren
+    Do While InStr(1, k, "  ") > 0
+        k = Replace(k, "  ", " ")
+    Loop
     NormalizeKey = k
 End Function
 
