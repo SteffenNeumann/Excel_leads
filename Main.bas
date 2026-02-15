@@ -172,6 +172,8 @@ Public Sub ImportLeadsFromAppleMail()
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
 
+    Debug.Print "[Main] === Version: 2026-02-15-pyfix ==="
+
     ' --- Eingabeprüfung ---
     If Not ValidateMailSettings() Then Exit Sub
 
@@ -799,6 +801,9 @@ Private Function HtmlToText(ByVal html As String) As String
     ' Tel/Mailto-Links: href-Werte als Text sichern bevor Tags entfernt werden
     html = ExtractTelMailtoLinks(html)
 
+    ' Text-Pattern ( tel:NUMBER ) durch Nummer ersetzen (SendGrid-Tracking)
+    html = ExtractTelTextPattern(html)
+
     ' HTML-Tags entfernen
     Dim i As Long, ch As String, inTag As Boolean, outText As String
     For i = 1 To Len(html)
@@ -940,6 +945,53 @@ Private Function ExtractTelMailtoLinks(ByVal html As String) As String
 
     Debug.Print "[ExtractTelMailto] Ende, " & matchCount & " tel/mailto-Links extrahiert"
     ExtractTelMailtoLinks = html
+End Function
+
+Private Function ExtractTelTextPattern(ByVal html As String) As String
+    ' Zweck: Text-Muster "( tel:NUMBER )" durch die Telefonnummer ersetzen.
+    '        SendGrid-Mails enthalten tel: als Text-Inhalt statt als href-Attribut.
+    '        Muster: ( tel:004961312652011 ) -> 004961312652011
+    '        Leere Muster: ( tel: ) -> werden entfernt
+    Dim pos As Long
+    Dim closeP As Long
+    Dim telVal As String
+    Dim fullPattern As String
+    Dim matchCount As Long
+
+    matchCount = 0
+    pos = 1
+    Do
+        pos = InStr(pos, html, "( tel:", vbTextCompare)
+        If pos = 0 Then Exit Do
+
+        closeP = InStr(pos, html, ")")
+        If closeP = 0 Then Exit Do
+
+        ' Vollstaendiges Pattern extrahieren: "( tel:NUMBER )"
+        fullPattern = Mid$(html, pos, closeP - pos + 1)
+        ' Telefonnummer zwischen "tel:" und ")" extrahieren
+        telVal = Trim$(Mid$(fullPattern, InStr(1, fullPattern, "tel:", vbTextCompare) + 4))
+        ' Abschliessendes ) entfernen
+        If Right$(telVal, 1) = ")" Then telVal = Left$(telVal, Len(telVal) - 1)
+        telVal = Trim$(telVal)
+
+        If Len(telVal) > 3 Then
+            ' Nummer gefunden -> Pattern durch Nummer ersetzen
+            matchCount = matchCount + 1
+            Debug.Print "[ExtractTelText] '" & fullPattern & "' -> '" & telVal & "'"
+            html = Left$(html, pos - 1) & telVal & Mid$(html, closeP + 1)
+            pos = pos + Len(telVal)
+        Else
+            ' Leeres tel: Pattern -> entfernen
+            Debug.Print "[ExtractTelText] Leeres Pattern entfernt: '" & fullPattern & "'"
+            html = Left$(html, pos - 1) & Mid$(html, closeP + 1)
+        End If
+    Loop
+
+    If matchCount > 0 Then
+        Debug.Print "[ExtractTelText] " & matchCount & " tel-Text-Pattern ersetzt"
+    End If
+    ExtractTelTextPattern = html
 End Function
 
 Private Function IsLikelyPhoneNumber(ByVal textIn As String) As Boolean
