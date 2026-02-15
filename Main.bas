@@ -181,17 +181,8 @@ Public Sub ImportLeadsFromAppleMail()
 
     ' --- Variablen (Objekte) ---
     Dim tbl As ListObject
-    Dim payload As Object
-    Dim parsed As Object
 
     ' --- Variablen (Primitives) ---
-    Dim v As Variant
-    Dim msgDate As Date
-    Dim msgSubject As String
-    Dim msgBody As String
-    Dim msgFrom As String
-    Dim leadType As String
-
     Dim messagesText As String
     Dim messages() As String
     Dim msgBlock As Variant
@@ -222,6 +213,8 @@ Public Sub ImportLeadsFromAppleMail()
     totalBlocks = UBound(messages) - LBound(messages) + 1
     Application.StatusBar = "Nachrichten analysieren... 0/" & totalBlocks
 
+    Dim processResult As Long
+
     For Each msgBlock In messages
         ' Schleife: jeden Nachrichtenblock einzeln verarbeiten.
         If Trim$(msgBlock) <> vbNullString Then
@@ -229,35 +222,21 @@ Public Sub ImportLeadsFromAppleMail()
             If analyzedCount Mod 5 = 0 Then
                 Application.StatusBar = "Nachrichten analysieren... " & analyzedCount & "/" & totalBlocks
             End If
-            On Error GoTo MsgError
-            Set payload = ParseMessageBlock(CStr(msgBlock))
 
-            msgDate = Date
-            msgSubject = vbNullString
-            msgBody = vbNullString
-            msgFrom = vbNullString
-            If TryGetKV(payload, "Date", v) Then msgDate = CDate(v)
-            If TryGetKV(payload, "Subject", v) Then msgSubject = CStr(v)
-            If TryGetKV(payload, "Body", v) Then msgBody = CStr(v)
-            msgBody = DecodeBodyIfNeeded(msgBody)
-            If TryGetKV(payload, "From", v) Then msgFrom = CStr(v)
-
-            leadType = ResolveLeadType(msgSubject, msgBody)
-
-            Set parsed = ParseLeadContent(msgBody)
-            SetKV parsed, "From", msgFrom
-            SetKV parsed, "MailBody", msgBody
-
-            If Not LeadAlreadyExists(tbl, parsed, msgDate) Then
-                AddLeadRow tbl, parsed, msgDate, leadType
-                importedCount = importedCount + 1
-                AddLeadToIndex parsed, msgDate
-            Else
-                duplicateCount = duplicateCount + 1
-            End If
+            Err.Clear
+            On Error Resume Next
+            processResult = ProcessSingleMessage(tbl, CStr(msgBlock))
             On Error GoTo 0
+
+            Select Case processResult
+                Case 1
+                    importedCount = importedCount + 1
+                Case 2
+                    duplicateCount = duplicateCount + 1
+                Case Else
+                    errorCount = errorCount + 1
+            End Select
         End If
-NextMsg:
     Next msgBlock
 
     Application.StatusBar = False
@@ -265,18 +244,52 @@ NextMsg:
     ThisWorkbook.Worksheets(SHEET_NAME).Range("B2").Value = Format$(Now, "hh:nn dd.mm.yy")
     On Error GoTo 0
     MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten übertragen. Duplikate: " & duplicateCount & ". Fehler: " & errorCount & ".", vbInformation
-    Exit Sub
-
-MsgError:
-    errorCount = errorCount + 1
-    LogImportError "Fehler beim Verarbeiten einer Nachricht", Err.Description
-    Err.Clear
-    Resume NextMsg
 End Sub
 
 ' =========================
 ' Apple Mail Read
 ' =========================
+
+Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText As String) As Long
+    ' Zweck: Einzelne Nachricht verarbeiten (parsen, dekodieren, importieren).
+    ' Rückgabe: 1 = importiert, 2 = Duplikat, 0 = Fehler.
+    ' Fehler werden hier NICHT abgefangen -> propagieren zum Aufrufer.
+    Dim payload As Object
+    Dim parsed As Object
+    Dim v As Variant
+    Dim msgDate As Date
+    Dim msgSubject As String
+    Dim msgBody As String
+    Dim msgFrom As String
+    Dim leadType As String
+
+    Set payload = ParseMessageBlock(blockText)
+
+    msgDate = Date
+    msgSubject = vbNullString
+    msgBody = vbNullString
+    msgFrom = vbNullString
+    If TryGetKV(payload, "Date", v) Then msgDate = CDate(v)
+    If TryGetKV(payload, "Subject", v) Then msgSubject = CStr(v)
+    If TryGetKV(payload, "Body", v) Then msgBody = CStr(v)
+    msgBody = DecodeBodyIfNeeded(msgBody)
+    If TryGetKV(payload, "From", v) Then msgFrom = CStr(v)
+
+    leadType = ResolveLeadType(msgSubject, msgBody)
+
+    Set parsed = ParseLeadContent(msgBody)
+    SetKV parsed, "From", msgFrom
+    SetKV parsed, "MailBody", msgBody
+
+    If LeadAlreadyExists(tbl, parsed, msgDate) Then
+        ProcessSingleMessage = 2
+    Else
+        AddLeadRow tbl, parsed, msgDate, leadType
+        AddLeadToIndex parsed, msgDate
+        ProcessSingleMessage = 1
+    End If
+End Function
+
 Private Function GetSettingValue(ByVal namedRange As String, ByVal defaultValue As String) As String
     ' Zweck: benannten Bereich lesen, Fallback auf Default.
     ' Abhängigkeiten: ThisWorkbook.Names, Worksheets, Range.
@@ -369,22 +382,24 @@ Private Function ReadTextFile(ByVal filePath As String) As String
     Dim txt As String
     Dim bytes As Long
 
-    On Error GoTo ErrHandler
     f = FreeFile
+    On Error Resume Next
     Open filePath For Binary Access Read As #f
+    If Err.Number <> 0 Then
+        Err.Clear
+        ReadTextFile = vbNullString
+        On Error GoTo 0
+        Exit Function
+    End If
+
     bytes = LOF(f)
     If bytes > 0 Then
         txt = String$(bytes, vbNullChar)
         Get #f, , txt
     End If
     Close #f
+    On Error GoTo 0
     ReadTextFile = txt
-    Exit Function
-
-ErrHandler:
-    On Error Resume Next
-    Close #f
-    ReadTextFile = vbNullString
 End Function
 
 Private Function NormalizeLineEndings(ByVal textIn As String) As String
@@ -439,29 +454,28 @@ Private Function IsLikelyBase64(ByVal textIn As String) As Boolean
     lines = Split(clean, vbLf)
     For i = LBound(lines) To UBound(lines)
         lineText = Trim$(lines(i))
-        If Len(lineText) = 0 Then GoTo NextB64Line
+        If Len(lineText) > 0 Then
+            checkedLineCount = checkedLineCount + 1
+            If checkedLineCount > MAX_CHECK_LINES Then Exit For
 
-        checkedLineCount = checkedLineCount + 1
-        If checkedLineCount > MAX_CHECK_LINES Then Exit For
+            lineOk = True
+            For j = 1 To Len(lineText)
+                ch = Mid$(lineText, j, 1)
+                Select Case ch
+                    Case "A" To "Z", "a" To "z", "0" To "9", "+", "/", "="
+                    Case Else
+                        lineOk = False
+                        Exit For
+                End Select
+            Next j
 
-        lineOk = True
-        For j = 1 To Len(lineText)
-            ch = Mid$(lineText, j, 1)
-            Select Case ch
-                Case "A" To "Z", "a" To "z", "0" To "9", "+", "/", "="
-                Case Else
-                    lineOk = False
-                    Exit For
-            End Select
-        Next j
-
-        If lineOk Then
-            validLineCount = validLineCount + 1
-            If Len(lineText) >= 40 Then longLineCount = longLineCount + 1
-        Else
-            invalidLineCount = invalidLineCount + 1
+            If lineOk Then
+                validLineCount = validLineCount + 1
+                If Len(lineText) >= 40 Then longLineCount = longLineCount + 1
+            Else
+                invalidLineCount = invalidLineCount + 1
+            End If
         End If
-NextB64Line:
     Next i
 
     ' Mindestens 80% gültige Zeilen und mindestens 2 lange Zeilen
@@ -474,7 +488,8 @@ End Function
 
 Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
     ' Zweck: Body automatisch dekodieren falls er Base64-kodiert oder MIME-Rohtext ist.
-    ' Abhängigkeiten: IsLikelyBase64, DecodeBase64ToString, ExtractBodyFromEmail, StripMimeHeaders.
+    '         Nach Dekodierung wird HTML automatisch in Klartext konvertiert.
+    ' Abhängigkeiten: IsLikelyBase64, DecodeBase64ToString, ExtractBodyFromEmail, StripMimeHeaders, HtmlToText.
     ' Rückgabe: Dekodierter Text oder Original falls keine Kodierung erkannt.
     Dim trimmed As String
     Dim decoded As String
@@ -495,7 +510,7 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
         decoded = ExtractBodyFromEmail(trimmed)
         Debug.Print "[DecodeBody] MIME-Ergebnis Länge: " & Len(decoded)
         If Len(Trim$(decoded)) > 0 Then
-            DecodeBodyIfNeeded = decoded
+            DecodeBodyIfNeeded = ConvertHtmlIfNeeded(decoded)
         Else
             DecodeBodyIfNeeded = bodyText
         End If
@@ -503,7 +518,6 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
     End If
 
     ' Fall 2: MIME-Header ohne Content-Type (z.B. nur Content-Transfer-Encoding: base64)
-    '         Header strippen, dann Base64-Daten dekodieren
     If InStr(1, trimmed, "Content-Transfer-Encoding:", vbTextCompare) > 0 Then
         Debug.Print "[DecodeBody] Content-Transfer-Encoding Header gefunden -> Header strippen"
         strippedBody = StripMimeHeaders(trimmed)
@@ -514,7 +528,7 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
             Debug.Print "[DecodeBody] Base64-Ergebnis Länge: " & Len(decoded)
             If Len(Trim$(decoded)) > 0 Then
                 Debug.Print "[DecodeBody] Dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
-                DecodeBodyIfNeeded = decoded
+                DecodeBodyIfNeeded = ConvertHtmlIfNeeded(decoded)
             Else
                 Debug.Print "[DecodeBody] WARNUNG: Base64-Dekodierung nach Strip lieferte leeren String!"
                 DecodeBodyIfNeeded = bodyText
@@ -533,7 +547,7 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
         Debug.Print "[DecodeBody] Base64-Ergebnis Länge: " & Len(decoded)
         If Len(Trim$(decoded)) > 0 Then
             Debug.Print "[DecodeBody] Dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
-            DecodeBodyIfNeeded = decoded
+            DecodeBodyIfNeeded = ConvertHtmlIfNeeded(decoded)
         Else
             Debug.Print "[DecodeBody] WARNUNG: Base64-Dekodierung lieferte leeren String!"
             DecodeBodyIfNeeded = bodyText
@@ -544,6 +558,24 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
     Debug.Print "[DecodeBody] Kein Encoding erkannt -> Original beibehalten"
     ' Fall 4: Kein Encoding erkannt -> Original zurückgeben
     DecodeBodyIfNeeded = bodyText
+End Function
+
+Private Function ConvertHtmlIfNeeded(ByVal textIn As String) As String
+    ' Zweck: Falls der Text HTML enthält, in Klartext konvertieren.
+    ' Erkennung: Prüft ob der Text HTML-Tags wie <html>, <body>, <div>, <table> enthält.
+    ' Rückgabe: Klartext oder unveränderter Text wenn kein HTML erkannt.
+    Dim trimCheck As String
+    trimCheck = LCase$(Left$(Trim$(textIn), 500))
+
+    If InStr(1, trimCheck, "<html", vbTextCompare) > 0 _
+       Or InStr(1, trimCheck, "<body", vbTextCompare) > 0 _
+       Or InStr(1, trimCheck, "<table", vbTextCompare) > 0 _
+       Or InStr(1, trimCheck, "<!doctype", vbTextCompare) > 0 Then
+        Debug.Print "[ConvertHtml] HTML erkannt -> HtmlToText"
+        ConvertHtmlIfNeeded = HtmlToText(textIn)
+    Else
+        ConvertHtmlIfNeeded = textIn
+    End If
 End Function
 
 Private Function StripMimeHeaders(ByVal textIn As String) As String
@@ -602,21 +634,19 @@ Private Function ParseMimeBody(ByVal contentText As String, ByVal desiredType As
         If collecting Then
             If Left$(Trim$(lineText), 2) = "--" Then Exit For
             collected = collected & lineText & vbLf
-            GoTo NextLine
+        Else
+            If InStr(1, lineText, "Content-Type:", vbTextCompare) > 0 Then
+                inTarget = (InStr(1, lineText, desiredType, vbTextCompare) > 0)
+                encoding = vbNullString
+                collected = vbNullString
+                charset = ExtractCharset(lineText, charset)
+            ElseIf inTarget And InStr(1, lineText, "Content-Transfer-Encoding:", vbTextCompare) > 0 Then
+                If InStr(1, lineText, "base64", vbTextCompare) > 0 Then encoding = "base64"
+                If InStr(1, lineText, "quoted-printable", vbTextCompare) > 0 Then encoding = "qp"
+            ElseIf inTarget And Len(Trim$(lineText)) = 0 Then
+                collecting = True
+            End If
         End If
-
-        If InStr(1, lineText, "Content-Type:", vbTextCompare) > 0 Then
-            inTarget = (InStr(1, lineText, desiredType, vbTextCompare) > 0)
-            encoding = vbNullString
-            collected = vbNullString
-            charset = ExtractCharset(lineText, charset)
-        ElseIf inTarget And InStr(1, lineText, "Content-Transfer-Encoding:", vbTextCompare) > 0 Then
-            If InStr(1, lineText, "base64", vbTextCompare) > 0 Then encoding = "base64"
-            If InStr(1, lineText, "quoted-printable", vbTextCompare) > 0 Then encoding = "qp"
-        ElseIf inTarget And Len(Trim$(lineText)) = 0 Then
-            collecting = True
-        End If
-NextLine:
     Next i
 
     If Len(collected) = 0 Then Exit Function
@@ -783,13 +813,16 @@ Private Function DecodeQuotedPrintable(ByVal qpText As String, ByVal charset As 
                 bytes(outPos) = CByte(CLng("&H" & next2))
                 outPos = outPos + 1
                 i = i + 3
-                GoTo NextChar
+            Else
+                bytes(outPos) = Asc(ch) And &HFF
+                outPos = outPos + 1
+                i = i + 1
             End If
+        Else
+            bytes(outPos) = Asc(ch) And &HFF
+            outPos = outPos + 1
+            i = i + 1
         End If
-        bytes(outPos) = Asc(ch) And &HFF
-        outPos = outPos + 1
-        i = i + 1
-NextChar:
     Loop
 
     DecodeQuotedPrintable = DecodeBytesToString(bytes, outPos, charset)
@@ -1067,46 +1100,40 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
 
     For i = LBound(mailboxes) To UBound(mailboxes)
         mbName = Trim$(mailboxes(i))
-        If Len(mbName) = 0 Then GoTo NextMailbox
+        If Len(mbName) > 0 Then
+            ' Zugehörigen Folder holen (gleicher Index, oder letzten wiederverwenden)
+            If i <= UBound(folders) Then
+                flName = Trim$(folders(i))
+            Else
+                flName = Trim$(folders(UBound(folders)))
+            End If
+            If Len(flName) = 0 Then flName = LEAD_FOLDER_DEFAULT
 
-        ' Zugehörigen Folder holen (gleicher Index, oder letzten wiederverwenden)
-        If i <= UBound(folders) Then
-            flName = Trim$(folders(i))
-        Else
-            flName = Trim$(folders(UBound(folders)))
+            isOutlook = IsOutlookMailbox(mbName)
+
+            If isOutlook Then
+                script = BuildOutlookScript(mbName, flName, keywordA, keywordB)
+                appLabel = "Outlook"
+            Else
+                script = BuildAppleMailScript(mbName, flName, keywordA, keywordB)
+                appLabel = "Apple Mail"
+            End If
+
+            Err.Clear
+            On Error Resume Next
+            mailResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+            If Err.Number <> 0 Then
+                LogImportError "AppleScriptTask-Fehler (" & appLabel & ", " & mbName & ")", Err.Description
+                Err.Clear
+            ElseIf Left$(mailResult, 6) = "ERROR:" Then
+                LogImportError "AppleScript-Fehler (" & appLabel & ", " & mbName & ")", Mid$(mailResult, 7)
+            Else
+                result = result & mailResult
+                If Len(sourceLabels) > 0 Then sourceLabels = sourceLabels & " | "
+                sourceLabels = sourceLabels & appLabel & ": " & BuildMailboxSourceLabel(mbName, flName)
+            End If
+            On Error GoTo 0
         End If
-        If Len(flName) = 0 Then flName = LEAD_FOLDER_DEFAULT
-
-        isOutlook = IsOutlookMailbox(mbName)
-
-        If isOutlook Then
-            script = BuildOutlookScript(mbName, flName, keywordA, keywordB)
-            appLabel = "Outlook"
-        Else
-            script = BuildAppleMailScript(mbName, flName, keywordA, keywordB)
-            appLabel = "Apple Mail"
-        End If
-
-        On Error GoTo MailboxError
-        mailResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
-        If Left$(mailResult, 6) = "ERROR:" Then
-            LogImportError "AppleScript-Fehler (" & appLabel & ", " & mbName & ")", Mid$(mailResult, 7)
-            GoTo NextMailbox
-        End If
-        result = result & mailResult
-
-        ' Source-Label sammeln
-        If Len(sourceLabels) > 0 Then sourceLabels = sourceLabels & " | "
-        sourceLabels = sourceLabels & appLabel & ": " & BuildMailboxSourceLabel(mbName, flName)
-        GoTo NextMailbox
-
-MailboxError:
-        LogImportError "AppleScriptTask-Fehler (" & appLabel & ", " & mbName & ")", Err.Description
-        Err.Clear
-        Resume NextMailbox
-
-NextMailbox:
-        On Error GoTo 0
     Next i
 
     ' --- 3. Source-Note zusammenbauen ---
@@ -1439,8 +1466,18 @@ Private Function FetchAppleMailFolderList() As String
     script = script & "end tell" & vbLf
     script = script & "end timeout"
 
-    On Error GoTo ErrHandler
+    Err.Clear
+    On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    If Err.Number <> 0 Then
+        MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
+        LogImportError "AppleScriptTask-Fehler", Err.Description
+        Err.Clear
+        On Error GoTo 0
+        FetchAppleMailFolderList = vbNullString
+        Exit Function
+    End If
+    On Error GoTo 0
     If Left$(result, 6) = "ERROR:" Then
         MsgBox "AppleScript-Fehler: " & Mid$(result, 7), vbExclamation
         LogImportError "AppleScript-Fehler", Mid$(result, 7)
@@ -1448,12 +1485,6 @@ Private Function FetchAppleMailFolderList() As String
         Exit Function
     End If
     FetchAppleMailFolderList = result
-    Exit Function
-
-ErrHandler:
-    MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
-    LogImportError "AppleScriptTask-Fehler", Err.Description
-    FetchAppleMailFolderList = vbNullString
 End Function
 
 Private Function FetchOutlookFolderList() As String
@@ -1534,8 +1565,18 @@ Private Function FetchOutlookFolderList() As String
     script = script & "end tell" & vbLf
     script = script & "end timeout"
 
-    On Error GoTo ErrOutlook
+    Err.Clear
+    On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    If Err.Number <> 0 Then
+        MsgBox "AppleScriptTask-Fehler (Outlook). Prüfe Script-Installation und Automation-Rechte.", vbExclamation
+        LogImportError "AppleScriptTask-Fehler (Outlook)", Err.Description
+        Err.Clear
+        On Error GoTo 0
+        FetchOutlookFolderList = vbNullString
+        Exit Function
+    End If
+    On Error GoTo 0
     If Left$(result, 6) = "ERROR:" Then
         MsgBox "AppleScript-Fehler (Outlook): " & Mid$(result, 7), vbExclamation
         LogImportError "AppleScript-Fehler (Outlook)", Mid$(result, 7)
@@ -1543,12 +1584,6 @@ Private Function FetchOutlookFolderList() As String
         Exit Function
     End If
     FetchOutlookFolderList = result
-    Exit Function
-
-ErrOutlook:
-    MsgBox "AppleScriptTask-Fehler (Outlook). Prüfe Script-Installation und Automation-Rechte.", vbExclamation
-    LogImportError "AppleScriptTask-Fehler (Outlook)", Err.Description
-    FetchOutlookFolderList = vbNullString
 End Function
 
 ' =========================
@@ -1593,20 +1628,22 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
         Exit Sub
     End If
 
-    On Error GoTo ErrHandler
+    Err.Clear
+    On Error Resume Next
 
     If Len(Dir$(targetPath)) > 0 Then Kill targetPath
-
     FileCopy sourcePath, targetPath
-    Exit Sub
 
-ErrHandler:
-    If Err.Number = 75 Then
-        MsgBox "Zugriff verweigert. Bitte manuell kopieren nach: " & folderPath & " oder AUTO_INSTALL_APPLESCRIPT aktivieren.", vbExclamation
-        Exit Sub
+    If Err.Number <> 0 Then
+        If Err.Number = 75 Then
+            MsgBox "Zugriff verweigert. Bitte manuell kopieren nach: " & folderPath & " oder AUTO_INSTALL_APPLESCRIPT aktivieren.", vbExclamation
+        Else
+            MsgBox "AppleScript konnte nicht installiert werden. Prüfe Rechte.", vbExclamation
+        End If
+        Err.Clear
     End If
 
-    MsgBox "AppleScript konnte nicht installiert werden. Prüfe Rechte.", vbExclamation
+    On Error GoTo 0
 End Sub
 
 Private Sub EnsureFolderExists(ByVal folderPath As String)
@@ -1694,12 +1731,11 @@ Private Function TryGetKV(ByVal store As Object, ByVal keyName As String, ByRef 
             TryGetKV = True
         End If
     Else
-        On Error GoTo NotFound
+        On Error Resume Next
         valueOut = store(k)
-        TryGetKV = True
-        Exit Function
-NotFound:
-        TryGetKV = False
+        TryGetKV = (Err.Number = 0)
+        Err.Clear
+        On Error GoTo 0
     End If
 End Function
 
@@ -1736,28 +1772,25 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
     lines = Split(blockText, vbLf)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: jede Zeile des Message-Blocks auswerten.
-
         If inBody Then
             ' Nach BODY:-Tag: ALLE Zeilen sind Body-Inhalt (inkl. Leerzeilen)
             bodyAccum = bodyAccum & lines(i) & vbLf
-            GoTo NextParseLine
+        Else
+            ' Header-Bereich: Tags prüfen
+            lineText = Trim$(lines(i))
+            If Len(lineText) > 0 Then
+                If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
+                    SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
+                ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
+                    SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
+                ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
+                    SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
+                ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
+                    bodyAccum = Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
+                    inBody = True
+                End If
+            End If
         End If
-
-        ' Header-Bereich: Tags prüfen
-        lineText = Trim$(lines(i))
-        If Len(lineText) = 0 Then GoTo NextParseLine
-
-        If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
-            SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
-        ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
-            SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
-        ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
-            SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
-        ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
-            bodyAccum = Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
-            inBody = True
-        End If
-NextParseLine:
     Next i
 
     SetKV payload, "Body", bodyAccum
@@ -1787,18 +1820,33 @@ Private Function ParseAppleMailDate(ByVal dateText As String) As Date
 
     t = Replace(t, " um ", " ")
 
-    On Error GoTo Fallback
+    On Error Resume Next
     ParseAppleMailDate = CDate(t)
-    Exit Function
+    If Err.Number = 0 Then
+        On Error GoTo 0
+        Exit Function
+    End If
+    Err.Clear
+    On Error GoTo 0
 
-Fallback:
-    On Error GoTo ErrHandler
     parts = Split(t, " ")
-    If UBound(parts) < 2 Then GoTo ErrHandler
+    If UBound(parts) < 2 Then
+        ParseAppleMailDate = Date
+        Exit Function
+    End If
 
+    On Error Resume Next
     dayNum = CLng(Replace(parts(0), ".", ""))
     monthNum = GermanMonthToNumber(parts(1))
     yearNum = CLng(parts(2))
+
+    If Err.Number <> 0 Then
+        Err.Clear
+        On Error GoTo 0
+        ParseAppleMailDate = Date
+        Exit Function
+    End If
+    On Error GoTo 0
 
     timePart = vbNullString
     If UBound(parts) >= 3 Then timePart = parts(3)
@@ -1806,16 +1854,21 @@ Fallback:
     h = 0: m = 0: s = 0
     If Len(timePart) > 0 Then
         timeParts = Split(timePart, ":")
+        On Error Resume Next
         If UBound(timeParts) >= 0 Then h = CLng(timeParts(0))
         If UBound(timeParts) >= 1 Then m = CLng(timeParts(1))
         If UBound(timeParts) >= 2 Then s = CLng(timeParts(2))
+        Err.Clear
+        On Error GoTo 0
     End If
 
+    On Error Resume Next
     ParseAppleMailDate = DateSerial(yearNum, monthNum, dayNum) + TimeSerial(h, m, s)
-    Exit Function
-
-ErrHandler:
-    ParseAppleMailDate = Date
+    If Err.Number <> 0 Then
+        Err.Clear
+        ParseAppleMailDate = Date
+    End If
+    On Error GoTo 0
 End Function
 
 Private Function GermanMonthToNumber(ByVal monthText As String) As Long
@@ -1883,32 +1936,22 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     For i = LBound(lines) To UBound(lines)
         ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
         lineText = Trim$(lines(i))
-        If Len(lineText) = 0 Then GoTo NextLine
-
-        If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
-            currentSection = "Kontakt"
-            pendingKey = vbNullString
-            GoTo NextLine
+        If Len(lineText) > 0 Then
+            If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
+                currentSection = "Kontakt"
+                pendingKey = vbNullString
+            ElseIf InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 Then
+                currentSection = "Senior"
+                pendingKey = vbNullString
+            ElseIf Right$(lineText, 1) = ":" Then
+                pendingKey = Left$(lineText, Len(lineText) - 1)
+            ElseIf Len(pendingKey) > 0 Then
+                MapLabelValue result, pendingKey, lineText, currentSection
+                pendingKey = vbNullString
+            ElseIf InStr(lineText, ":") > 0 Then
+                MapInlinePair result, lineText, currentSection
+            End If
         End If
-
-        If InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 Then
-            currentSection = "Senior"
-            pendingKey = vbNullString
-            GoTo NextLine
-        End If
-
-        If Right$(lineText, 1) = ":" Then
-            pendingKey = Left$(lineText, Len(lineText) - 1)
-            GoTo NextLine
-        End If
-
-        If Len(pendingKey) > 0 Then
-            MapLabelValue result, pendingKey, lineText, currentSection
-            pendingKey = vbNullString
-        ElseIf InStr(lineText, ":") > 0 Then
-            MapInlinePair result, lineText, currentSection
-        End If
-NextLine:
     Next i
 
     If Len(Trim$(GetField(result, "Senior_Name"))) = 0 Then
