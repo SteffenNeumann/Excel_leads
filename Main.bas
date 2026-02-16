@@ -172,7 +172,7 @@ Public Sub ImportLeadsFromAppleMail()
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
 
-    Debug.Print "[Main] === Version: 2026-02-16-section-umlaut-fix ==="
+    Debug.Print "[Main] === Version: 2026-02-16-debug-payload ==="
 
     ' --- Eingabeprüfung ---
     If Not ValidateMailSettings() Then Exit Sub
@@ -271,6 +271,11 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     Dim msgFrom As String
     Dim leadType As String
 
+    Debug.Print "[ProcessMsg] blockText Laenge: " & Len(blockText)
+    Debug.Print "[ProcessMsg] blockText erste 300 Zeichen:"
+    Debug.Print Left$(blockText, 300)
+    Debug.Print "[ProcessMsg] ---"
+
     Set payload = ParseMessageBlock(blockText)
 
     msgDate = Date
@@ -282,6 +287,10 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     If TryGetKV(payload, "Body", v) Then msgBody = CStr(v)
     msgBody = DecodeBodyIfNeeded(msgBody)
     If TryGetKV(payload, "From", v) Then msgFrom = CStr(v)
+
+    Debug.Print "[ProcessMsg] payload -> Subject='" & Left$(msgSubject, 80) & "'"
+    Debug.Print "[ProcessMsg] payload -> From='" & Left$(msgFrom, 80) & "'"
+    Debug.Print "[ProcessMsg] payload -> Body Laenge=" & Len(msgBody)
 
     leadType = ResolveLeadType(msgSubject, msgBody)
 
@@ -2289,6 +2298,7 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
     bodyAccum = vbNullString
 
     lines = Split(blockText, vbLf)
+    Debug.Print "[ParseMsg] Zeilen im Block: " & (UBound(lines) - LBound(lines) + 1)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: jede Zeile des Message-Blocks auswerten.
         If inBody Then
@@ -2297,16 +2307,24 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
         Else
             ' Header-Bereich: Tags prüfen
             lineText = Trim$(lines(i))
+            ' Debug: erste 10 Header-Zeilen ausgeben
+            If i <= LBound(lines) + 9 Then
+                Debug.Print "[ParseMsg] Header Z" & i & ": '" & Left$(lineText, 100) & "'"
+            End If
             If Len(lineText) > 0 Then
                 If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
+                    Debug.Print "[ParseMsg] DATE gefunden: '" & Left$(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)), 60) & "'"
                     SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
                 ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
+                    Debug.Print "[ParseMsg] SUBJECT gefunden: '" & Left$(Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1)), 80) & "'"
                     SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
                 ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
+                    Debug.Print "[ParseMsg] FROM gefunden: '" & Left$(Trim$(Mid$(lineText, Len(FROM_TAG) + 1)), 80) & "'"
                     SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
                 ElseIf Left$(lineText, 9) = "SRCSTRAT:" Then
                     Debug.Print "[AppleScript] " & lineText
                 ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
+                    Debug.Print "[ParseMsg] BODY Tag gefunden, Body-Start"
                     bodyAccum = Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
                     inBody = True
                 End If
@@ -2526,6 +2544,17 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                 currentSection = "Anfrage"
                 pendingKey = vbNullString
                 Debug.Print "[ParseLead] Sektion: Anfrage (Zeile " & i & ")"
+                ' Wert nach "Anfragedetails:" extrahieren (z.B. "Haushaltshilfe")
+                Dim anfColonPos As Long
+                anfColonPos = InStr(lineText, ":")
+                If anfColonPos > 0 Then
+                    Dim anfVal As String
+                    anfVal = Trim$(Mid$(lineText, anfColonPos + 1))
+                    If Len(anfVal) > 0 Then
+                        Debug.Print "[ParseLead] Anfragedetails-Wert: '" & anfVal & "'"
+                        SetKV result, "Anfragedetails", anfVal
+                    End If
+                End If
                 GoTo NextLineLabel
             ElseIf InStr(1, lineText, "Datenschutz", vbTextCompare) > 0 _
                 And InStr(1, lineText, "zustimmung", vbTextCompare) = 0 Then
@@ -2914,6 +2943,7 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     ' Betreff als erste Zeile in Notizen einfuegen (fuer Zuordnung bei fehlerhaftem Parsing)
     Dim subjectVal As String
     subjectVal = GetField(fields, "MailSubject")
+    Debug.Print "[AddLeadRow] MailSubject='" & Left$(subjectVal, 80) & "'"
     If Len(subjectVal) > 0 Then
         notesVal = "Betreff: " & subjectVal & vbLf & notesVal
     End If
