@@ -2380,6 +2380,7 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     Dim currentSection As String
     Dim pendingKey As String
     Dim workText As String
+    Dim startLine As Long
 
     Set result = NewKeyValueStore()
 
@@ -2403,13 +2404,41 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
 
     lines = Split(workText, vbLf)
     Debug.Print "[ParseLead] Anzahl Zeilen: " & (UBound(lines) - LBound(lines) + 1)
+
+    ' Vorlauf-Rauschen ueberspringen: erste Sektions-Ueberschrift suchen
+    ' (Weitergeleitete Mails enthalten Signaturen/Header vor den Lead-Daten)
+    startLine = LBound(lines)
     For i = LBound(lines) To UBound(lines)
+        lineText = Trim$(Replace(lines(i), ChrW$(160), " "))
+        lineText = Replace(lineText, ChrW$(&HAD), "")
+        If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 _
+           Or InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 _
+           Or InStr(1, lineText, "Senior-Informationen", vbTextCompare) > 0 _
+           Or InStr(1, lineText, "Angaben zum Senior", vbTextCompare) > 0 _
+           Or InStr(1, lineText, "Zur betreuten Person", vbTextCompare) > 0 _
+           Or InStr(1, lineText, "Betreute Person", vbTextCompare) > 0 Then
+            startLine = i
+            Exit For
+        End If
+    Next i
+
+    If startLine > LBound(lines) Then
+        Debug.Print "[ParseLead] Sektionsheader in Zeile " & startLine & " -> " & startLine & " Vorlauf-Zeilen uebersprungen"
+    End If
+
+    For i = startLine To UBound(lines)
         ' Schleife: Zeilen iterieren und Abschnitt/Felder erkennen.
         lineText = Trim$(Replace(lines(i), ChrW$(160), " "))
         ' Asterisken entfernen (HTML-Bold-Marker *Label:* aus SendGrid-Templates)
         lineText = Replace(lineText, "*", "")
         lineText = Trim$(lineText)
         If Len(lineText) > 0 Then
+            ' Rausch-Zeilen ueberspringen (E-Mail-Header, URLs, Footer)
+            If IsNoiseLine(lineText) Then
+                Debug.Print "[ParseLead] Noise uebersprungen (Zeile " & i & "): '" & Left$(lineText, 60) & "'"
+                GoTo NextLineLabel
+            End If
+
             If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
                 currentSection = "Kontakt"
                 pendingKey = vbNullString
@@ -2471,6 +2500,7 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                 End If
             End If
         End If
+NextLineLabel:
     Next i
 
     If Len(Trim$(GetField(result, "Senior_Name"))) = 0 Then
@@ -2562,6 +2592,66 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
             Debug.Print "[MapLabel] UNBEKANNT: '" & keyNorm & "' -> '" & Left$(valueNorm, 60) & "' [" & sectionName & "]"
     End Select
 End Sub
+
+Private Function IsNoiseLine(ByVal lineText As String) As Boolean
+    ' Zweck: Erkennt ob eine Zeile Rauschen ist (E-Mail-Header, URLs, Footer).
+    ' Rückgabe: True wenn Zeile uebersprungen werden soll.
+    Dim lt As String
+    lt = LCase$(Trim$(lineText))
+
+    ' E-Mail-Weiterleitungs-Header (Von:, Datum:, An:, Betreff: etc.)
+    If Left$(lt, 4) = "von:" Or Left$(lt, 6) = "datum:" Or Left$(lt, 3) = "an:" _
+       Or Left$(lt, 8) = "betreff:" Or Left$(lt, 10) = "gesendet:" _
+       Or Left$(lt, 5) = "from:" Or Left$(lt, 5) = "date:" Or Left$(lt, 3) = "to:" _
+       Or Left$(lt, 8) = "subject:" Or Left$(lt, 5) = "sent:" _
+       Or Left$(lt, 3) = "cc:" Or Left$(lt, 4) = "bcc:" Then
+        ' Nur als Noise werten wenn E-Mail-Muster erkennbar (< oder @ oder WG:/Fwd:)
+        If InStr(lineText, "<") > 0 Or InStr(lineText, "@") > 0 _
+           Or InStr(1, lineText, "WG:", vbTextCompare) > 0 _
+           Or InStr(1, lineText, "Fwd:", vbTextCompare) > 0 _
+           Or InStr(1, lineText, "AW:", vbTextCompare) > 0 Then
+            IsNoiseLine = True
+            Exit Function
+        End If
+        ' Datum-Zeilen mit Wochentag erkennen (z.B. "Datum: Freitag, 23. Januar")
+        If Left$(lt, 6) = "datum:" Or Left$(lt, 5) = "date:" Then
+            If InStr(1, lineText, "um ", vbTextCompare) > 0 _
+               Or InStr(1, lineText, "at ", vbTextCompare) > 0 Then
+                IsNoiseLine = True
+                Exit Function
+            End If
+        End If
+    End If
+
+    ' URL-Zeilen (http://, https://, www.)
+    If Left$(lt, 7) = "http://" Or Left$(lt, 8) = "https://" Or Left$(lt, 4) = "www." Then
+        IsNoiseLine = True
+        Exit Function
+    End If
+
+    ' [Text]<URL> Muster (SendGrid-Tracking-Links)
+    If Left$(lt, 1) = "[" And InStr(lt, "]<http") > 0 Then
+        IsNoiseLine = True
+        Exit Function
+    End If
+
+    ' Impressum/Footer-Muster
+    If Left$(lt, 18) = "registergericht:" _
+       Or Left$(lt, 24) = "sitz der gesellschaft:" _
+       Or InStr(1, lt, "umsatzsteuer-identifikationsnummer", vbTextCompare) > 0 _
+       Or InStr(1, lt, "geschäftsführer:", vbTextCompare) > 0 _
+       Or InStr(1, lt, "gesch" & ChrW$(228) & "ftsf" & ChrW$(252) & "hrer:", vbTextCompare) > 0 Then
+        IsNoiseLine = True
+        Exit Function
+    End If
+
+    ' Zustimmungs-/Datenschutz-Zeilen
+    If InStr(1, lt, "zustimmung zur datenschutz", vbTextCompare) > 0 _
+       Or InStr(1, lt, "zustimmung zur kontaktweitergabe", vbTextCompare) > 0 Then
+        IsNoiseLine = True
+        Exit Function
+    End If
+End Function
 
 Private Function NormalizeKey(ByVal rawKey As String) As String
     ' Zweck: Schlüsseltext vereinheitlichen.
@@ -3196,9 +3286,14 @@ Public Sub DebugDumpFields(ByVal fields As Object)
         Else
             Debug.Print "  LEER : " & CStr(fieldLabels(i)) & " (" & CStr(fieldNames(i)) & ")"
             ' Nur Kernfelder als fehlend zaehlen (Name, Telefon, E-Mail)
+            ' Vorname/Nachname nur zaehlen wenn Kontakt_Name auch leer ist
             Select Case CStr(fieldNames(i))
-                Case "Kontakt_Name", "Kontakt_Vorname", "Kontakt_Mobil", "Kontakt_Email"
+                Case "Kontakt_Name", "Kontakt_Mobil", "Kontakt_Email"
                     missingCount = missingCount + 1
+                Case "Kontakt_Vorname"
+                    If Len(Trim$(GetField(fields, "Kontakt_Name"))) = 0 Then
+                        missingCount = missingCount + 1
+                    End If
             End Select
         End If
     Next i
