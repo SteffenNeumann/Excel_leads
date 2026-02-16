@@ -3362,7 +3362,7 @@ Public Sub DebugDumpFields(ByVal fields As Object)
     For i = LBound(fieldNames) To UBound(fieldNames)
         v = GetField(fields, CStr(fieldNames(i)))
         If Len(Trim$(v)) > 0 Then
-            Debug.Print "  OK   : " & CStr(fieldLabels(i)) & " = """ & Left$(v, 80) & """"
+            ' OK-Felder nicht ausgeben - nur fehlende zeigen
         Else
             Debug.Print "  LEER : " & CStr(fieldLabels(i)) & " (" & CStr(fieldNames(i)) & ")"
             ' Nur Kernfelder als fehlend zaehlen (Name, Telefon, E-Mail)
