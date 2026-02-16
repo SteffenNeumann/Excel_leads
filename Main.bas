@@ -1289,9 +1289,59 @@ Private Function DecodeBytesToString(ByRef bytes() As Byte, ByVal lengthBytes As
     If lengthBytes = 0 Then Exit Function
     If InStr(1, charset, "utf-8", vbTextCompare) > 0 Then
         DecodeBytesToString = Utf8BytesToString(bytes, lengthBytes)
+    ElseIf InStr(1, charset, "windows-1252", vbTextCompare) > 0 _
+        Or InStr(1, charset, "cp1252", vbTextCompare) > 0 Then
+        DecodeBytesToString = Windows1252BytesToString(bytes, lengthBytes)
     Else
         DecodeBytesToString = Latin1BytesToString(bytes, lengthBytes)
     End If
+End Function
+
+Private Function Windows1252BytesToString(ByRef bytes() As Byte, ByVal lengthBytes As Long) As String
+    ' Zweck: Windows-1252 Bytes in Unicode-String konvertieren.
+    ' Im Bereich 0x80-0x9F weicht Windows-1252 von Latin-1/Unicode ab.
+    ' Beispiele: 0x80=Euro, 0x9B=rsaquo, 0x85=Ellipsis, 0x93/94=Anführungszeichen.
+    Dim i As Long
+    Dim s As String
+    Dim b As Long
+    If lengthBytes = 0 Then Exit Function
+    For i = 0 To lengthBytes - 1
+        b = bytes(i)
+        Select Case b
+            Case &H80: s = s & ChrW$(&H20AC)  ' Euro
+            Case &H82: s = s & ChrW$(&H201A)  ' Single Low-9 Quote
+            Case &H83: s = s & ChrW$(&H192)   ' Latin Small F With Hook
+            Case &H84: s = s & ChrW$(&H201E)  ' Double Low-9 Quote
+            Case &H85: s = s & ChrW$(&H2026)  ' Horizontal Ellipsis
+            Case &H86: s = s & ChrW$(&H2020)  ' Dagger
+            Case &H87: s = s & ChrW$(&H2021)  ' Double Dagger
+            Case &H88: s = s & ChrW$(&H2C6)   ' Modifier Letter Circumflex
+            Case &H89: s = s & ChrW$(&H2030)  ' Per Mille Sign
+            Case &H8A: s = s & ChrW$(&H160)   ' Latin Capital S With Caron
+            Case &H8B: s = s & ChrW$(&H2039)  ' Single Left Guillemet
+            Case &H8C: s = s & ChrW$(&H152)   ' Latin Capital OE
+            Case &H8E: s = s & ChrW$(&H17D)   ' Latin Capital Z With Caron
+            Case &H91: s = s & ChrW$(&H2018)  ' Left Single Quote
+            Case &H92: s = s & ChrW$(&H2019)  ' Right Single Quote
+            Case &H93: s = s & ChrW$(&H201C)  ' Left Double Quote
+            Case &H94: s = s & ChrW$(&H201D)  ' Right Double Quote
+            Case &H95: s = s & ChrW$(&H2022)  ' Bullet
+            Case &H96: s = s & ChrW$(&H2013)  ' En Dash
+            Case &H97: s = s & ChrW$(&H2014)  ' Em Dash
+            Case &H98: s = s & ChrW$(&H2DC)   ' Small Tilde
+            Case &H99: s = s & ChrW$(&H2122)  ' Trade Mark Sign
+            Case &H9A: s = s & ChrW$(&H161)   ' Latin Small S With Caron
+            Case &H9B: s = s & ChrW$(&H203A)  ' Single Right Guillemet (rsaquo)
+            Case &H9C: s = s & ChrW$(&H153)   ' Latin Small OE
+            Case &H9E: s = s & ChrW$(&H17E)   ' Latin Small Z With Caron
+            Case &H9F: s = s & ChrW$(&H178)   ' Latin Capital Y With Diaeresis
+            Case &H81, &H8D, &H8F, &H90, &H9D
+                ' Undefiniert in Windows-1252 -> ignorieren
+            Case Else
+                s = s & ChrW$(b)
+        End Select
+    Next i
+    Windows1252BytesToString = s
 End Function
 
 Private Function SafeChrW(ByVal codePoint As Long) As String
@@ -1573,12 +1623,16 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
     script = script & "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf
     script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
     ' Python MIME text/plain Extraktor (base64-kodiert)
+    ' Fix: binary mode + message_from_binary_file + charset aus Content-Type Header
     Dim b64Py As String
-    b64Py = "aW1wb3J0IGVtYWlsLCBzeXMKd2l0aCBvcGVuKHN5cy5hcmd2WzFdKSBhcyBmOgogICAgbXNnID0gZW1h" & _
-            "aWwubWVzc2FnZV9mcm9tX2ZpbGUoZikKZm9yIHAgaW4gbXNnLndhbGsoKToKICAgIGlmIHAuZ2V0X2Nv" & _
-            "bnRlbnRfdHlwZSgpID09ICd0ZXh0L3BsYWluJzoKICAgICAgICBwYXlsb2FkID0gcC5nZXRfcGF5bG9h" & _
-            "ZChkZWNvZGU9VHJ1ZSkKICAgICAgICBpZiBwYXlsb2FkOgogICAgICAgICAgICBzeXMuc3Rkb3V0Lndy" & _
-            "aXRlKHBheWxvYWQuZGVjb2RlKCd1dGYtOCcsICdyZXBsYWNlJykpCiAgICAgICAgICAgIGJyZWFrCg=="
+    b64Py = "aW1wb3J0IGVtYWlsLCBzeXMKd2l0aCBvcGVuKHN5cy5hcmd2WzFdLCAncmInKSBhcyBm" & _
+            "OgogICAgbXNnID0gZW1haWwubWVzc2FnZV9mcm9tX2JpbmFyeV9maWxlKGYpCmZvciBw" & _
+            "IGluIG1zZy53YWxrKCk6CiAgICBpZiBwLmdldF9jb250ZW50X3R5cGUoKSA9PSAndGV4" & _
+            "dC9wbGFpbic6CiAgICAgICAgcGF5bG9hZCA9IHAuZ2V0X3BheWxvYWQoZGVjb2RlPVRy" & _
+            "dWUpCiAgICAgICAgaWYgcGF5bG9hZDoKICAgICAgICAgICAgY2hhcnNldCA9IHAuZ2V0" & _
+            "X2NvbnRlbnRfY2hhcnNldCgpIG9yICd1dGYtOCcKICAgICAgICAgICAgc3lzLnN0ZG91" & _
+            "dC53cml0ZShwYXlsb2FkLmRlY29kZShjaGFyc2V0LCAncmVwbGFjZScpKQogICAgICAg" & _
+            "ICAgICBicmVhawo="
 
     ' Python-Script einmalig auf Platte schreiben
     script = script & "do shell script ""echo '" & b64Py & "' | base64 -D > /tmp/_ep.py""" & vbLf
@@ -2395,6 +2449,10 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
 
     ' Soft-Hyphens (U+00AD) entfernen, die Sektionserkennung stören können
     workText = Replace(workText, ChrW$(&HAD), "")
+
+    ' Unicode Replacement Character (U+FFFD) entfernen
+    ' Entsteht wenn Windows-1252 Bytes fälschlich als UTF-8 dekodiert werden
+    workText = Replace(workText, ChrW$(&HFFFD), "")
 
     ' Non-Breaking Spaces (NBSP) in normale Spaces umwandeln
     workText = Replace(workText, ChrW$(160), " ")
