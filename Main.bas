@@ -2929,8 +2929,28 @@ Private Function CleanPhoneNumber(ByVal rawValue As String) As String
     ' Entfernt <tel:...> Suffix und URL-Encoding (%20 etc.).
     ' Beispiel: "+49 16097008155<tel:+49%2016097008155>" -> "+49 16097008155"
     Dim s As String
+    Dim sLower As String
+    Dim closePos As Long
     Dim p As Long
     s = Trim$(rawValue)
+
+    ' Sonderfall: reiner tel-Link ohne sichtbaren Anzeigetext
+    sLower = LCase$(s)
+    If Left$(sLower, 5) = "tel:" Then
+        s = Mid$(s, 5)
+    ElseIf Left$(sLower, 6) = "<tel:" Then
+        closePos = InStr(1, s, ">")
+        If closePos > 0 Then
+            s = Mid$(s, 6, closePos - 6)
+        Else
+            s = Mid$(s, 6)
+        End If
+    End If
+
+    ' URL-Encoding auflösen
+    s = Replace(s, "%20", " ", , , vbTextCompare)
+    s = Replace(s, "%2B", "+", , , vbTextCompare)
+
     ' <tel:...> Suffix entfernen
     p = InStr(1, s, "<tel:", vbTextCompare)
     If p > 0 Then
@@ -2954,8 +2974,38 @@ Private Function CleanLinkedValue(ByVal rawValue As String) As String
     ' Entfernt <tel:...>, <mailto:...> und sonstige <...> Suffixe.
     ' Beispiel: "m.kaiser@meggy.com<mailto:m.kaiser@meggy.com>" -> "m.kaiser@meggy.com"
     Dim s As String
+    Dim sLower As String
+    Dim closePos As Long
     Dim p As Long
     s = Trim$(rawValue)
+
+    sLower = LCase$(s)
+
+    ' Sonderfall: Wert besteht nur aus Linkpayload (tel/mailto)
+    If Left$(sLower, 5) = "tel:" Then
+        s = Mid$(s, 5)
+    ElseIf Left$(sLower, 6) = "<tel:" Then
+        closePos = InStr(1, s, ">")
+        If closePos > 0 Then
+            s = Mid$(s, 6, closePos - 6)
+        Else
+            s = Mid$(s, 6)
+        End If
+    ElseIf Left$(sLower, 7) = "mailto:" Then
+        s = Mid$(s, 8)
+    ElseIf Left$(sLower, 8) = "<mailto:" Then
+        closePos = InStr(1, s, ">")
+        If closePos > 0 Then
+            s = Mid$(s, 9, closePos - 9)
+        Else
+            s = Mid$(s, 9)
+        End If
+    End If
+
+    ' URL-Encoding auflösen
+    s = Replace(s, "%20", " ", , , vbTextCompare)
+    s = Replace(s, "%2B", "+", , , vbTextCompare)
+
     p = InStr(1, s, "<")
     If p > 1 Then
         s = Left$(s, p - 1)
@@ -3249,6 +3299,36 @@ Public Sub SmokeTestExtraction()
     totalCount = totalCount + RunSingleSmokeTest("7: SendGrid Bold *Label:* + tel:", body7, _
         "Peggy Kaiser", "+491601234567", "peggy.kaiser@example.de", "Vormittags", _
         "55128", "Helga Kaiser", "2", "", passCount, failCount)
+
+    ' --- Test 8: Mobil-Wert nur als <tel:...> (ohne sichtbaren Text) ---
+    Dim body8 As String
+    body8 = "Kontaktinformationen des Interessenten" & vbLf & _
+            "Name:" & vbLf & _
+            "Irene Schnell" & vbLf & _
+            "Mobil:" & vbLf & _
+            "<tel:+49%2016097008155>" & vbLf & _
+            "E-Mail-Adresse:" & vbLf & _
+            "ireneschnell@web.de" & vbLf & _
+            "Informationen zum Senior" & vbLf & _
+            "Name:" & vbLf & _
+            "Irene Schnell"
+
+    totalCount = totalCount + RunSingleSmokeTest("8: Mobil nur <tel:...>", body8, _
+        "Irene Schnell", "+49 16097008155", "ireneschnell@web.de", "", _
+        "", "Irene Schnell", "", "", passCount, failCount)
+
+    ' --- Test 9: Inline Mobil mit <tel:...> ---
+    Dim body9 As String
+    body9 = "Kontaktinformationen" & vbLf & _
+            "Name: Meggy Kaiser" & vbLf & _
+            "Mobil: <tel:+49%2016097008155>" & vbLf & _
+            "E-Mail-Adresse: m.kaiser@meggy-k-munich.com" & vbLf & _
+            "Informationen zum Senior" & vbLf & _
+            "Name: Helga Kaiser"
+
+    totalCount = totalCount + RunSingleSmokeTest("9: Inline Mobil <tel:...>", body9, _
+        "Meggy Kaiser", "+49 16097008155", "m.kaiser@meggy-k-munich.com", "", _
+        "", "Helga Kaiser", "", "", passCount, failCount)
 
     ' --- Zusammenfassung ---
     Debug.Print ""
