@@ -172,7 +172,7 @@ Public Sub ImportLeadsFromAppleMail()
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
 
-    Debug.Print "[Main] === Version: 2026-02-15-pyfix ==="
+    Debug.Print "[Main] === Version: 2026-02-16-charset-subject ==="
 
     ' --- Eingabeprüfung ---
     If Not ValidateMailSettings() Then Exit Sub
@@ -228,6 +228,11 @@ Public Sub ImportLeadsFromAppleMail()
             Err.Clear
             On Error Resume Next
             processResult = ProcessSingleMessage(tbl, CStr(msgBlock))
+            If Err.Number <> 0 Then
+                Dim errMsg As String
+                errMsg = "Fehler #" & Err.Number & ": " & Err.Description
+                Debug.Print "[Import] " & errMsg & " bei Nachricht " & analyzedCount
+            End If
             On Error GoTo 0
 
             Select Case processResult
@@ -237,6 +242,7 @@ Public Sub ImportLeadsFromAppleMail()
                     duplicateCount = duplicateCount + 1
                 Case Else
                     errorCount = errorCount + 1
+                    Debug.Print "[Import] Nachricht " & analyzedCount & " fehlgeschlagen (processResult=" & processResult & ")"
             End Select
         End If
     Next msgBlock
