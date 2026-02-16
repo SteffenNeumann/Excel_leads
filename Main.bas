@@ -284,7 +284,7 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     SetKV parsed, "MailBody", msgBody
 
     ' Diagnose: alle Felder ausgeben (Debug-Fenster Ctrl+G)
-    DebugDumpFields parsed
+    DebugDumpFields parsed, msgSubject
 
     If LeadAlreadyExists(tbl, parsed, msgDate) Then
         ProcessSingleMessage = 2
@@ -3315,7 +3315,7 @@ End Function
 ' =========================
 ' Diagnose-Tool: Fehlende Felder erkennen
 ' =========================
-Public Sub DebugDumpFields(ByVal fields As Object)
+Public Sub DebugDumpFields(ByVal fields As Object, Optional ByVal subject As String = "")
     ' Zweck: Alle erwarteten Felder ausgeben und fehlende markieren.
     ' Aufruf: Nach ParseLeadContent im Direktfenster (Ctrl+G).
     Dim fieldNames As Variant
@@ -3358,6 +3358,7 @@ Public Sub DebugDumpFields(ByVal fields As Object)
     Debug.Print ""
     Debug.Print "=============================="
     Debug.Print "FELD-DIAGNOSE"
+    If Len(subject) > 0 Then Debug.Print "Betreff: " & subject
     Debug.Print "=============================="
     For i = LBound(fieldNames) To UBound(fieldNames)
         v = GetField(fields, CStr(fieldNames(i)))
