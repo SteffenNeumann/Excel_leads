@@ -282,6 +282,7 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     Set parsed = ParseLeadContent(msgBody)
     SetKV parsed, "From", msgFrom
     SetKV parsed, "MailBody", msgBody
+    SetKV parsed, "MailSubject", msgSubject
 
     ' Diagnose: alle Felder ausgeben (Debug-Fenster Ctrl+G)
     DebugDumpFields parsed, msgSubject
@@ -2920,9 +2921,14 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     If infoIdx > 0 Then
         Dim infoCell As Range
         Dim infoBody As String
+        Dim infoSubject As String
         infoBody = GetField(fields, "MailBody")
         infoBody = Replace(infoBody, vbCrLf, vbLf)
         infoBody = Replace(infoBody, vbCr, vbLf)
+        infoSubject = GetField(fields, "MailSubject")
+        If Len(infoSubject) > 0 Then
+            infoBody = "Betreff: " & infoSubject & vbLf & vbLf & infoBody
+        End If
         SetCellByHeaderMap newRow, headerMap, "Info", infoBody
         Set infoCell = GetCellByHeaderMap(newRow, headerMap, "Info")
         If Not infoCell Is Nothing Then infoCell.WrapText = True
