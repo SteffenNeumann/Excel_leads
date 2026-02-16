@@ -2433,6 +2433,14 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
         lineText = Replace(lineText, "*", "")
         lineText = Trim$(lineText)
         If Len(lineText) > 0 Then
+            ' pendingKey hat Vorrang: wenn ein Label wartet, ist naechste Zeile der Wert
+            If Len(pendingKey) > 0 Then
+                Debug.Print "[ParseLead] MapLabel: '" & pendingKey & "' -> '" & Left$(lineText, 60) & "' [" & currentSection & "] (Zeile " & i & ")"
+                MapLabelValue result, pendingKey, lineText, currentSection
+                pendingKey = vbNullString
+                GoTo NextLineLabel
+            End If
+
             ' Rausch-Zeilen ueberspringen (E-Mail-Header, URLs, Footer)
             If IsNoiseLine(lineText) Then
                 Debug.Print "[ParseLead] Noise uebersprungen (Zeile " & i & "): '" & Left$(lineText, 60) & "'"
@@ -2468,10 +2476,6 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                         Debug.Print "[ParseLead] PendingKey: '" & pendingKey & "' (Zeile " & i & ")"
                     End If
                 End If
-            ElseIf Len(pendingKey) > 0 Then
-                Debug.Print "[ParseLead] MapLabel: '" & pendingKey & "' -> '" & Left$(lineText, 60) & "' [" & currentSection & "] (Zeile " & i & ")"
-                MapLabelValue result, pendingKey, lineText, currentSection
-                pendingKey = vbNullString
             ElseIf InStr(lineText, ":") > 0 Then
                 ' tel:NUMBER Pattern in Kontakt-Sektion extrahieren
                 Dim telPosInline As Long
@@ -2839,16 +2843,32 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     SetCellByHeaderMap newRow, headerMap, "PG", pgVal
     SetCellByHeaderMap newRow, headerMap, "Notizen", notesVal
 
-    ' Info-Spalte: Body mit Zeilenumbrüchen in die Zelle schreiben
-    Dim infoCell As Range
-    Dim infoBody As String
-    infoBody = GetField(fields, "MailBody")
-    ' Zeilenenden auf Chr(10) normalisieren (Excel-Zell-Zeilenumbruch)
-    infoBody = Replace(infoBody, vbCrLf, vbLf)
-    infoBody = Replace(infoBody, vbCr, vbLf)
-    SetCellByHeaderMap newRow, headerMap, "Info", infoBody
-    Set infoCell = GetCellByHeaderMap(newRow, headerMap, "Info")
-    If Not infoCell Is Nothing Then infoCell.WrapText = True
+    ' Adresse / Ort / ID in passende Spalten schreiben
+    Dim anschriftVal As String
+    anschriftVal = GetField(fields, "Kontakt_Anschrift")
+    If Len(anschriftVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Adresse", anschriftVal
+
+    Dim ortVal As String
+    ortVal = GetField(fields, "Bedarfsort_Ort")
+    If Len(ortVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Ort", ortVal
+
+    Dim idVal As String
+    idVal = GetField(fields, "Anfrage_ID")
+    If Len(idVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "ID", idVal
+
+    ' Info-Spalte: Body mit Zeilenumbruechen in die Zelle schreiben (nur wenn Spalte existiert)
+    Dim infoIdx As Long
+    infoIdx = GetHeaderIndex(headerMap, "Info")
+    If infoIdx > 0 Then
+        Dim infoCell As Range
+        Dim infoBody As String
+        infoBody = GetField(fields, "MailBody")
+        infoBody = Replace(infoBody, vbCrLf, vbLf)
+        infoBody = Replace(infoBody, vbCr, vbLf)
+        SetCellByHeaderMap newRow, headerMap, "Info", infoBody
+        Set infoCell = GetCellByHeaderMap(newRow, headerMap, "Info")
+        If Not infoCell Is Nothing Then infoCell.WrapText = True
+    End If
 End Sub
 
 Private Function FindTableByName(ByVal tableName As String) As ListObject
