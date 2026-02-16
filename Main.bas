@@ -2640,7 +2640,11 @@ Private Function IsNoiseLine(ByVal lineText As String) As Boolean
        Or Left$(lt, 24) = "sitz der gesellschaft:" _
        Or InStr(1, lt, "umsatzsteuer-identifikationsnummer", vbTextCompare) > 0 _
        Or InStr(1, lt, "geschäftsführer:", vbTextCompare) > 0 _
-       Or InStr(1, lt, "gesch" & ChrW$(228) & "ftsf" & ChrW$(252) & "hrer:", vbTextCompare) > 0 Then
+       Or InStr(1, lt, "gesch" & ChrW$(228) & "ftsf" & ChrW$(252) & "hrer:", vbTextCompare) > 0 _
+       Or InStr(1, lt, "anfragen-manager", vbTextCompare) > 0 _
+       Or InStr(1, lt, "anfrage reklamieren", vbTextCompare) > 0 _
+       Or InStr(1, lt, "datenschutz<", vbTextCompare) > 0 _
+       Or InStr(1, lt, "partnerbetreuung@", vbTextCompare) > 0 Then
         IsNoiseLine = True
         Exit Function
     End If
@@ -2648,6 +2652,37 @@ Private Function IsNoiseLine(ByVal lineText As String) As Boolean
     ' Zustimmungs-/Datenschutz-Zeilen
     If InStr(1, lt, "zustimmung zur datenschutz", vbTextCompare) > 0 _
        Or InStr(1, lt, "zustimmung zur kontaktweitergabe", vbTextCompare) > 0 Then
+        IsNoiseLine = True
+        Exit Function
+    End If
+
+    ' Inline-Zeilen die nur Zeitstempel enthalten (DD.MM.YYYY HH:MM)
+    ' z.B. "21.01.2026 10:04 Uhr" -> kein nützliches Feld
+    If Len(lt) <= 25 And InStr(lt, ".") > 0 And InStr(lt, "uhr") > 0 Then
+        IsNoiseLine = True
+        Exit Function
+    End If
+
+    ' Zeilen mit <tel:...> oder <mailto:...> Pattern im Footer (nicht in Kontakt-Sektion)
+    ' Diese enthalten Pflegehilfe-Hotline-Nummern etc.
+    If Left$(lt, 1) >= "0" And Left$(lt, 1) <= "9" And InStr(lt, "<tel:") > 0 Then
+        IsNoiseLine = True
+        Exit Function
+    End If
+
+    ' E-Mail-Adressen mit <mailto:> Pattern (Footer-Kontaktadressen)
+    If InStr(lt, "@") > 0 And InStr(lt, "<mailto:") > 0 Then
+        ' Nur als Noise werten wenn NICHT ein bekanntes Label davor steht
+        If InStr(1, lt, "e-mail", vbTextCompare) = 0 _
+           And InStr(1, lt, "email", vbTextCompare) = 0 _
+           And InStr(1, lt, "mail-adresse", vbTextCompare) = 0 Then
+            IsNoiseLine = True
+            Exit Function
+        End If
+    End If
+
+    ' Inline-URLs mit <https://...> oder <http://...> Pattern
+    If InStr(lt, "<https://") > 0 Or InStr(lt, "<http://") > 0 Then
         IsNoiseLine = True
         Exit Function
     End If
@@ -2771,17 +2806,38 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     Dim headerMap As Object
     Set headerMap = BuildHeaderIndex(tbl)
 
+    ' Debug: Alle Tabellen-Header auflisten
+    Debug.Print "[AddLeadRow] Tabelle '" & tbl.Name & "' hat " & tbl.ListColumns.Count & " Spalten:"
+    Dim hdrIdx As Long
+    For hdrIdx = 1 To tbl.ListColumns.Count
+        Debug.Print "  Spalte " & hdrIdx & ": '" & tbl.ListColumns(hdrIdx).Name & "'"
+    Next hdrIdx
+
+    Dim nameVal As String
+    Dim phoneVal As String
+    Dim plzVal As String
+    Dim pgVal As String
+    Dim notesVal As String
+
+    nameVal = ResolveKontaktName(fields)
+    phoneVal = CleanPhoneNumber(GetField(fields, "Kontakt_Mobil"))
+    plzVal = CleanPostalCode(GetField(fields, "PLZ"))
+    pgVal = NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
+    notesVal = BuildNotes(fields)
+
+    Debug.Print "[AddLeadRow] Werte -> Name='" & nameVal & "' Tel='" & phoneVal & "' PLZ='" & plzVal & "' PG='" & pgVal & "'"
+
     SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
     Set monthCell = GetCellByHeaderMap(newRow, headerMap, "Monat Lead erhalten")
     SetImportNote monthCell
     SetCellByHeaderMap newRow, headerMap, "Lead-Quelle", ResolveLeadSource(fields)
     SetCellByHeaderMap newRow, headerMap, "Leadtyp", leadType
     SetCellByHeaderMap newRow, headerMap, "Status", "Lead erhalten"
-    SetCellByHeaderMap newRow, headerMap, "Name", ResolveKontaktName(fields)
-    SetCellByHeaderMap newRow, headerMap, "Telefonnummer", CleanPhoneNumber(GetField(fields, "Kontakt_Mobil"))
-    SetCellByHeaderMap newRow, headerMap, "PLZ", CleanPostalCode(GetField(fields, "PLZ"))
-    SetCellByHeaderMap newRow, headerMap, "PG", NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
-    SetCellByHeaderMap newRow, headerMap, "Notizen", BuildNotes(fields)
+    SetCellByHeaderMap newRow, headerMap, "Name", nameVal
+    SetCellByHeaderMap newRow, headerMap, "Telefonnummer", phoneVal
+    SetCellByHeaderMap newRow, headerMap, "PLZ", plzVal
+    SetCellByHeaderMap newRow, headerMap, "PG", pgVal
+    SetCellByHeaderMap newRow, headerMap, "Notizen", notesVal
 
     ' Info-Spalte: Body mit Zeilenumbrüchen in die Zelle schreiben
     Dim infoCell As Range
@@ -2855,7 +2911,11 @@ Private Sub SetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Obje
     ' Rückgabe: keine (schreibt in Zeile).
     Dim idx As Long
     idx = GetHeaderIndex(headerMap, headerName)
-    If idx > 0 Then rowItem.Range.Cells(1, idx).Value = valueToSet
+    If idx > 0 Then
+        rowItem.Range.Cells(1, idx).Value = valueToSet
+    Else
+        Debug.Print "[SetCell] WARNUNG: Spalte '" & headerName & "' nicht in Tabelle gefunden! Wert='" & Left$(CStr(valueToSet), 40) & "'"
+    End If
 End Sub
 
 Private Function BuildHeaderIndex(ByVal tbl As ListObject) As Object
