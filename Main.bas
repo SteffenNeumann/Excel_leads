@@ -283,6 +283,9 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     SetKV parsed, "From", msgFrom
     SetKV parsed, "MailBody", msgBody
 
+    ' Diagnose: alle Felder ausgeben (Debug-Fenster Ctrl+G)
+    DebugDumpFields parsed
+
     If LeadAlreadyExists(tbl, parsed, msgDate) Then
         ProcessSingleMessage = 2
     Else
@@ -2411,7 +2414,12 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                 currentSection = "Kontakt"
                 pendingKey = vbNullString
                 Debug.Print "[ParseLead] Sektion: Kontakt (Zeile " & i & ")"
-            ElseIf InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 Then
+            ElseIf InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 _
+                Or InStr(1, lineText, "Senior-Informationen", vbTextCompare) > 0 _
+                Or InStr(1, lineText, "Angaben zum Senior", vbTextCompare) > 0 _
+                Or InStr(1, lineText, "Zur betreuten Person", vbTextCompare) > 0 _
+                Or InStr(1, lineText, "Betreute Person", vbTextCompare) > 0 _
+                Or InStr(1, lineText, "Pflegebed" & ChrW$(252) & "rftige", vbTextCompare) > 0 Then
                 currentSection = "Senior"
                 pendingKey = vbNullString
                 Debug.Print "[ParseLead] Sektion: Senior (Zeile " & i & ")"
@@ -2507,16 +2515,16 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "vorname": SetKV fields, "Kontakt_Vorname", valueNorm
         Case "nachname": SetKV fields, "Kontakt_Nachname", valueNorm
         Case "vor- und nachname", "vor und nachname": SetKV fields, "Kontakt_Name", valueNorm
-        Case "name"
+        Case "name", "vollst" & ChrW$(228) & "ndiger name", "kontaktperson", "ihr name"
             If LCase$(sectionName) = "senior" Then
                 SetKV fields, "Senior_Name", valueNorm
             Else
                 SetKV fields, "Kontakt_Name", valueNorm
             End If
-        Case "mobil", "telefonnummer", "festnetz": SetKV fields, "Kontakt_Mobil", CleanLinkedValue(valueNorm)
-        Case "e-mail", "e-mail-adresse": SetKV fields, "Kontakt_Email", CleanLinkedValue(valueNorm)
+        Case "mobil", "telefonnummer", "festnetz", "telefon", "handynummer", "mobilnummer", "handy", "mobiltelefon", "telefon/mobil", "tel", "tel.": SetKV fields, "Kontakt_Mobil", CleanLinkedValue(valueNorm)
+        Case "e-mail", "e-mail-adresse", "email", "emailadresse", "email-adresse", "mail", "e-mailadresse": SetKV fields, "Kontakt_Email", CleanLinkedValue(valueNorm)
         Case "erreichbarkeit": SetKV fields, "Kontakt_Erreichbarkeit", valueNorm
-        Case "anschrift": SetKV fields, "Kontakt_Anschrift", valueNorm
+        Case "anschrift", "stra" & ChrW$(223) & "e", "strasse", "adresse": SetKV fields, "Kontakt_Anschrift", valueNorm
         Case "beziehung": SetKV fields, "Senior_Beziehung", valueNorm
         Case "alter": SetKV fields, "Senior_Alter", valueNorm
         Case "pflegegrad status": SetKV fields, "Senior_Pflegegrad_Status", valueNorm
@@ -2526,7 +2534,7 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "medizinisches": SetKV fields, "Senior_Medizinisches", valueNorm
         Case "behinderung": SetKV fields, "Senior_Behinderung", valueNorm
         Case "postleitzahl", "plz": SetKV fields, "PLZ", CleanPostalCode(valueNorm)
-        Case "bedarfsort": SetBedarfsort fields, valueNorm
+        Case "bedarfsort", "ort", "stadt", "wohnort": SetBedarfsort fields, valueNorm
         Case "nutzer": SetKV fields, "Nutzer", valueNorm
         Case "alltagshilfe aufgaben": SetKV fields, "Alltagshilfe_Aufgaben", valueNorm
         Case "alltagshilfe häufigkeit": SetKV fields, "Alltagshilfe_Haeufigkeit", valueNorm
@@ -2549,6 +2557,9 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "id", "d": SetKV fields, "Anfrage_ID", valueNorm
         Case "budgetrahmen": SetKV fields, "Budgetrahmen", valueNorm
         Case "geschlecht der betreuungskraft": SetKV fields, "Geschlecht_Betreuungskraft", valueNorm
+        Case Else
+            ' Nicht erkanntes Label loggen fuer Debugging
+            Debug.Print "[MapLabel] UNBEKANNT: '" & keyNorm & "' -> '" & Left$(valueNorm, 60) & "' [" & sectionName & "]"
     End Select
 End Sub
 
@@ -3130,6 +3141,77 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
         End If
     Next i
 End Function
+
+' =========================
+' Diagnose-Tool: Fehlende Felder erkennen
+' =========================
+Public Sub DebugDumpFields(ByVal fields As Object)
+    ' Zweck: Alle erwarteten Felder ausgeben und fehlende markieren.
+    ' Aufruf: Nach ParseLeadContent im Direktfenster (Ctrl+G).
+    Dim fieldNames As Variant
+    Dim fieldLabels As Variant
+    Dim i As Long
+    Dim v As String
+    Dim missingCount As Long
+
+    fieldNames = Array("Kontakt_Anrede", "Kontakt_Vorname", "Kontakt_Nachname", _
+                       "Kontakt_Name", "Kontakt_Mobil", "Kontakt_Email", _
+                       "Kontakt_Erreichbarkeit", "Kontakt_Anschrift", _
+                       "Senior_Name", "Senior_Beziehung", "Senior_Alter", _
+                       "Senior_Pflegegrad", "Senior_Pflegegrad_Status", _
+                       "Senior_Lebenssituation", "Senior_Mobilitaet", _
+                       "Senior_Medizinisches", "Senior_Behinderung", _
+                       "PLZ", "Bedarfsort_Ort", "Nutzer", _
+                       "Aufgaben", "Alltagshilfe_Aufgaben", "Alltagshilfe_Haeufigkeit", _
+                       "Woechentlicher_Umfang", "Umfang_am_Stueck", _
+                       "Abrechnung_Betreuungsleistungen", "Pflegedienst_Vorhanden", _
+                       "Anfragedetails", "Weitere_Details", "Bedarf", _
+                       "Anfrage_ID", "Budgetrahmen", "Geschlecht_Betreuungskraft", _
+                       "From", "MailBody")
+
+    fieldLabels = Array("Anrede", "Vorname", "Nachname", _
+                        "Kontakt-Name", "Mobil/Telefon", "E-Mail", _
+                        "Erreichbarkeit", "Anschrift", _
+                        "Senior Name", "Beziehung", "Alter", _
+                        "Pflegegrad", "PG Status", _
+                        "Lebenssituation", "Mobilit" & ChrW$(228) & "t", _
+                        "Medizinisches", "Behinderung", _
+                        "PLZ", "Bedarfsort Ort", "Nutzer", _
+                        "Aufgaben", "Alltagshilfe Aufgaben", "Alltagshilfe H" & ChrW$(228) & "ufigkeit", _
+                        "W" & ChrW$(246) & "chentl. Umfang", "Umfang am St" & ChrW$(252) & "ck", _
+                        "Abrechnung Betreuung", "Pflegedienst", _
+                        "Anfragedetails", "Weitere Details", "Bedarf", _
+                        "Anfrage-ID", "Budgetrahmen", "Geschlecht BK", _
+                        "Absender (From)", "Mail-Body")
+
+    missingCount = 0
+    Debug.Print ""
+    Debug.Print "=============================="
+    Debug.Print "FELD-DIAGNOSE"
+    Debug.Print "=============================="
+    For i = LBound(fieldNames) To UBound(fieldNames)
+        v = GetField(fields, CStr(fieldNames(i)))
+        If Len(Trim$(v)) > 0 Then
+            Debug.Print "  OK   : " & CStr(fieldLabels(i)) & " = """ & Left$(v, 80) & """"
+        Else
+            Debug.Print "  LEER : " & CStr(fieldLabels(i)) & " (" & CStr(fieldNames(i)) & ")"
+            ' Nur Kernfelder als fehlend zaehlen (Name, Telefon, E-Mail)
+            Select Case CStr(fieldNames(i))
+                Case "Kontakt_Name", "Kontakt_Vorname", "Kontakt_Mobil", "Kontakt_Email"
+                    missingCount = missingCount + 1
+            End Select
+        End If
+    Next i
+    Debug.Print "------------------------------"
+    If missingCount > 0 Then
+        Debug.Print "WARNUNG: " & missingCount & " Kern-Kontaktfelder fehlen!"
+        Debug.Print "Tipp: Body-Text im Direktfenster pruefen (MailBody-Feld oben)"
+    Else
+        Debug.Print "Alle Kern-Kontaktfelder vorhanden."
+    End If
+    Debug.Print "=============================="
+    Debug.Print ""
+End Sub
 
 ' =========================
 ' Smoke Test
