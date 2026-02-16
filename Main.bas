@@ -172,7 +172,7 @@ Public Sub ImportLeadsFromAppleMail()
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
 
-    Debug.Print "[Main] === Version: 2026-02-16-charset-subject ==="
+    Debug.Print "[Main] === Version: 2026-02-16-section-umlaut-fix ==="
 
     ' --- Eingabeprüfung ---
     If Not ValidateMailSettings() Then Exit Sub
@@ -2403,7 +2403,7 @@ Private Function GermanMonthToNumber(ByVal monthText As String) As Long
     Select Case m
         Case "januar": GermanMonthToNumber = 1
         Case "februar": GermanMonthToNumber = 2
-        Case "märz", "maerz": GermanMonthToNumber = 3
+        Case "m" & ChrW$(228) & "rz", "maerz": GermanMonthToNumber = 3
         Case "april": GermanMonthToNumber = 4
         Case "mai": GermanMonthToNumber = 5
         Case "juni": GermanMonthToNumber = 6
@@ -2506,16 +2506,12 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                 GoTo NextLineLabel
             End If
 
-            ' Rausch-Zeilen ueberspringen (E-Mail-Header, URLs, Footer)
-            If IsNoiseLine(lineText) Then
-                Debug.Print "[ParseLead] Noise uebersprungen (Zeile " & i & "): '" & Left$(lineText, 60) & "'"
-                GoTo NextLineLabel
-            End If
-
+            ' Sektionserkennung VOR Noise-Check (Sektionsheader koennen URLs enthalten)
             If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
                 currentSection = "Kontakt"
                 pendingKey = vbNullString
                 Debug.Print "[ParseLead] Sektion: Kontakt (Zeile " & i & ")"
+                GoTo NextLineLabel
             ElseIf InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 _
                 Or InStr(1, lineText, "Senior-Informationen", vbTextCompare) > 0 _
                 Or InStr(1, lineText, "Angaben zum Senior", vbTextCompare) > 0 _
@@ -2525,7 +2521,28 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
                 currentSection = "Senior"
                 pendingKey = vbNullString
                 Debug.Print "[ParseLead] Sektion: Senior (Zeile " & i & ")"
-            ElseIf Right$(lineText, 1) = ":" And Len(lineText) > 1 Then
+                GoTo NextLineLabel
+            ElseIf InStr(1, lineText, "Anfragedetails", vbTextCompare) > 0 Then
+                currentSection = "Anfrage"
+                pendingKey = vbNullString
+                Debug.Print "[ParseLead] Sektion: Anfrage (Zeile " & i & ")"
+                GoTo NextLineLabel
+            ElseIf InStr(1, lineText, "Datenschutz", vbTextCompare) > 0 _
+                And InStr(1, lineText, "zustimmung", vbTextCompare) = 0 Then
+                currentSection = "Footer"
+                pendingKey = vbNullString
+                Debug.Print "[ParseLead] Sektion: Footer (Zeile " & i & ") -> Parsing beendet"
+                Exit For
+            End If
+
+            ' Rausch-Zeilen ueberspringen (E-Mail-Header, URLs, Footer)
+            If IsNoiseLine(lineText) Then
+                Debug.Print "[ParseLead] Noise uebersprungen (Zeile " & i & "): '" & Left$(lineText, 60) & "'"
+                GoTo NextLineLabel
+            End If
+
+            ' Label/Wert-Erkennung
+            If Right$(lineText, 1) = ":" And Len(lineText) > 1 Then
                 Dim candidateKey As String
                 candidateKey = Trim$(Left$(lineText, Len(lineText) - 1))
                 ' Wenn der "Key" wie eine Telefonnummer aussieht, direkt als Mobil speichern
@@ -2629,18 +2646,18 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "pflegegrad status": SetKV fields, "Senior_Pflegegrad_Status", valueNorm
         Case "pflegegrad", "pflegegrad/-stufe": SetKV fields, "Senior_Pflegegrad", valueNorm
         Case "lebenssituation": SetKV fields, "Senior_Lebenssituation", valueNorm
-        Case "mobilität": SetKV fields, "Senior_Mobilitaet", valueNorm
+        Case "mobilit" & ChrW$(228) & "t": SetKV fields, "Senior_Mobilitaet", valueNorm
         Case "medizinisches": SetKV fields, "Senior_Medizinisches", valueNorm
         Case "behinderung": SetKV fields, "Senior_Behinderung", valueNorm
         Case "postleitzahl", "plz": SetKV fields, "PLZ", CleanPostalCode(valueNorm)
         Case "bedarfsort", "ort", "stadt", "wohnort": SetBedarfsort fields, valueNorm
         Case "nutzer": SetKV fields, "Nutzer", valueNorm
         Case "alltagshilfe aufgaben": SetKV fields, "Alltagshilfe_Aufgaben", valueNorm
-        Case "alltagshilfe häufigkeit": SetKV fields, "Alltagshilfe_Haeufigkeit", valueNorm
+        Case "alltagshilfe h" & ChrW$(228) & "ufigkeit": SetKV fields, "Alltagshilfe_Haeufigkeit", valueNorm
         Case "aufgaben": SetKV fields, "Aufgaben", valueNorm
-        Case "wöchentlicher umfang": SetKV fields, "Woechentlicher_Umfang", valueNorm
-        Case "umfang am stück", "umfang am stueck": SetKV fields, "Umfang_am_Stueck", valueNorm
-        Case "abrechnung über bet.- & entlastungsleistungen", "abrechnung ueber bet.- & entlastungsleistungen": SetKV fields, "Abrechnung_Betreuungsleistungen", valueNorm
+        Case "w" & ChrW$(246) & "chentlicher umfang": SetKV fields, "Woechentlicher_Umfang", valueNorm
+        Case "umfang am st" & ChrW$(252) & "ck", "umfang am stueck": SetKV fields, "Umfang_am_Stueck", valueNorm
+        Case "abrechnung " & ChrW$(252) & "ber bet.- & entlastungsleistungen", "abrechnung ueber bet.- & entlastungsleistungen": SetKV fields, "Abrechnung_Betreuungsleistungen", valueNorm
         Case "pflegedienst vorhanden": SetKV fields, "Pflegedienst_Vorhanden", valueNorm
         Case "anfragedetails": SetKV fields, "Anfragedetails", valueNorm
         Case "anfragen-nr", "anfragen-nr.", "anfragen nr": SetKV fields, "Anfrage_ID", valueNorm
@@ -2893,6 +2910,13 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     plzVal = CleanPostalCode(GetField(fields, "PLZ"))
     pgVal = NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
     notesVal = BuildNotes(fields)
+
+    ' Betreff als erste Zeile in Notizen einfuegen (fuer Zuordnung bei fehlerhaftem Parsing)
+    Dim subjectVal As String
+    subjectVal = GetField(fields, "MailSubject")
+    If Len(subjectVal) > 0 Then
+        notesVal = "Betreff: " & subjectVal & vbLf & notesVal
+    End If
 
     Debug.Print "[AddLeadRow] Werte -> Name='" & nameVal & "' Tel='" & phoneVal & "' PLZ='" & plzVal & "' PG='" & pgVal & "'"
 
