@@ -28,6 +28,7 @@ Private Const DATE_TAG As String = "DATE:"
 Private Const SUBJECT_TAG As String = "SUBJECT:"
 Private Const FROM_TAG As String = "FROM:"
 Private Const BODY_TAG As String = "BODY:"
+Private Const FILENAME_TAG As String = "FILENAME:"
 
 Private Const MAX_MESSAGES As Long = 50
 
@@ -306,6 +307,14 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     SetKV parsed, "MailBody", msgBody
     SetKV parsed, "MailSubject", msgSubject
 
+    ' Dateiname fuer Zuordnung durchreichen
+    Dim msgFileName As String
+    If TryGetKV(payload, "FileName", v) Then msgFileName = CStr(v)
+    If Len(msgFileName) > 0 Then
+        SetKV parsed, "MailFileName", msgFileName
+        Debug.Print "[ProcessMsg] MailFileName='" & msgFileName & "'"
+    End If
+
     ' Diagnose: alle Felder ausgeben (Debug-Fenster Ctrl+G)
     DebugDumpFields parsed, msgSubject
 
@@ -406,6 +415,7 @@ Private Function FolderExists(ByVal folderPath As String) As Boolean
 End Function
 
 Private Function ReadTextFile(ByVal filePath As String) As String
+    ' Zweck: Datei als String lesen. Fallback via AppleScript bei Umlaut-Dateinamen (macOS).
     Dim f As Integer
     Dim txt As String
     Dim bytes As Long
@@ -414,9 +424,12 @@ Private Function ReadTextFile(ByVal filePath As String) As String
     On Error Resume Next
     Open filePath For Binary Access Read As #f
     If Err.Number <> 0 Then
+        Debug.Print "[ReadTextFile] Open fehlgeschlagen: " & Err.Description & " -> Pfad: " & filePath
         Err.Clear
-        ReadTextFile = vbNullString
         On Error GoTo 0
+        ' Fallback: via AppleScript Shell kopieren
+        txt = ReadTextFileViaShell(filePath)
+        ReadTextFile = txt
         Exit Function
     End If
 
@@ -427,7 +440,79 @@ Private Function ReadTextFile(ByVal filePath As String) As String
     End If
     Close #f
     On Error GoTo 0
+
+    ' Fallback wenn 0 Bytes obwohl Datei existiert (Umlaut-Problem auf macOS)
+    If Len(txt) = 0 Then
+        Debug.Print "[ReadTextFile] 0 Bytes via Binary -> Fallback Shell-Read fuer: " & filePath
+        txt = ReadTextFileViaShell(filePath)
+    End If
+
     ReadTextFile = txt
+End Function
+
+Private Function ReadTextFileViaShell(ByVal filePath As String) As String
+    ' Zweck: Datei via AppleScript/Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
+    ' VBA Open For Binary kann auf macOS keine Dateinamen mit oe, ae, ue etc. oeffnen.
+    ' Strategie: cp via Shell in Temp-Pfad, dann Binary-Read vom Temp-Pfad.
+    Dim tmpPath As String
+    Dim script As String
+    Dim result As String
+    Dim f As Integer
+    Dim txt As String
+    Dim bytes As Long
+
+    tmpPath = "/tmp/_eml_import_temp.eml"
+
+    ' AppleScript: Datei per Shell-Copy in Temp-Pfad ohne Sonderzeichen kopieren
+    script = "do shell script ""cp "" & quoted form of " & Chr(34) & filePath & Chr(34) & " & "" "" & quoted form of " & Chr(34) & tmpPath & Chr(34)
+
+    Debug.Print "[ReadTextFile] Shell-Copy Script: " & Left$(script, 120)
+
+    On Error Resume Next
+    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    If Err.Number <> 0 Then
+        Debug.Print "[ReadTextFile] AppleScriptTask fehlgeschlagen: " & Err.Description
+        Err.Clear
+        On Error GoTo 0
+        ReadTextFileViaShell = vbNullString
+        Exit Function
+    End If
+    On Error GoTo 0
+
+    ' Pruefen ob Ergebnis ein Fehler ist
+    If Left$(result, 6) = "ERROR:" Then
+        Debug.Print "[ReadTextFile] Shell-Copy Fehler: " & result
+        ReadTextFileViaShell = vbNullString
+        Exit Function
+    End If
+
+    ' Temp-Datei normal lesen (Pfad ohne Sonderzeichen)
+    f = FreeFile
+    On Error Resume Next
+    Open tmpPath For Binary Access Read As #f
+    If Err.Number <> 0 Then
+        Debug.Print "[ReadTextFile] Temp-Datei Open fehlgeschlagen: " & Err.Description
+        Err.Clear
+        On Error GoTo 0
+        ReadTextFileViaShell = vbNullString
+        Exit Function
+    End If
+    bytes = LOF(f)
+    If bytes > 0 Then
+        txt = String$(bytes, vbNullChar)
+        Get #f, , txt
+    End If
+    Close #f
+    On Error GoTo 0
+
+    Debug.Print "[ReadTextFile] Shell-Read erfolgreich: " & bytes & " Bytes"
+
+    ' Temp-Datei aufraeumen
+    On Error Resume Next
+    Kill tmpPath
+    On Error GoTo 0
+
+    ReadTextFileViaShell = txt
 End Function
 
 Private Function NormalizeLineEndings(ByVal textIn As String) As String
@@ -1552,7 +1637,10 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
         outText = outText & DATE_TAG & dateText & vbLf
         outText = outText & SUBJECT_TAG & subj & vbLf
         outText = outText & FROM_TAG & sender & vbLf
+        outText = outText & FILENAME_TAG & fileName & vbLf
         outText = outText & BODY_TAG & bodyText & vbLf
+
+        Debug.Print "[EML-Import] MSG-Block erstellt: Subject='" & Left$(subj, 60) & "' FileName='" & fileName & "'"
 
         count = count + 1
         If count >= MAX_MESSAGES Then Exit Do
@@ -2478,6 +2566,9 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
                 ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
                     Debug.Print "[ParseMsg] FROM gefunden: '" & Left$(Trim$(Mid$(lineText, Len(FROM_TAG) + 1)), 80) & "'"
                     SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
+                ElseIf Left$(lineText, Len(FILENAME_TAG)) = FILENAME_TAG Then
+                    Debug.Print "[ParseMsg] FILENAME gefunden: '" & Left$(Trim$(Mid$(lineText, Len(FILENAME_TAG) + 1)), 80) & "'"
+                    SetKV payload, "FileName", Trim$(Mid$(lineText, Len(FILENAME_TAG) + 1))
                 ElseIf Left$(lineText, 9) = "SRCSTRAT:" Then
                     Debug.Print "[AppleScript] " & lineText
                 ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
@@ -3097,10 +3188,16 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     pgVal = NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
     notesVal = BuildNotes(fields)
 
-    ' Betreff als erste Zeile in Notizen einfuegen (fuer Zuordnung bei fehlerhaftem Parsing)
+    ' Dateiname + Betreff als erste Zeilen in Notizen einfuegen (fuer Zuordnung)
+    Dim fileNameVal As String
+    fileNameVal = GetField(fields, "MailFileName")
     Dim subjectVal As String
     subjectVal = GetField(fields, "MailSubject")
     Debug.Print "[AddLeadRow] MailSubject='" & Left$(subjectVal, 80) & "'"
+    Debug.Print "[AddLeadRow] MailFileName='" & Left$(fileNameVal, 80) & "'"
+    If Len(fileNameVal) > 0 Then
+        notesVal = "Datei: " & fileNameVal & vbLf & notesVal
+    End If
     If Len(subjectVal) > 0 Then
         notesVal = "Betreff: " & subjectVal & vbLf & notesVal
     End If
