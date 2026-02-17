@@ -217,6 +217,7 @@ Public Sub ImportLeadsFromAppleMail()
     Application.StatusBar = "Nachrichten analysieren... 0/" & totalBlocks
 
     Dim processResult As Long
+    Dim errMsg As String
 
     For Each msgBlock In messages
         ' Schleife: jeden Nachrichtenblock einzeln verarbeiten.
@@ -230,7 +231,6 @@ Public Sub ImportLeadsFromAppleMail()
             On Error Resume Next
             processResult = ProcessSingleMessage(tbl, CStr(msgBlock))
             If Err.Number <> 0 Then
-                Dim errMsg As String
                 errMsg = "Fehler #" & Err.Number & ": " & Err.Description
                 Debug.Print "[Import] " & errMsg & " bei Nachricht " & analyzedCount
             End If
@@ -375,14 +375,17 @@ Private Function IsOutlookMailbox(ByVal mailboxName As String) As Boolean
 End Function
 
 Private Function GetLeadMailbox() As String
+    ' Zweck: Mailbox-Name aus Einstellungen lesen.
     GetLeadMailbox = GetSettingValue(NAME_LEAD_MAILBOX, LEAD_MAILBOX_DEFAULT)
 End Function
 
 Private Function GetLeadFolder() As String
+    ' Zweck: Ordnername aus Einstellungen lesen.
     GetLeadFolder = GetSettingValue(NAME_LEAD_FOLDER, LEAD_FOLDER_DEFAULT)
 End Function
 
 Private Function GetMailPath() As String
+    ' Zweck: Dateipfad fuer EML-Import aus Einstellungen lesen.
     GetMailPath = CleanPathValue(GetSettingValue(NAME_MAILPATH, vbNullString))
 End Function
 
@@ -410,6 +413,7 @@ Private Function CleanPathValue(ByVal rawValue As String) As String
 End Function
 
 Private Function FolderExists(ByVal folderPath As String) As Boolean
+    ' Zweck: Pruefen ob ein Ordner existiert. Rueckgabe: True/False.
     If Len(Trim$(folderPath)) = 0 Then Exit Function
     FolderExists = (Len(Dir$(folderPath, vbDirectory)) > 0)
 End Function
@@ -585,6 +589,7 @@ Private Function DecodeMimeHeaderValue(ByVal headerValue As String) As String
     ' Zweck: MIME Encoded-Word dekodieren (RFC 2047).
     ' Formate: =?charset?Q?encoded_text?= und =?charset?B?encoded_text?=
     ' Beispiel: =?Windows-1252?Q?WG:_Neue_Anfrage:_H=F6rath?= -> WG: Neue Anfrage: Hörath
+    ' Rueckgabe: Dekodierter Header-Text.
     Dim result As String
     Dim pos As Long
     Dim startTag As Long
@@ -595,6 +600,11 @@ Private Function DecodeMimeHeaderValue(ByVal headerValue As String) As String
     Dim encoding As String
     Dim encodedText As String
     Dim decoded As String
+    Dim outText As String
+    Dim q1 As Long
+    Dim q2 As Long
+    Dim peek As Long
+    Dim pCh As String
 
     result = headerValue
     If InStr(1, result, "=?") = 0 Then
@@ -604,7 +614,6 @@ Private Function DecodeMimeHeaderValue(ByVal headerValue As String) As String
 
     ' Iterativ alle =?...?= Bloecke ersetzen
     pos = 1
-    Dim outText As String
     outText = vbNullString
 
     Do
@@ -627,9 +636,8 @@ Private Function DecodeMimeHeaderValue(ByVal headerValue As String) As String
 
         encodedWord = Mid$(result, startTag + 2, endTag - startTag - 2)
         ' encodedWord hat Format: charset?encoding?encoded_text
-        Dim q1 As Long, q2 As Long
         q1 = InStr(1, encodedWord, "?")
-        If q1 > 0 Then q2 = InStr(q1 + 1, encodedWord, "?")
+        If q1 > 0 Then q2 = InStr(q1 + 1, encodedWord, "?") Else q2 = 0
 
         If q1 > 0 And q2 > 0 Then
             charset = Left$(encodedWord, q1 - 1)
@@ -655,10 +663,8 @@ Private Function DecodeMimeHeaderValue(ByVal headerValue As String) As String
 
         ' Whitespace zwischen aufeinanderfolgenden Encoded-Words ueberspringen (RFC 2047 Sec 5)
         If pos <= Len(result) Then
-            Dim peek As Long
             peek = pos
             Do While peek <= Len(result)
-                Dim pCh As String
                 pCh = Mid$(result, peek, 1)
                 If pCh <> " " And pCh <> vbTab And pCh <> vbLf And pCh <> vbCr Then Exit Do
                 peek = peek + 1
@@ -929,7 +935,9 @@ Private Function StripMimeHeaders(ByVal textIn As String) As String
 End Function
 
 Private Function ExtractBodyFromEmail(ByVal contentText As String) As String
-    ' Bevorzugt text/plain, unterstützt base64 und quoted-printable; fällt auf text/html zurück.
+    ' Zweck: Body aus EML-Rohtext extrahieren. Bevorzugt text/plain, Fallback auf text/html.
+    ' Abhaengigkeiten: ParseMimeBody, HtmlToText, LegacyExtractBody.
+    ' Rueckgabe: Dekodierter Body-Text.
     Dim bodyText As String
 
     contentText = NormalizeLineEndings(contentText)
@@ -946,6 +954,8 @@ Private Function ExtractBodyFromEmail(ByVal contentText As String) As String
 End Function
 
 Private Function ParseMimeBody(ByVal contentText As String, ByVal desiredType As String) As String
+    ' Zweck: MIME-Part nach Content-Type extrahieren und dekodieren (base64/quoted-printable).
+    ' Rueckgabe: Dekodierter Body-Teil oder leer.
     Dim lines() As String
     Dim i As Long
     Dim lineText As String
@@ -989,6 +999,7 @@ Private Function ParseMimeBody(ByVal contentText As String, ByVal desiredType As
 End Function
 
 Private Function ExtractCharset(ByVal headerLine As String, ByVal defaultCharset As String) As String
+    ' Zweck: Charset aus Content-Type Header extrahieren. Rueckgabe: Charset oder Default.
     Dim p As Long
     Dim part As String
     Dim c As String
@@ -1336,6 +1347,8 @@ Private Function DecodeNumericEntities(ByVal textIn As String) As String
 End Function
 
 Private Function LegacyExtractBody(ByVal contentText As String) As String
+    ' Zweck: Body nach erster Leerzeile extrahieren (Fallback ohne MIME-Parsing).
+    ' Rueckgabe: Text nach Header-Block oder leer.
     Dim splitMarker As String
     Dim pos As Long
 
@@ -1349,6 +1362,9 @@ Private Function LegacyExtractBody(ByVal contentText As String) As String
 End Function
 
 Private Function DecodeBase64ToString(ByVal base64Data As String, ByVal charset As String) As String
+    ' Zweck: Base64-kodierten Text dekodieren und via Charset in String umwandeln.
+    ' Abhaengigkeiten: DecodeBytesToString.
+    ' Rueckgabe: Dekodierter Text.
     Dim clean As String
     Dim base64Chars As String
     Dim i As Long
@@ -1427,6 +1443,9 @@ Private Function DecodeBase64ToString(ByVal base64Data As String, ByVal charset 
 End Function
 
 Private Function DecodeQuotedPrintable(ByVal qpText As String, ByVal charset As String) As String
+    ' Zweck: Quoted-Printable-kodierten Text dekodieren und via Charset in String umwandeln.
+    ' Abhaengigkeiten: IsHexPair, DecodeBytesToString.
+    ' Rueckgabe: Dekodierter Text.
     Dim i As Long
     Dim ch As String
     Dim next2 As String
@@ -1462,6 +1481,7 @@ Private Function DecodeQuotedPrintable(ByVal qpText As String, ByVal charset As 
 End Function
 
 Private Function IsHexPair(ByVal txt As String) As Boolean
+    ' Zweck: Pruefen ob ein 2-Zeichen-String ein gueltiges Hex-Paar ist (0-9, A-F).
     Dim i As Long
     If Len(txt) <> 2 Then Exit Function
     For i = 1 To 2
@@ -1474,6 +1494,8 @@ Private Function IsHexPair(ByVal txt As String) As Boolean
 End Function
 
 Private Function Utf8BytesToString(ByRef bytes() As Byte, ByVal lengthBytes As Long) As String
+    ' Zweck: UTF-8 Byte-Array in VBA-String (UTF-16) konvertieren.
+    ' Rueckgabe: Unicode-String.
     Dim i As Long
     Dim b1 As Long, b2 As Long, b3 As Long, b4 As Long
     Dim codePoint As Long
@@ -1516,6 +1538,7 @@ Private Function Utf8BytesToString(ByRef bytes() As Byte, ByVal lengthBytes As L
 End Function
 
 Private Function Latin1BytesToString(ByRef bytes() As Byte, ByVal lengthBytes As Long) As String
+    ' Zweck: Latin-1 (ISO 8859-1) Byte-Array in VBA-String konvertieren.
     Dim i As Long
     Dim s As String
     If lengthBytes = 0 Then Exit Function
@@ -1526,6 +1549,7 @@ Private Function Latin1BytesToString(ByRef bytes() As Byte, ByVal lengthBytes As
 End Function
 
 Private Function DecodeBytesToString(ByRef bytes() As Byte, ByVal lengthBytes As Long, ByVal charset As String) As String
+    ' Zweck: Byte-Array anhand Charset in String konvertieren (UTF-8, Windows-1252, Latin-1).
     If lengthBytes = 0 Then Exit Function
     If InStr(1, charset, "utf-8", vbTextCompare) > 0 Then
         DecodeBytesToString = Utf8BytesToString(bytes, lengthBytes)
@@ -1585,6 +1609,7 @@ Private Function Windows1252BytesToString(ByRef bytes() As Byte, ByVal lengthByt
 End Function
 
 Private Function SafeChrW(ByVal codePoint As Long) As String
+    ' Zweck: ChrW mit Bereichspruefung (ersetzt ungueltiges durch "?").
     If codePoint < 0 Or codePoint > &HFFFF& Then
         SafeChrW = "?"
     Else
@@ -1735,14 +1760,17 @@ Private Sub AddLeadToIndex(ByVal fields As Object, ByVal msgDate As Date)
 End Sub
 
 Private Sub AddLeadKey(ByRef idx As Object, ByVal keyName As String)
+    ' Zweck: Schluessel zum Lead-Index hinzufuegen.
     If Len(keyName) > 0 Then SetKV idx, keyName, True
 End Sub
 
 Private Function MakeIdKey(ByVal idValue As String) As String
+    ' Zweck: Duplikat-Schluessel aus Anfragen-ID erzeugen.
     If Len(Trim$(idValue)) > 0 Then MakeIdKey = "ID:" & LCase$(Trim$(idValue))
 End Function
 
 Private Function MakeNamePhoneMonthKey(ByVal nameValue As String, ByVal phoneValue As String, ByVal msgDate As Date) As String
+    ' Zweck: Duplikat-Schluessel aus Name, Telefon und Monat erzeugen.
     If Len(Trim$(nameValue)) = 0 Or Len(Trim$(phoneValue)) = 0 Then Exit Function
     MakeNamePhoneMonthKey = "NPM:" & LCase$(Trim$(nameValue)) & "|" & Trim$(phoneValue) & "|" & Format$(DateSerial(Year(msgDate), Month(msgDate), 1), "yyyy-mm")
 End Function
@@ -2134,6 +2162,7 @@ Private Function BuildOutlookScript(ByVal mailboxName As String, ByVal folderNam
 End Function
 
 Private Function BuildMailboxSourceLabel(ByVal mailboxName As String, ByVal folderName As String) As String
+    ' Zweck: Lesbares Label aus Mailbox- und Ordnername zusammensetzen.
     Dim labelText As String
 
     labelText = Trim$(mailboxName)
@@ -2706,10 +2735,9 @@ Private Function ResolveLeadType(ByVal subjectText As String, ByVal bodyText As 
 End Function
 
 Private Function ParseLeadContent(ByVal bodyText As String) As Object
-    ' Zweck: Nachrichtentext in strukturierte Felder parsen.
-    ' Abhängigkeiten: NewKeyValueStore, MapLabelValue, MapInlinePair, SetBedarfsort.
-    ' Rückgabe: Key/Value-Store mit Feldwerten.
-    ' Rückgabe: Key/Value-Store mit den erkannten Feldern.
+    ' Zweck: Nachrichtentext in strukturierte Felder parsen (Kontakt/Senior/Anfrage).
+    ' Abhaengigkeiten: NewKeyValueStore, MapLabelValue, MapInlinePair, SetBedarfsort.
+    ' Rueckgabe: Key/Value-Store mit den erkannten Feldern.
     Dim result As Object
     Dim lines() As String
     Dim i As Long
@@ -2718,6 +2746,12 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     Dim pendingKey As String
     Dim workText As String
     Dim startLine As Long
+    Dim anfColonPos As Long
+    Dim anfVal As String
+    Dim candidateKey As String
+    Dim telPosInline As Long
+    Dim telNumInline As String
+    Dim lineHandled As Boolean
 
     Set result = NewKeyValueStore()
 
@@ -2773,107 +2807,108 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
         ' Asterisken entfernen (HTML-Bold-Marker *Label:* aus SendGrid-Templates)
         lineText = Replace(lineText, "*", "")
         lineText = Trim$(lineText)
+        lineHandled = False
         If Len(lineText) > 0 Then
             ' pendingKey hat Vorrang: wenn ein Label wartet, ist naechste Zeile der Wert
             If Len(pendingKey) > 0 Then
                 Debug.Print "[ParseLead] MapLabel: '" & pendingKey & "' -> '" & Left$(lineText, 60) & "' [" & currentSection & "] (Zeile " & i & ")"
                 MapLabelValue result, pendingKey, lineText, currentSection
                 pendingKey = vbNullString
-                GoTo NextLineLabel
+                lineHandled = True
             End If
 
             ' Sektionserkennung VOR Noise-Check (Sektionsheader koennen URLs enthalten)
-            If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
-                currentSection = "Kontakt"
-                pendingKey = vbNullString
-                Debug.Print "[ParseLead] Sektion: Kontakt (Zeile " & i & ")"
-                GoTo NextLineLabel
-            ElseIf InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 _
-                Or InStr(1, lineText, "Senior-Informationen", vbTextCompare) > 0 _
-                Or InStr(1, lineText, "Angaben zum Senior", vbTextCompare) > 0 _
-                Or InStr(1, lineText, "Zur betreuten Person", vbTextCompare) > 0 _
-                Or InStr(1, lineText, "Betreute Person", vbTextCompare) > 0 _
-                Or InStr(1, lineText, "Pflegebed" & ChrW$(252) & "rftige", vbTextCompare) > 0 Then
-                currentSection = "Senior"
-                pendingKey = vbNullString
-                Debug.Print "[ParseLead] Sektion: Senior (Zeile " & i & ")"
-                GoTo NextLineLabel
-            ElseIf InStr(1, lineText, "Anfragedetails", vbTextCompare) > 0 Then
-                currentSection = "Anfrage"
-                pendingKey = vbNullString
-                Debug.Print "[ParseLead] Sektion: Anfrage (Zeile " & i & ")"
-                ' Wert nach "Anfragedetails:" extrahieren (z.B. "Haushaltshilfe")
-                Dim anfColonPos As Long
-                anfColonPos = InStr(lineText, ":")
-                If anfColonPos > 0 Then
-                    Dim anfVal As String
-                    anfVal = Trim$(Mid$(lineText, anfColonPos + 1))
-                    If Len(anfVal) > 0 Then
-                        Debug.Print "[ParseLead] Anfragedetails-Wert: '" & anfVal & "'"
-                        SetKV result, "Anfragedetails", anfVal
+            If Not lineHandled Then
+                If InStr(1, lineText, "Kontaktinformationen", vbTextCompare) > 0 Then
+                    currentSection = "Kontakt"
+                    pendingKey = vbNullString
+                    Debug.Print "[ParseLead] Sektion: Kontakt (Zeile " & i & ")"
+                    lineHandled = True
+                ElseIf InStr(1, lineText, "Informationen zum Senior", vbTextCompare) > 0 _
+                    Or InStr(1, lineText, "Senior-Informationen", vbTextCompare) > 0 _
+                    Or InStr(1, lineText, "Angaben zum Senior", vbTextCompare) > 0 _
+                    Or InStr(1, lineText, "Zur betreuten Person", vbTextCompare) > 0 _
+                    Or InStr(1, lineText, "Betreute Person", vbTextCompare) > 0 _
+                    Or InStr(1, lineText, "Pflegebed" & ChrW$(252) & "rftige", vbTextCompare) > 0 Then
+                    currentSection = "Senior"
+                    pendingKey = vbNullString
+                    Debug.Print "[ParseLead] Sektion: Senior (Zeile " & i & ")"
+                    lineHandled = True
+                ElseIf InStr(1, lineText, "Anfragedetails", vbTextCompare) > 0 Then
+                    currentSection = "Anfrage"
+                    pendingKey = vbNullString
+                    Debug.Print "[ParseLead] Sektion: Anfrage (Zeile " & i & ")"
+                    ' Wert nach "Anfragedetails:" extrahieren (z.B. "Haushaltshilfe")
+                    anfColonPos = InStr(lineText, ":")
+                    If anfColonPos > 0 Then
+                        anfVal = Trim$(Mid$(lineText, anfColonPos + 1))
+                        If Len(anfVal) > 0 Then
+                            Debug.Print "[ParseLead] Anfragedetails-Wert: '" & anfVal & "'"
+                            SetKV result, "Anfragedetails", anfVal
+                        End If
                     End If
+                    lineHandled = True
+                ElseIf InStr(1, lineText, "Datenschutz", vbTextCompare) > 0 _
+                    And InStr(1, lineText, "zustimmung", vbTextCompare) = 0 Then
+                    currentSection = "Footer"
+                    pendingKey = vbNullString
+                    Debug.Print "[ParseLead] Sektion: Footer (Zeile " & i & ") -> Parsing beendet"
+                    Exit For
                 End If
-                GoTo NextLineLabel
-            ElseIf InStr(1, lineText, "Datenschutz", vbTextCompare) > 0 _
-                And InStr(1, lineText, "zustimmung", vbTextCompare) = 0 Then
-                currentSection = "Footer"
-                pendingKey = vbNullString
-                Debug.Print "[ParseLead] Sektion: Footer (Zeile " & i & ") -> Parsing beendet"
-                Exit For
             End If
 
             ' Rausch-Zeilen ueberspringen (E-Mail-Header, URLs, Footer)
-            If IsNoiseLine(lineText) Then
-                Debug.Print "[ParseLead] Noise uebersprungen (Zeile " & i & "): '" & Left$(lineText, 60) & "'"
-                GoTo NextLineLabel
+            If Not lineHandled Then
+                If IsNoiseLine(lineText) Then
+                    Debug.Print "[ParseLead] Noise uebersprungen (Zeile " & i & "): '" & Left$(lineText, 60) & "'"
+                    lineHandled = True
+                End If
             End If
 
             ' Label/Wert-Erkennung
-            If Right$(lineText, 1) = ":" And Len(lineText) > 1 Then
-                Dim candidateKey As String
-                candidateKey = Trim$(Left$(lineText, Len(lineText) - 1))
-                ' Wenn der "Key" wie eine Telefonnummer aussieht, direkt als Mobil speichern
-                If currentSection = "Kontakt" And IsLikelyPhoneNumber(candidateKey) Then
-                    If Len(GetField(result, "Kontakt_Mobil")) = 0 Then
-                        Debug.Print "[ParseLead] Tel-als-Label: '" & candidateKey & "' (Zeile " & i & ")"
-                        SetKV result, "Kontakt_Mobil", CleanLinkedValue(candidateKey)
+            If Not lineHandled Then
+                If Right$(lineText, 1) = ":" And Len(lineText) > 1 Then
+                    candidateKey = Trim$(Left$(lineText, Len(lineText) - 1))
+                    ' Wenn der "Key" wie eine Telefonnummer aussieht, direkt als Mobil speichern
+                    If currentSection = "Kontakt" And IsLikelyPhoneNumber(candidateKey) Then
+                        If Len(GetField(result, "Kontakt_Mobil")) = 0 Then
+                            Debug.Print "[ParseLead] Tel-als-Label: '" & candidateKey & "' (Zeile " & i & ")"
+                            SetKV result, "Kontakt_Mobil", CleanLinkedValue(candidateKey)
+                        End If
+                        pendingKey = vbNullString
+                    Else
+                        pendingKey = candidateKey
+                        If Len(pendingKey) > 0 Then
+                            Debug.Print "[ParseLead] PendingKey: '" & pendingKey & "' (Zeile " & i & ")"
+                        End If
                     End If
-                    pendingKey = vbNullString
-                Else
-                    pendingKey = candidateKey
-                    If Len(pendingKey) > 0 Then
-                        Debug.Print "[ParseLead] PendingKey: '" & pendingKey & "' (Zeile " & i & ")"
-                    End If
-                End If
-            ElseIf InStr(lineText, ":") > 0 Then
-                ' tel:NUMBER Pattern in Kontakt-Sektion extrahieren
-                Dim telPosInline As Long
-                telPosInline = InStr(1, lineText, "tel:", vbTextCompare)
-                If telPosInline > 0 And currentSection = "Kontakt" Then
-                    Dim telNumInline As String
-                    telNumInline = Trim$(Mid$(lineText, telPosInline + 4))
-                    telNumInline = Replace(telNumInline, ")", "")
-                    telNumInline = Replace(telNumInline, "(", "")
-                    telNumInline = Trim$(telNumInline)
-                    If IsLikelyPhoneNumber(telNumInline) And Len(GetField(result, "Kontakt_Mobil")) = 0 Then
-                        Debug.Print "[ParseLead] Tel-Pattern: '" & telNumInline & "' (Zeile " & i & ")"
-                        SetKV result, "Kontakt_Mobil", CleanLinkedValue(telNumInline)
+                ElseIf InStr(lineText, ":") > 0 Then
+                    ' tel:NUMBER Pattern in Kontakt-Sektion extrahieren
+                    telPosInline = InStr(1, lineText, "tel:", vbTextCompare)
+                    If telPosInline > 0 And currentSection = "Kontakt" Then
+                        telNumInline = Trim$(Mid$(lineText, telPosInline + 4))
+                        telNumInline = Replace(telNumInline, ")", "")
+                        telNumInline = Replace(telNumInline, "(", "")
+                        telNumInline = Trim$(telNumInline)
+                        If IsLikelyPhoneNumber(telNumInline) And Len(GetField(result, "Kontakt_Mobil")) = 0 Then
+                            Debug.Print "[ParseLead] Tel-Pattern: '" & telNumInline & "' (Zeile " & i & ")"
+                            SetKV result, "Kontakt_Mobil", CleanLinkedValue(telNumInline)
+                        Else
+                            Debug.Print "[ParseLead] Inline: '" & Left$(lineText, 80) & "' [" & currentSection & "] (Zeile " & i & ")"
+                            MapInlinePair result, lineText, currentSection
+                        End If
                     Else
                         Debug.Print "[ParseLead] Inline: '" & Left$(lineText, 80) & "' [" & currentSection & "] (Zeile " & i & ")"
                         MapInlinePair result, lineText, currentSection
                     End If
-                Else
-                    Debug.Print "[ParseLead] Inline: '" & Left$(lineText, 80) & "' [" & currentSection & "] (Zeile " & i & ")"
-                    MapInlinePair result, lineText, currentSection
-                End If
-            ElseIf currentSection = "Kontakt" And IsLikelyPhoneNumber(lineText) Then
-                If Len(GetField(result, "Kontakt_Mobil")) = 0 Then
-                    Debug.Print "[ParseLead] Auto-Mobil: '" & lineText & "' (Zeile " & i & ")"
-                    SetKV result, "Kontakt_Mobil", CleanLinkedValue(lineText)
+                ElseIf currentSection = "Kontakt" And IsLikelyPhoneNumber(lineText) Then
+                    If Len(GetField(result, "Kontakt_Mobil")) = 0 Then
+                        Debug.Print "[ParseLead] Auto-Mobil: '" & lineText & "' (Zeile " & i & ")"
+                        SetKV result, "Kontakt_Mobil", CleanLinkedValue(lineText)
+                    End If
                 End If
             End If
         End If
-NextLineLabel:
     Next i
 
     If Len(Trim$(GetField(result, "Senior_Name"))) = 0 Then
@@ -3079,6 +3114,7 @@ Private Function NormalizeKey(ByVal rawKey As String) As String
 End Function
 
 Private Function StripNamePrefix(ByVal nameText As String) As String
+    ' Zweck: Anrede-Praefix (Herr/Frau/Herrn) aus Name entfernen.
     Dim s As String
     Dim sLower As String
 
@@ -3260,12 +3296,12 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
 End Sub
 
 Private Function FindTableByName(ByVal tableName As String) As ListObject
-    ' Zweck: ListObject global nach Name suchen. Rückgabe: gefundene Tabelle oder Nothing.
-    ' Abhängigkeiten: ThisWorkbook.Worksheets, ListObjects.
-    ' Rückgabe: ListObject oder Nothing.
+    ' Zweck: ListObject global nach Name suchen.
+    ' Abhaengigkeiten: ThisWorkbook.Worksheets, ListObjects.
+    ' Rueckgabe: ListObject oder Nothing.
     Dim ws As Worksheet
+    Dim lo As ListObject
     For Each ws In ThisWorkbook.Worksheets
-        Dim lo As ListObject
         For Each lo In ws.ListObjects
             If StrComp(lo.Name, tableName, vbTextCompare) = 0 Then
                 Set FindTableByName = lo
