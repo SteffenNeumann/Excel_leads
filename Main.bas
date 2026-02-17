@@ -453,20 +453,30 @@ End Function
 Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     ' Zweck: Datei via AppleScript/Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
     ' VBA Open For Binary kann auf macOS keine Dateinamen mit oe, ae, ue etc. oeffnen.
-    ' Strategie: cp via Shell in Temp-Pfad, dann Binary-Read vom Temp-Pfad.
+    ' Strategie: cp via Shell in gleichen Ordner mit ASCII-Name, dann Binary-Read.
+    ' Temp-Datei im gleichen Ordner ablegen (VBA hat dort bereits Sandbox-Zugriff).
     Dim tmpPath As String
+    Dim folderPart As String
     Dim script As String
     Dim result As String
     Dim f As Integer
     Dim txt As String
     Dim bytes As Long
+    Dim slashPos As Long
 
-    tmpPath = "/tmp/_eml_import_temp.eml"
+    ' Ordner aus Dateipfad extrahieren
+    slashPos = InStrRev(filePath, "/")
+    If slashPos > 0 Then
+        folderPart = Left$(filePath, slashPos)
+    Else
+        folderPart = ""
+    End If
+    tmpPath = folderPart & "_tmp_eml_import.eml"
 
     ' AppleScript: Datei per Shell-Copy in Temp-Pfad ohne Sonderzeichen kopieren
     script = "do shell script ""cp "" & quoted form of " & Chr(34) & filePath & Chr(34) & " & "" "" & quoted form of " & Chr(34) & tmpPath & Chr(34)
 
-    Debug.Print "[ReadTextFile] Shell-Copy Script: " & Left$(script, 120)
+    Debug.Print "[ReadTextFile] Shell-Copy: " & filePath & " -> " & tmpPath
 
     On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
@@ -486,7 +496,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         Exit Function
     End If
 
-    ' Temp-Datei normal lesen (Pfad ohne Sonderzeichen)
+    ' Temp-Datei normal lesen (Pfad ohne Sonderzeichen -> kein Sandbox-Dialog)
     f = FreeFile
     On Error Resume Next
     Open tmpPath For Binary Access Read As #f
