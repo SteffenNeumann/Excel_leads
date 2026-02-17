@@ -2956,6 +2956,9 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
         Case "name", "vollst" & ChrW$(228) & "ndiger name", "kontaktperson", "ihr name"
             If LCase$(sectionName) = "senior" Then
                 SetKV fields, "Senior_Name", valueNorm
+            ElseIf Len(GetField(fields, "Kontakt_Name")) > 0 Then
+                ' Zweites Name-Feld in Kontakt-Sektion -> gehoert zum Senior
+                SetKV fields, "Senior_Name", valueNorm
             Else
                 SetKV fields, "Kontakt_Name", valueNorm
             End If
