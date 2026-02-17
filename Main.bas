@@ -90,6 +90,11 @@ Private gLeadSourceNote As String
 ' FilterDigits: Filtert Ziffern.
 ' NormalizePflegegrad: Extrahiert Ziffern aus PG-Text.
 ' AppendNote: Fügt Notizen zusammen.
+' LevenshteinDistance: Berechnet Edit-Distanz zwischen zwei Strings. Rückgabe: Long.
+' NormalizeLeadName: Korrigiert Komma-Format (Nachname, Vorname -> Vorname Nachname). Rückgabe: String.
+' IsNameSwapped: Prüft ob Vor-/Nachname vertauscht sind. Rückgabe: Boolean.
+' CheckAndNormalizeLeadName: Normalisiert Name, prüft Vertauschung + Levenshtein gegen Bestand. Rückgabe: String.
+' CollectExistingNames: Sammelt bestehende Namen aus Tabelle. Rückgabe: String-Array.
 ' LeadAlreadyExists: Duplikatsprüfung; nutzt ResolveKontaktName, GetField, BuildHeaderIndex, GetHeaderIndex.
 '
 ' Abhängigkeitsgraph (vereinfacht)
@@ -3135,6 +3140,190 @@ Private Function StripNamePrefix(ByVal nameText As String) As String
     StripNamePrefix = s
 End Function
 
+' =========================
+' Namens-Normalisierung & Levenshtein
+' =========================
+Private Function LevenshteinDistance(ByVal s1 As String, ByVal s2 As String) As Long
+    ' Zweck: Levenshtein-Distanz zwischen zwei Strings berechnen.
+    ' Rueckgabe: Anzahl der Edit-Operationen (0 = identisch).
+    Dim len1 As Long, len2 As Long
+    Dim i As Long, j As Long
+    Dim cost As Long
+    Dim d() As Long
+
+    s1 = LCase$(s1)
+    s2 = LCase$(s2)
+    len1 = Len(s1)
+    len2 = Len(s2)
+
+    If len1 = 0 Then LevenshteinDistance = len2: Exit Function
+    If len2 = 0 Then LevenshteinDistance = len1: Exit Function
+
+    ReDim d(0 To len1, 0 To len2)
+
+    For i = 0 To len1: d(i, 0) = i: Next i
+    For j = 0 To len2: d(0, j) = j: Next j
+
+    For i = 1 To len1
+        For j = 1 To len2
+            If Mid$(s1, i, 1) = Mid$(s2, j, 1) Then
+                cost = 0
+            Else
+                cost = 1
+            End If
+            d(i, j) = WorksheetFunction.Min( _
+                d(i - 1, j) + 1, _
+                d(i, j - 1) + 1, _
+                d(i - 1, j - 1) + cost)
+        Next j
+    Next i
+
+    LevenshteinDistance = d(len1, len2)
+End Function
+
+Private Function NormalizeLeadName(ByVal rawName As String) As String
+    ' Zweck: Name normalisieren: Komma-Trennung (Nachname, Vorname) umdrehen.
+    ' Rueckgabe: bereinigter Name im Format "Vorname Nachname".
+    Dim cleaned As String
+    Dim parts() As String
+
+    cleaned = Trim$(rawName)
+    If Len(cleaned) = 0 Then Exit Function
+
+    ' Komma-Trennung erkennen: "Nachname, Vorname" -> "Vorname Nachname"
+    If InStr(cleaned, ",") > 0 Then
+        parts = Split(cleaned, ",")
+        If UBound(parts) = 1 Then
+            cleaned = Trim$(parts(1)) & " " & Trim$(parts(0))
+        End If
+    End If
+
+    ' Doppelte Leerzeichen entfernen
+    Do While InStr(1, cleaned, "  ") > 0
+        cleaned = Replace(cleaned, "  ", " ")
+    Loop
+
+    NormalizeLeadName = Trim$(cleaned)
+End Function
+
+Private Function IsNameSwapped(ByVal name1 As String, ByVal name2 As String) As Boolean
+    ' Zweck: Pruefen ob name2 eine Vorname/Nachname-Vertauschung von name1 ist.
+    ' Rueckgabe: True wenn Vertauschung erkannt.
+    Dim parts1() As String, parts2() As String
+
+    If Len(Trim$(name1)) = 0 Or Len(Trim$(name2)) = 0 Then Exit Function
+
+    parts1 = Split(Trim$(LCase$(name1)), " ")
+    parts2 = Split(Trim$(LCase$(name2)), " ")
+
+    ' Nur bei 2-teiligen Namen vergleichen
+    If UBound(parts1) <> 1 Or UBound(parts2) <> 1 Then Exit Function
+
+    ' Vertauschung: A B vs B A
+    If parts1(0) = parts2(1) And parts1(1) = parts2(0) Then
+        IsNameSwapped = True
+    End If
+End Function
+
+Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existingNames As Variant, ByVal leadContext As String) As String
+    ' Zweck: Name normalisieren, Komma-Format korrigieren, Vertauschung pruefen,
+    '        bei Aehnlichkeit (Levenshtein) Hinweis loggen.
+    ' Rueckgabe: korrigierter Name.
+    Dim normalized As String
+    Dim hadComma As Boolean
+    Dim i As Long
+    Dim dist As Long
+    Dim existName As String
+    Dim threshold As Long
+
+    ' Schritt 1: Komma-Korrektur
+    hadComma = (InStr(rawName, ",") > 0)
+    normalized = NormalizeLeadName(rawName)
+    normalized = StripNamePrefix(normalized)
+
+    If hadComma And normalized <> rawName Then
+        LogImportError _
+            "Name korrigiert (Komma-Format): '" & rawName & "' -> '" & normalized & "'", _
+            leadContext, "Hinweis"
+        Debug.Print "[NameCheck] Komma-Korrektur: '" & rawName & "' -> '" & normalized & "'"
+    End If
+
+    ' Schritt 2: Gegen bestehende Namen in der Tabelle pruefen
+    If Not IsArray(existingNames) Then GoTo SkipExistingCheck
+    If UBound(existingNames) < LBound(existingNames) Then GoTo SkipExistingCheck
+
+    threshold = 2  ' Max. Levenshtein-Distanz fuer Aehnlichkeits-Hinweis
+
+    For i = LBound(existingNames) To UBound(existingNames)
+        existName = Trim$(CStr(existingNames(i)))
+        If Len(existName) = 0 Then GoTo NextExisting
+
+        ' Exakt gleich -> kein Hinweis noetig
+        If StrComp(normalized, existName, vbTextCompare) = 0 Then GoTo NextExisting
+
+        ' Vertauschungs-Check
+        If IsNameSwapped(normalized, existName) Then
+            LogImportError _
+                "Namens-Vertauschung erkannt: '" & normalized & "' vs. bestehend '" & existName & "'", _
+                "Name wird als '" & normalized & "' eingetragen. " & leadContext, "Hinweis"
+            Debug.Print "[NameCheck] Vertauschung: '" & normalized & "' vs '" & existName & "'"
+            GoTo SkipExistingCheck
+        End If
+
+        ' Levenshtein-Check (nur bei aehnlicher Laenge)
+        If Abs(Len(normalized) - Len(existName)) <= threshold Then
+            dist = LevenshteinDistance(normalized, existName)
+            If dist > 0 And dist <= threshold Then
+                LogImportError _
+                    "Aehnlicher Name gefunden: '" & normalized & "' vs. bestehend '" & existName & "' (Distanz: " & dist & ")", _
+                    "Moeglicherweise gleiche Person. " & leadContext, "Hinweis"
+                Debug.Print "[NameCheck] Levenshtein=" & dist & ": '" & normalized & "' vs '" & existName & "'"
+                GoTo SkipExistingCheck
+            End If
+        End If
+NextExisting:
+    Next i
+
+SkipExistingCheck:
+    CheckAndNormalizeLeadName = normalized
+End Function
+
+Private Function CollectExistingNames(ByVal tbl As ListObject) As Variant
+    ' Zweck: Alle bestehenden Namen aus der Tabelle sammeln.
+    ' Rueckgabe: Array von Strings.
+    Dim headerMap As Object
+    Dim nameColIdx As Long
+    Dim i As Long
+    Dim names() As String
+    Dim cnt As Long
+
+    Set headerMap = BuildHeaderIndex(tbl)
+    nameColIdx = GetHeaderIndex(headerMap, "Name")
+
+    If nameColIdx = 0 Or tbl.ListRows.Count = 0 Then
+        CollectExistingNames = Array()
+        Exit Function
+    End If
+
+    ReDim names(1 To tbl.ListRows.Count)
+    cnt = 0
+    For i = 1 To tbl.ListRows.Count
+        Dim cellVal As String
+        cellVal = Trim$(CStr(tbl.DataBodyRange.Cells(i, nameColIdx).Value))
+        If Len(cellVal) > 0 Then
+            cnt = cnt + 1
+            names(cnt) = cellVal
+        End If
+    Next i
+
+    If cnt = 0 Then
+        CollectExistingNames = Array()
+    Else
+        ReDim Preserve names(1 To cnt)
+        CollectExistingNames = names
+    End If
+End Function
+
 Private Function GetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Object, ByVal headerName As String) As Range
     ' Zweck: Zellobjekt anhand Header-Map holen.
     ' Abhängigkeiten: GetHeaderIndex.
@@ -3163,26 +3352,46 @@ Private Sub SetImportNote(ByVal targetCell As Range)
     On Error GoTo 0
 End Sub
 
-Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As String)
-    ' Zweck: Fehler in ErrLog protokollieren.
+Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As String, Optional ByVal logType As String = "Fehler")
+    ' Zweck: Fehler/Hinweis in ErrLog protokollieren.
+    ' logType: "Fehler" oder "Hinweis"
     Dim ws As Worksheet
     Dim nextRow As Long
+    Dim icon As String
 
     Set ws = GetOrCreateErrorLogSheet()
     If ws Is Nothing Then Exit Sub
 
     nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If nextRow = 1 And Len(Trim$(CStr(ws.Cells(1, 1).Value))) = 0 Then nextRow = 0
+    If nextRow = 1 And Len(Trim$(CStr(ws.Cells(1, 1).Value))) = 0 Then nextRow = 1
     nextRow = nextRow + 1
 
-    ws.Cells(nextRow, 1).Value = Format$(Now, "dd.mm.yy hh.nn")
-    ws.Cells(nextRow, 2).Value = errMessage
-    ws.Cells(nextRow, 3).Value = possibleCause
+    ' Icon je nach Typ
+    If StrComp(logType, "Hinweis", vbTextCompare) = 0 Then
+        icon = ChrW$(9432)  ' (i) Info-Icon
+    Else
+        icon = ChrW$(9888)  ' Warn-Dreieck
+        logType = "Fehler"
+    End If
+
+    ws.Cells(nextRow, 1).Value = icon
+    ws.Cells(nextRow, 2).Value = logType
+    ws.Cells(nextRow, 3).Value = Format$(Now, "dd.mm.yy hh:nn")
+    ws.Cells(nextRow, 4).Value = errMessage
+    ws.Cells(nextRow, 5).Value = possibleCause
+
+    ' Zeile einfaerben
+    If StrComp(logType, "Hinweis", vbTextCompare) = 0 Then
+        ws.Range(ws.Cells(nextRow, 1), ws.Cells(nextRow, 5)).Interior.Color = RGB(255, 255, 220) ' hellgelb
+    Else
+        ws.Range(ws.Cells(nextRow, 1), ws.Cells(nextRow, 5)).Interior.Color = RGB(255, 220, 220) ' hellrot
+    End If
 End Sub
 
 Private Function GetOrCreateErrorLogSheet() As Worksheet
-    ' Zweck: ErrLog-Sheet holen oder anlegen.
+    ' Zweck: ErrLog-Sheet holen oder anlegen mit strukturierten Spalten.
     Dim ws As Worksheet
+    Dim needsHeader As Boolean
 
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(ERROR_LOG_SHEET)
@@ -3193,11 +3402,34 @@ Private Function GetOrCreateErrorLogSheet() As Worksheet
         Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
         If Not ws Is Nothing Then
             ws.Name = ERROR_LOG_SHEET
-            ws.Cells(1, 1).Value = "Zeitstempel"
-            ws.Cells(1, 2).Value = "Fehler"
-            ws.Cells(1, 3).Value = "Mögliche Ursache"
+            needsHeader = True
         End If
         On Error GoTo 0
+    Else
+        ' Pruefen ob alte Struktur (3 Spalten) -> Migration
+        If ws.Cells(1, 1).Value = "Zeitstempel" And ws.Cells(1, 4).Value = vbNullString Then
+            needsHeader = True
+            ' Alte Daten loeschen (Header-Zeile wird ueberschrieben)
+        End If
+    End If
+
+    If needsHeader And Not ws Is Nothing Then
+        ws.Cells(1, 1).Value = ChrW$(9888) ' Icon-Spalte
+        ws.Cells(1, 2).Value = "Typ"
+        ws.Cells(1, 3).Value = "Zeitstempel"
+        ws.Cells(1, 4).Value = "Meldung"
+        ws.Cells(1, 5).Value = "Details / Ursache"
+        ' Header formatieren
+        With ws.Range(ws.Cells(1, 1), ws.Cells(1, 5))
+            .Font.Bold = True
+            .Interior.Color = RGB(68, 114, 196)
+            .Font.Color = RGB(255, 255, 255)
+        End With
+        ws.Columns(1).ColumnWidth = 4
+        ws.Columns(2).ColumnWidth = 10
+        ws.Columns(3).ColumnWidth = 16
+        ws.Columns(4).ColumnWidth = 50
+        ws.Columns(5).ColumnWidth = 50
     End If
 
     Set GetOrCreateErrorLogSheet = ws
@@ -3232,6 +3464,14 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     Dim notesVal As String
 
     nameVal = ResolveKontaktName(fields)
+
+    ' Namens-Normalisierung & Pruefung (Komma, Vertauschung, Levenshtein)
+    Dim existingNames As Variant
+    Dim leadCtx As String
+    existingNames = CollectExistingNames(tbl)
+    leadCtx = "Leadtyp: " & leadType & ", Datum: " & Format$(msgDate, "dd.mm.yy")
+    nameVal = CheckAndNormalizeLeadName(nameVal, existingNames, leadCtx)
+
     phoneVal = CleanPhoneNumber(GetField(fields, "Kontakt_Mobil"))
     plzVal = CleanPostalCode(GetField(fields, "PLZ"))
     pgVal = NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
