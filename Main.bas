@@ -1776,8 +1776,11 @@ End Function
 
 Private Function MakeNamePhoneMonthKey(ByVal nameValue As String, ByVal phoneValue As String, ByVal msgDate As Date) As String
     ' Zweck: Duplikat-Schluessel aus Name, Telefon und Monat erzeugen.
-    If Len(Trim$(nameValue)) = 0 Or Len(Trim$(phoneValue)) = 0 Then Exit Function
-    MakeNamePhoneMonthKey = "NPM:" & LCase$(Trim$(nameValue)) & "|" & Trim$(phoneValue) & "|" & Format$(DateSerial(Year(msgDate), Month(msgDate), 1), "yyyy-mm")
+    ' Name wird normalisiert (Komma-Format umdrehen) fuer konsistenten Vergleich.
+    Dim normName As String
+    normName = NormalizeLeadName(nameValue)
+    If Len(Trim$(normName)) = 0 Or Len(Trim$(phoneValue)) = 0 Then Exit Function
+    MakeNamePhoneMonthKey = "NPM:" & LCase$(Trim$(normName)) & "|" & Trim$(phoneValue) & "|" & Format$(DateSerial(Year(msgDate), Month(msgDate), 1), "yyyy-mm")
 End Function
 
 Private Function ExtractIdFromNotes(ByVal noteText As String) As String
@@ -3258,11 +3261,15 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
         existName = Trim$(CStr(existingNames(i)))
         If Len(existName) = 0 Then GoTo NextExisting
 
+        ' Bestehenden Namen ebenfalls normalisieren (Komma-Format umdrehen)
+        Dim existNorm As String
+        existNorm = NormalizeLeadName(existName)
+
         ' Exakt gleich -> kein Hinweis noetig
-        If StrComp(normalized, existName, vbTextCompare) = 0 Then GoTo NextExisting
+        If StrComp(normalized, existNorm, vbTextCompare) = 0 Then GoTo NextExisting
 
         ' Vertauschungs-Check
-        If IsNameSwapped(normalized, existName) Then
+        If IsNameSwapped(normalized, existNorm) Then
             LogImportError _
                 "Namens-Vertauschung erkannt: '" & normalized & "' vs. bestehend '" & existName & "'", _
                 "Name wird als '" & normalized & "' eingetragen. " & leadContext, "Hinweis"
@@ -3271,8 +3278,8 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
         End If
 
         ' Levenshtein-Check (nur bei aehnlicher Laenge)
-        If Abs(Len(normalized) - Len(existName)) <= threshold Then
-            dist = LevenshteinDistance(normalized, existName)
+        If Abs(Len(normalized) - Len(existNorm)) <= threshold Then
+            dist = LevenshteinDistance(normalized, existNorm)
             If dist > 0 And dist <= threshold Then
                 LogImportError _
                     "Aehnlicher Name gefunden: '" & normalized & "' vs. bestehend '" & existName & "' (Distanz: " & dist & ")", _
