@@ -3386,6 +3386,9 @@ Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As St
     Else
         ws.Range(ws.Cells(nextRow, 1), ws.Cells(nextRow, 5)).Interior.Color = RGB(255, 220, 220) ' hellrot
     End If
+
+    ' Zeilenhoehe automatisch anpassen
+    ws.Rows(nextRow).EntireRow.AutoFit
 End Sub
 
 Private Function GetOrCreateErrorLogSheet() As Worksheet
@@ -3546,6 +3549,9 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
         Set infoCell = GetCellByHeaderMap(newRow, headerMap, "Info")
         If Not infoCell Is Nothing Then infoCell.WrapText = True
     End If
+
+    ' Zeilenhoehe automatisch anpassen
+    newRow.Range.EntireRow.AutoFit
 End Sub
 
 Private Function FindTableByName(ByVal tableName As String) As ListObject
