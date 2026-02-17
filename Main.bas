@@ -3406,10 +3406,11 @@ Private Function GetOrCreateErrorLogSheet() As Worksheet
         End If
         On Error GoTo 0
     Else
-        ' Pruefen ob alte Struktur (3 Spalten) -> Migration
-        If ws.Cells(1, 1).Value = "Zeitstempel" And ws.Cells(1, 4).Value = vbNullString Then
+        ' Pruefen ob Header fehlt oder alte Struktur (3 Spalten) -> Migration
+        If Len(Trim$(CStr(ws.Cells(1, 1).Value))) = 0 Then
             needsHeader = True
-            ' Alte Daten loeschen (Header-Zeile wird ueberschrieben)
+        ElseIf ws.Cells(1, 1).Value = "Zeitstempel" And Len(Trim$(CStr(ws.Cells(1, 4).Value))) = 0 Then
+            needsHeader = True
         End If
     End If
 
@@ -3510,9 +3511,18 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     anschriftVal = GetField(fields, "Kontakt_Anschrift")
     If Len(anschriftVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Adresse", anschriftVal
 
+    ' Ort: nur setzen wenn Zelle keine Formel enthaelt (Formelschutz)
     Dim ortVal As String
     ortVal = GetField(fields, "Bedarfsort_Ort")
-    If Len(ortVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Ort", ortVal
+    If Len(ortVal) > 0 Then
+        Dim ortCell As Range
+        Set ortCell = GetCellByHeaderMap(newRow, headerMap, "Ort")
+        If Not ortCell Is Nothing Then
+            If Not ortCell.HasFormula Then
+                ortCell.Value = ortVal
+            End If
+        End If
+    End If
 
     Dim idVal As String
     idVal = GetField(fields, "Anfrage_ID")
