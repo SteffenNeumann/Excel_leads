@@ -292,6 +292,13 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     Debug.Print "[ProcessMsg] payload -> From='" & Left$(msgFrom, 80) & "'"
     Debug.Print "[ProcessMsg] payload -> Body Laenge=" & Len(msgBody)
 
+    ' Leere Nachrichten ueberspringen (kein Subject UND kein Body)
+    If Len(Trim$(msgSubject)) = 0 And Len(Trim$(msgBody)) < 10 Then
+        Debug.Print "[ProcessMsg] SKIP: Leere Nachricht (kein Subject, Body < 10 Zeichen)"
+        ProcessSingleMessage = 0
+        Exit Function
+    End If
+
     leadType = ResolveLeadType(msgSubject, msgBody)
 
     Set parsed = ParseLeadContent(msgBody)
@@ -432,21 +439,143 @@ Private Function NormalizeLineEndings(ByVal textIn As String) As String
 End Function
 
 Private Function ExtractHeaderValue(ByVal contentText As String, ByVal headerName As String) As String
+    ' Zweck: Header-Wert aus EML-Rohtext extrahieren.
+    ' Unterstuetzt Folded-Headers (Fortsetzungszeilen mit Space/Tab).
+    ' Stoppt am Ende des Header-Blocks (erste echte Leerzeile).
     Dim lines() As String
     Dim i As Long
     Dim lineText As String
+    Dim headerLen As Long
+    Dim result As String
+    Dim found As Boolean
 
+    headerLen = Len(headerName)
     contentText = NormalizeLineEndings(contentText)
+
+    ' NUL-Zeichen entfernen (binary-read Artefakte)
+    contentText = Replace(contentText, vbNullChar, vbNullString)
 
     lines = Split(contentText, vbLf)
     For i = LBound(lines) To UBound(lines)
         lineText = lines(i)
-        If Len(lineText) = 0 Then Exit For
-        If LCase$(Left$(lineText, Len(headerName))) = LCase$(headerName) Then
-            ExtractHeaderValue = Trim$(Mid$(lineText, Len(headerName) + 1))
-            Exit Function
+
+        ' Echte Leerzeile = Ende des Header-Blocks
+        If Len(lineText) = 0 Then
+            If found Then Exit For
+            ' Weitermachen falls Header noch nicht gefunden
+            Exit For
+        End If
+
+        If found Then
+            ' Fortsetzungszeile? (beginnt mit Space oder Tab)
+            If Left$(lineText, 1) = " " Or Left$(lineText, 1) = vbTab Then
+                result = result & " " & Trim$(lineText)
+            Else
+                Exit For
+            End If
+        Else
+            If Len(lineText) >= headerLen Then
+                If LCase$(Left$(lineText, headerLen)) = LCase$(headerName) Then
+                    result = Trim$(Mid$(lineText, headerLen + 1))
+                    found = True
+                End If
+            End If
         End If
     Next i
+
+    ExtractHeaderValue = result
+End Function
+
+Private Function DecodeMimeHeaderValue(ByVal headerValue As String) As String
+    ' Zweck: MIME Encoded-Word dekodieren (RFC 2047).
+    ' Formate: =?charset?Q?encoded_text?= und =?charset?B?encoded_text?=
+    ' Beispiel: =?Windows-1252?Q?WG:_Neue_Anfrage:_H=F6rath?= -> WG: Neue Anfrage: Hörath
+    Dim result As String
+    Dim pos As Long
+    Dim startTag As Long
+    Dim endTag As Long
+    Dim encodedWord As String
+    Dim parts() As String
+    Dim charset As String
+    Dim encoding As String
+    Dim encodedText As String
+    Dim decoded As String
+
+    result = headerValue
+    If InStr(1, result, "=?") = 0 Then
+        DecodeMimeHeaderValue = result
+        Exit Function
+    End If
+
+    ' Iterativ alle =?...?= Bloecke ersetzen
+    pos = 1
+    Dim outText As String
+    outText = vbNullString
+
+    Do
+        startTag = InStr(pos, result, "=?")
+        If startTag = 0 Then
+            outText = outText & Mid$(result, pos)
+            Exit Do
+        End If
+
+        ' Text vor dem Encoded-Word uebernehmen
+        If startTag > pos Then
+            outText = outText & Mid$(result, pos, startTag - pos)
+        End If
+
+        endTag = InStr(startTag + 2, result, "?=")
+        If endTag = 0 Then
+            outText = outText & Mid$(result, startTag)
+            Exit Do
+        End If
+
+        encodedWord = Mid$(result, startTag + 2, endTag - startTag - 2)
+        ' encodedWord hat Format: charset?encoding?encoded_text
+        Dim q1 As Long, q2 As Long
+        q1 = InStr(1, encodedWord, "?")
+        If q1 > 0 Then q2 = InStr(q1 + 1, encodedWord, "?")
+
+        If q1 > 0 And q2 > 0 Then
+            charset = Left$(encodedWord, q1 - 1)
+            encoding = Mid$(encodedWord, q1 + 1, q2 - q1 - 1)
+            encodedText = Mid$(encodedWord, q2 + 1)
+
+            If UCase$(encoding) = "Q" Then
+                ' Q-Encoding: _ = Space, =XX = Hex-Byte
+                encodedText = Replace(encodedText, "_", " ")
+                decoded = DecodeQuotedPrintable(encodedText, charset)
+            ElseIf UCase$(encoding) = "B" Then
+                ' B-Encoding: Base64
+                decoded = DecodeBase64ToString(encodedText, charset)
+            Else
+                decoded = encodedText
+            End If
+            outText = outText & decoded
+        Else
+            outText = outText & "=?" & encodedWord & "?="
+        End If
+
+        pos = endTag + 2
+
+        ' Whitespace zwischen aufeinanderfolgenden Encoded-Words ueberspringen (RFC 2047 Sec 5)
+        If pos <= Len(result) Then
+            Dim peek As Long
+            peek = pos
+            Do While peek <= Len(result)
+                Dim pCh As String
+                pCh = Mid$(result, peek, 1)
+                If pCh <> " " And pCh <> vbTab And pCh <> vbLf And pCh <> vbCr Then Exit Do
+                peek = peek + 1
+            Loop
+            ' Nur ueberspringen wenn direkt ein weiteres Encoded-Word folgt
+            If peek <= Len(result) - 1 Then
+                If Mid$(result, peek, 2) = "=?" Then pos = peek
+            End If
+        End If
+    Loop
+
+    DecodeMimeHeaderValue = outText
 End Function
 
 Private Function IsLikelyBase64(ByVal textIn As String) As Boolean
@@ -1382,15 +1511,42 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
 
     If Not FolderExists(folderPath) Then Exit Function
 
+    Debug.Print "[EML-Import] Ordner: " & folderPath
+
     fileName = Dir$(folderPath & "/" & "*.eml")
     Do While Len(fileName) > 0
         filePath = folderPath & "/" & fileName
+        Debug.Print "[EML-Import] Datei: " & fileName
+
         rawText = ReadTextFile(filePath)
+        Debug.Print "[EML-Import] Dateigroesse: " & Len(rawText) & " Zeichen"
+
+        ' Debug: erste 200 Zeichen des Rohtexts
+        If Len(rawText) > 0 Then
+            Debug.Print "[EML-Import] Rohtext-Start: '" & Left$(Replace(Replace(rawText, vbCr, "<CR>"), vbLf, "<LF>"), 200) & "'"
+        End If
+
         subj = ExtractHeaderValue(rawText, "Subject:")
         sender = ExtractHeaderValue(rawText, "From:")
         dateText = ExtractHeaderValue(rawText, "Date:")
+
+        Debug.Print "[EML-Import] Subject (roh): '" & Left$(subj, 100) & "'"
+        Debug.Print "[EML-Import] From (roh): '" & Left$(sender, 80) & "'"
+        Debug.Print "[EML-Import] Date (roh): '" & Left$(dateText, 60) & "'"
+
+        ' MIME-kodierte Header dekodieren (=?charset?Q?...?= / =?charset?B?...?=)
+        If InStr(1, subj, "=?") > 0 Then
+            subj = DecodeMimeHeaderValue(subj)
+            Debug.Print "[EML-Import] Subject (dekodiert): '" & Left$(subj, 100) & "'"
+        End If
+        If InStr(1, sender, "=?") > 0 Then
+            sender = DecodeMimeHeaderValue(sender)
+        End If
+
         If Len(dateText) = 0 Then dateText = CStr(FileDateTime(filePath))
         bodyText = ExtractBodyFromEmail(rawText)
+
+        Debug.Print "[EML-Import] Body-Laenge: " & Len(bodyText)
 
         outText = outText & MSG_DELIM & vbLf
         outText = outText & DATE_TAG & dateText & vbLf
@@ -1403,6 +1559,7 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
         fileName = Dir$()
     Loop
 
+    Debug.Print "[EML-Import] " & count & " Dateien gelesen"
     FetchMailMessagesFromPath = outText
 End Function
 
