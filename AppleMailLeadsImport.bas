@@ -68,7 +68,7 @@ Public Sub ImportLeadsFromAppleMail()
             Set parsed = ParseLeadContent(msgBody)
 
             If Not LeadAlreadyExists(tbl, parsed, msgDate) Then
-                AddLeadRow tbl, parsed, msgDate, leadType
+                AddLeadRow tbl, parsed, msgDate, leadType, msgSubject
             End If
         End If
     Next msgBlock
@@ -216,8 +216,9 @@ Private Sub MapLabelValue(ByRef fields As Object, ByVal rawKey As String, ByVal 
             Else
                 fields("Kontakt_Name") = valueNorm
             End If
-        Case "mobil", "telefonnummer": fields("Kontakt_Mobil") = valueNorm
+        Case "mobil", "telefonnummer", "festnetz": fields("Kontakt_Mobil") = valueNorm
         Case "e-mail", "e-mail-adresse": fields("Kontakt_Email") = valueNorm
+        Case "anschrift": fields("Kontakt_Anschrift") = valueNorm
         Case "erreichbarkeit": fields("Kontakt_Erreichbarkeit") = valueNorm
         Case "beziehung": fields("Senior_Beziehung") = valueNorm
         Case "alter": fields("Senior_Alter") = valueNorm
@@ -245,7 +246,7 @@ End Function
 ' =========================
 ' Excel Output
 ' =========================
-Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal msgDate As Date, ByVal leadType As String)
+Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal msgDate As Date, ByVal leadType As String, ByVal msgSubject As String)
     Dim newRow As ListRow
     Dim colIndex As Long
 
@@ -258,7 +259,7 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     SetCellByHeader newRow, "Telefonnummer", GetField(fields, "Kontakt_Mobil")
     SetCellByHeader newRow, "PLZ", GetField(fields, "PLZ")
     SetCellByHeader newRow, "PG", GetField(fields, "Senior_Pflegegrad")
-    SetCellByHeader newRow, "Notizen", BuildNotes(fields)
+    SetCellByHeader newRow, "Notizen", BuildNotes(fields, msgSubject)
 End Sub
 
 Private Sub SetCellByHeader(ByVal rowItem As ListRow, ByVal headerName As String, ByVal valueToSet As Variant)
@@ -299,10 +300,11 @@ Private Function GetField(ByVal fields As Object, ByVal keyName As String) As St
     End If
 End Function
 
-Private Function BuildNotes(ByVal fields As Object) As String
+Private Function BuildNotes(ByVal fields As Object, ByVal msgSubject As String) As String
     Dim notes As String
 
     notes = ""
+    notes = AppendNote(notes, "Betreff", msgSubject)
     notes = AppendNote(notes, "E-Mail", GetField(fields, "Kontakt_Email"))
     notes = AppendNote(notes, "Erreichbarkeit", GetField(fields, "Kontakt_Erreichbarkeit"))
     notes = AppendNote(notes, "Senior Name", GetField(fields, "Senior_Name"))
@@ -315,6 +317,7 @@ Private Function BuildNotes(ByVal fields As Object) As String
     notes = AppendNote(notes, "Nutzer", GetField(fields, "Nutzer"))
     notes = AppendNote(notes, "Alltagshilfe Aufgaben", GetField(fields, "Alltagshilfe_Aufgaben"))
     notes = AppendNote(notes, "Alltagshilfe Häufigkeit", GetField(fields, "Alltagshilfe_Haeufigkeit"))
+    notes = AppendNote(notes, "Anschrift", GetField(fields, "Kontakt_Anschrift"))
     notes = AppendNote(notes, "ID", GetField(fields, "Anfrage_ID"))
 
     BuildNotes = notes

@@ -1,0 +1,2708 @@
+Return-Path: <Info@vitalis-seniorendienst.de>
+Authentication-Results:  web.de; dkim=fail header.i=@vitalis-seniorendienst.de
+Received: from FR5P281CU006.outbound.protection.outlook.com ([40.107.149.132])
+ by mx-ha.web.de (mxweb004 [212.227.15.17]) with ESMTPS (Nemesis) id
+ 1M8QaK-1vnGCL3JBo-0062Hh for <neumann-steffen@web.de>; Sun, 15 Feb 2026
+ 16:20:21 +0100
+ARC-Seal: i=1; a=rsa-sha256; s=arcselector10001; d=microsoft.com; cv=none;
+ b=c73JI+HBvbyqBB3ehRucjxIL+fbtahvPQuyL9CXgd8C0biYqFHcuFGrmogJoH3ZklRwhjzzlMG3Gs5CkADapLttEijC9/0o9nj2tfUcb1N0QJuRgIH2E5cxHuMtXg9oXs48EHAKUuUru8FwlNN+oRKMe0vuK6o0wQoxQJZrEk7d/wC/FDZ3rrQ9h7GDLM8EIHvD7ykSE+pgDBxfUxX/V3myXkwEM2KkheJ7tIuL0FaDaPu/LHDr+insMhazwQFIL/itk+XuGQmUDMHpqnjsfVmXgE6FFHM7DYmnsVikfB089wTNXLV0Xyyl976rfluYds34ACP1JVqTz3HC8X5L25g==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=microsoft.com;
+ s=arcselector10001;
+ h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-AntiSpam-MessageData-ChunkCount:X-MS-Exchange-AntiSpam-MessageData-0:X-MS-Exchange-AntiSpam-MessageData-1;
+ bh=tHggtETguKLqkk/2XXYNjBJPFPLxpt4JrPR0YT3ZMUQ=;
+ b=A2/Mlb4ZIiia/R+N7LMPV51eZCyo5nDBzczYjCrm852h1AKnDcazn4FADEnNNJooheO/4HD9VX1HTh1OiGsG/1XLsrxg5yOjz9KXGPp+78IV5ULiOfS5RJB641HGK/5bUTDGtaOd5kkHg45uxbMXqnt2y77tMBSDpIltQ2TYCz3OFO8jl8FBIt0GrRS/8q3//jbmKjrBpd9DEMyITA2H5dJO3PIthxUw6Aupk0P7MKeJ6GffaJV22QGkngUpDgIn8HuhK5wEZPsIAz9/ZAIXyk5ToCXAFjcXB88lGjffjm28el3tBS0db4frPwwHPbDHLV/T+Lx3j6XYVaeeg6IE/A==
+ARC-Authentication-Results: i=1; mx.microsoft.com 1; spf=pass
+ smtp.mailfrom=vitalis-seniorendienst.de; dmarc=pass action=none
+ header.from=vitalis-seniorendienst.de; dkim=pass
+ header.d=vitalis-seniorendienst.de; arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+ d=vitalis-seniorendienst.de; s=selector1;
+ h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-SenderADCheck;
+ bh=tHggtETguKLqkk/2XXYNjBJPFPLxpt4JrPR0YT3ZMUQ=;
+ b=FvafhcrK4WazHaISqG5Ei4b30HGPMd6NNIgrzKkciGDluu3Uh6+pwCmwfUGVHk938jzrynw/EadthqKU24hSAHHGWeZg7aEpPzhlXZmSN2qKT1F0a/uWhhO08jqRNts0ifYm3zqdKVadENDMgygz29Evd+mW8KkOuB2cekO+AR5JpKolVXtdmCBfr5BJme+hujTdQVuL/hAjQ7nyqzQVa8/9alVT8Lf7SxA0jVtKR0+NbN0hlhKAcMkahPaRvHhLCb6ob56bEVm/e834N3z+vCE0WAQA3oOsHxtL7bSSuxWBKx9rUa2Vgdr8gPRfMHZM7v3keKtffX1XIR5sHL/dCQ==
+Received: from BEZP281MB2773.DEUP281.PROD.OUTLOOK.COM (2603:10a6:b10:55::13)
+ by FR5P281MB4813.DEUP281.PROD.OUTLOOK.COM (2603:10a6:d10:14b::11) with
+ Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.9611.16; Sun, 15 Feb
+ 2026 15:20:20 +0000
+Received: from BEZP281MB2773.DEUP281.PROD.OUTLOOK.COM
+ ([fe80::5203:b9e8:b79d:503e]) by BEZP281MB2773.DEUP281.PROD.OUTLOOK.COM
+ ([fe80::5203:b9e8:b79d:503e%5]) with mapi id 15.20.9611.013; Sun, 15 Feb 2026
+ 15:20:20 +0000
+From: Info Vitalis <Info@vitalis-seniorendienst.de>
+To: neumann-steffen <neumann-steffen@web.de>
+Subject: =?Windows-1252?Q?WG:_Neue_Anfrage:_Sabine_B=E4uml?=
+Thread-Topic: =?Windows-1252?Q?Neue_Anfrage:_Sabine_B=E4uml?=
+Thread-Index: AQHcm1Rdn4nfVxJ370Oeyr3F56Y7cLWD5oaT
+Date: Sun, 15 Feb 2026 15:20:20 +0000
+Message-ID:
+ <BEZP281MB2773C4738FEAF9157D534B358C6FA@BEZP281MB2773.DEUP281.PROD.OUTLOOK.COM>
+References: <DNHH3k6vTr--inug-fzPtw@geopod-ismtpd-7>
+In-Reply-To: <DNHH3k6vTr--inug-fzPtw@geopod-ismtpd-7>
+Accept-Language: de-DE, en-US
+Content-Language: de-DE
+X-MS-Has-Attach: yes
+X-MS-TNEF-Correlator:
+x-ms-reactions: allow
+x-ms-publictraffictype: Email
+x-ms-traffictypediagnostic: BEZP281MB2773:EE_|FR5P281MB4813:EE_
+x-ms-office365-filtering-correlation-id: 1c4496f9-acfb-4ecb-5762-08de6ca5bb77
+x-ld-processed: 4fbb6ae4-51bc-4fe8-a9e2-6f46dd7edd15,ExtAddr
+x-ms-exchange-senderadcheck: 1
+x-ms-exchange-antispam-relay: 0
+x-microsoft-antispam:
+ BCL:0;ARA:13230040|10070799003|1800799024|376014|366016|69100299015|7049299003|6049299003|3109299003|38070700021|8096899003|4053099003|13003099007;
+x-microsoft-antispam-message-info:
+ =?Windows-1252?Q?1u8d2P22+w65xpy+8EIgMVwIz0gWlbYoJFO3gog99kRAsi48kOZgwYso?=
+ =?Windows-1252?Q?LcIrwrDEUtyrJt1yp/AX2jz7TBH7qM/gxUDgKIwi18CFrSBg6hrdjWw5?=
+ =?Windows-1252?Q?TkDr74DpeyTuvOhaCfYwp5qeRekB1dw/EUNy0Iq1vlgtA4uTtaonfZEP?=
+ =?Windows-1252?Q?QZscDMWpnASL8+yxl0hj3onHfildzF6Y5zIY6lK2GodKPx5py/FFYLyE?=
+ =?Windows-1252?Q?h2oblRT2jiX3nkhBrGK0FjnvG8tnjDY6Oen1mih2yNr7v64/ew0z2bTd?=
+ =?Windows-1252?Q?hLieEKW2hKj9SbTEQ0B8y0Q92qCymBD6r+zyf+jxjAIwgRjtIso+mK3B?=
+ =?Windows-1252?Q?C1oVdTpNIZBu3GRqvqpk5uanLdrXI1877MkeofcB056vzYZ+RpBANjFf?=
+ =?Windows-1252?Q?yayNPFM+v8XCfAR+ANYg+fOezYP8yqeI6eIpz7FmgCMmt2km+wQVPpBi?=
+ =?Windows-1252?Q?bxWCRwmlBz5gsQifMmYitj2MLZ/Igs4JgUj3NNRw7LaT30XBJBszQip5?=
+ =?Windows-1252?Q?xAjUuNQwb/BVNwxgzKXuyaGVvngkPIbzDx87zA1H/8ApiWwc5Fif4g19?=
+ =?Windows-1252?Q?0a+RUYeqoV0vPflHjsrtcxbSC+qJEHPA9Cf8Sl6nbuCO3RVVW8tzMRSH?=
+ =?Windows-1252?Q?0fY9arF7JE0ZuOGFA2QXlFVmGaO/wyrTIi+pDWfExu1J8RU14E/86H8j?=
+ =?Windows-1252?Q?Nw1dyCAtr738aATY23UVtG11NIvcU55h43lKx5/r/Du7aSiXdG2Sb2Cg?=
+ =?Windows-1252?Q?sxYGqsSpd9TIiSeNdLopowiuG8bE1FtMsqqMgXI6Fbql6QA0lNRJUC4E?=
+ =?Windows-1252?Q?gRBht9S/9nbo5+wAO7LPd/OAGTKkxpGPEV98xB+pIddYrFZWdWWDU3RM?=
+ =?Windows-1252?Q?wa9zGRn1YmEnUrUfB4sOq5Mj9yxdXWYANPvDvYuR7jxqlY6p98xWeRH+?=
+ =?Windows-1252?Q?dpCp0Rr2biSqo5oGGoBgWOcfj+PbGJMEjYBWlhxZsG6MfKn5LokQaBg1?=
+ =?Windows-1252?Q?ZxtcrB2NSlv5uJHOwbCrmpJBXN14EPXU+UJtPV6Ll0P/xpLCiBNlf6do?=
+ =?Windows-1252?Q?Pl8QjmvhiStEvdRSmESDCEerr1o48cwBy+jSA+IDGhofGttRCWhAym7A?=
+ =?Windows-1252?Q?DbpFZH3Q0LwEtuth/H07zg0ZbG2YOAYnojbSYmpXRLUORA4ArQarY5y+?=
+ =?Windows-1252?Q?vRsWrulFuXPthzuIKYYVTQp6TfVeRJpIfIBFWDjXx2EZm+IWkeR+TzKV?=
+ =?Windows-1252?Q?d5pxysJnSLnB+6aHMSx2YwKpp7jw6fzJcrOukn/snlwg54pN5goLTx9G?=
+ =?Windows-1252?Q?E3IJMDpCtuUIhRG3f6gsVtCPXnyaLwre5M9WIJZKbFtFdMK+5sMwTOJL?=
+ =?Windows-1252?Q?m/xhwD7yLztnccwL89E2EdrEBN2KLgVD4dIxaCPahBYeTb1fCymbk03g?=
+ =?Windows-1252?Q?sj1Wrg5gOCfKc8bN4VxmDd8Eq2L9dRzV2c2P01iwnr3BFtXPheKcr64t?=
+ =?Windows-1252?Q?psavnomz8Jn03QGv5LtuxlB55tMCbpcl/HAevJNt3XMmt4HuyHYvSrEH?=
+ =?Windows-1252?Q?a9lKi/sc5Pf18gEL1wp9UuHh/kWDKTd0nPMOt2aWMf6Bu0WJdrdK9OHl?=
+ =?Windows-1252?Q?TqIWmDK4ccHannwENsa5PXvxEvgM7NGRDWqzsRow9U60S16h9m4wzy0F?=
+ =?Windows-1252?Q?W1rPOjSAt1A=3D?=
+x-forefront-antispam-report:
+ CIP:255.255.255.255;CTRY:;LANG:de;SCL:1;SRV:;IPV:NLI;SFV:NSPM;H:BEZP281MB2773.DEUP281.PROD.OUTLOOK.COM;PTR:;CAT:NONE;SFS:(13230040)(10070799003)(1800799024)(376014)(366016)(69100299015)(7049299003)(6049299003)(3109299003)(38070700021)(8096899003)(4053099003)(13003099007);DIR:OUT;SFP:1102;
+x-ms-exchange-antispam-messagedata-chunkcount: 2
+x-ms-exchange-antispam-messagedata-0:
+ =?Windows-1252?Q?wjkqq/PggB74HvW8qFn4vvwcgoVVI15eB2TBo2806PeHRDxtxzHu7lsJ?=
+ =?Windows-1252?Q?I+jp3+68uKjkNmbJdOx+0ZKxnbi+FmM6EDVuFp5IXuxipVNv2IH8igEw?=
+ =?Windows-1252?Q?Ta3EhjMlqlSxN7AeNueYTVa09JZTTG5pxQ//6j6vsHt67IdeEbIQsvl3?=
+ =?Windows-1252?Q?cgkkrL8u1P26saSTucE3DIPuPmRmuDDN917cdIHGCha3a5CCWWeO3dOR?=
+ =?Windows-1252?Q?waHdhZPzJesmkVT72GQti8LFA6CC0PcyxmKS3G3xyhubPbX6h6e79bRm?=
+ =?Windows-1252?Q?nSSeOHn/U590VlcaelaL7WAw1geqFFs2jkotoCdzPSpv5KHwkHQVKYnu?=
+ =?Windows-1252?Q?rXTnMjhjcYXUQBVYYuVBGUbc68REjQM37IdbUw9uP63dR0sjoCoZ4kJy?=
+ =?Windows-1252?Q?ARP6DK5UwafWt2hWY/yHobpySLK0qTBM8/GzzRob9HVkwtoMAkkrRowp?=
+ =?Windows-1252?Q?f0OrLuBwbWciNrN7TaUO+PXyF9L9AFds5xuvU9J1rWMeS6jN5uSCh3rB?=
+ =?Windows-1252?Q?Q6vu7kvWVfkyOKXKO6C3rghLwGId55PN0kUjIoNDONYea2on5Jq/HoTD?=
+ =?Windows-1252?Q?TVh0XUcTAEfeSfSw3jaRJDg1Jbd87rkm7bwuXW1tqLX7b/V5N/zME97G?=
+ =?Windows-1252?Q?o0GERo+olpOWgwSSnVUho5A61929ar30kAf8W0jAcoA47N7Kx4tNjEfW?=
+ =?Windows-1252?Q?ScLlejT5ubCnIHhOR1oX7EVx+Kg5WkRUVvKMQiHjxb/61d7n4GA4jR0D?=
+ =?Windows-1252?Q?QkxdunBYhPLrmqdowVd22S7MAtUJ3evsyUCUEftMJKbMkeGq0OqcQLOB?=
+ =?Windows-1252?Q?sTXAK5cWAPF0a1Kzclp6xTd0u89dSIdFl/yihiRIsNdHKx92nV5HAg62?=
+ =?Windows-1252?Q?ACLZZPGvwWJ7RD3ozyejF6a35ppyz+vdOINSOHuBJxL/N5RkkmWlnnAU?=
+ =?Windows-1252?Q?P6kmFsrCwqqmH8BkzgfYxQAeWoyJXeqcGTz/TTNaef6ms43prNODfvSZ?=
+ =?Windows-1252?Q?oV+KsTRvhwuth/PPL22KL7qrD+Uu66rrxJ7dwXWJdddG3/GC3dQfymxk?=
+ =?Windows-1252?Q?5eRxeEfxbrL9RAqZteVFHqTKqjztxOZMPsVPr3BBx/yJs6Joa7iY2nWr?=
+ =?Windows-1252?Q?ynxrBTzR2j+nfM5w0Xgx9TUKgxtfrqmdyr2BT4FhrAeeojFrtQ058ZyY?=
+ =?Windows-1252?Q?4TeVL/5McoQXxAcB/TaQLeglRcZ25i+BFQZoeHosnlMSGOkut8Lkz20G?=
+ =?Windows-1252?Q?Skgeg7L2i+qeq0oodr143bgz08i3utOFd/RhvG1bbSzPM/xxNLRQO1P0?=
+ =?Windows-1252?Q?C4hIXCmXUCgeaminxb8ThC6gKQNtT+CMfQWtc9T4BDt4W1m74r7XfARG?=
+ =?Windows-1252?Q?eg+kp4KG48k9bUjy5fEdJ/kSObpq0zjM496Dj9rZjJvM2iqMlkaqS0GG?=
+ =?Windows-1252?Q?RXW9mKYEFu/IU+yhZTio5fPt1ZxekkYAXACAYxGLG1t15LSWoeVcdUl5?=
+ =?Windows-1252?Q?u0Xyv9GbXdUVezFDWmYsieQtIi2yNk91zCi3Ns22ztH2uZ3h3NfVndxa?=
+ =?Windows-1252?Q?hA6t15lkAYDs5yzIaWCIS/90KJ9Jqk5OvQ6mjafHS7zU99HcpVyf/oeL?=
+ =?Windows-1252?Q?Hg3uIoEoDnh2S2G5il+xri4Nz6TyGQcAWo+wFzmErD4LYgPyv6xH8eq3?=
+ =?Windows-1252?Q?Lwh0H1kZVBTp6wFr05LitWQ4coKkKTS2t6kOO+nPc7EjBZahEbnbL/7Y?=
+ =?Windows-1252?Q?8VVsRIH3MJIBzPwZk3oK5yrmQSQJfOp4tSqmonfQ/pMav+ekykwn9c+/?=
+ =?Windows-1252?Q?cTeqUF3xn8aOHCsHwfKsdTmRcGN1sZBcTN9Ms/Jd0eIu25o8KV72Xqs/?=
+ =?Windows-1252?Q?y3pJerahHqwowuWT7swiuwaD+Vzd0L/NzdRcROEmY/toKv0J/FLWjVRY?=
+ =?Windows-1252?Q?nhLdi+47?=
+x-ms-exchange-antispam-messagedata-1:
+ boheC+4SiGCNrTYY8oUq8PjKcFPDJhwPsBQT7zIbW9tMT4jrSFuq7p6M
+Content-Type: multipart/mixed;
+	boundary="_005_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_"
+MIME-Version: 1.0
+X-OriginatorOrg: vitalis-seniorendienst.de
+X-MS-Exchange-CrossTenant-AuthAs: Internal
+X-MS-Exchange-CrossTenant-AuthSource: BEZP281MB2773.DEUP281.PROD.OUTLOOK.COM
+X-MS-Exchange-CrossTenant-Network-Message-Id: 1c4496f9-acfb-4ecb-5762-08de6ca5bb77
+X-MS-Exchange-CrossTenant-originalarrivaltime: 15 Feb 2026 15:20:20.3529
+ (UTC)
+X-MS-Exchange-CrossTenant-fromentityheader: Hosted
+X-MS-Exchange-CrossTenant-id: 4fbb6ae4-51bc-4fe8-a9e2-6f46dd7edd15
+X-MS-Exchange-CrossTenant-mailboxtype: HOSTED
+X-MS-Exchange-CrossTenant-userprincipalname: q/3hgJE/++GKoPQfAYPq2g+nv8knTwF30pFcfC9l9c72vUU/6bKN/ACMUP8KHXT7w/tF3zeDBUAAHOcIjL//gtdY6R3pe/4GeKmex86s3gY=
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: FR5P281MB4813
+Envelope-To: <neumann-steffen@web.de>
+UI-InboundReport: unknown:2;M01:P0:MA86kOgj0As=;1gPgj3wi/KO+GbjZCWDOU8khzHmd
+ 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
+ 52n9fmFvSDmG2kxFOwQ72Sg=
+
+--_005_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_
+Content-Type: multipart/alternative;
+	boundary="_000_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_"
+
+--_000_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_
+Content-Type: text/plain; charset="Windows-1252"
+Content-Transfer-Encoding: quoted-printable
+
+
+
+Von: Anfragen - Verbund Pflegehilfe <anfragen@pflegehilfe.de>
+Datum: Mittwoch, 11. Februar 2026 um 13:45
+An: Info Vitalis <Info@vitalis-seniorendienst.de>, Marcia Rubenbauer <m.rub=
+enbauer@vitalis-seniorendienst.de>
+Betreff: Neue Anfrage: Sabine B=E4uml
+
+[Verbund Pflegehilfe]<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.=
+nbkQ8cxEjPIayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2BW-2F1Sd8a4CjWmnPs6hobUZIvlWUA9x=
+4R1ML-2FId29Oxg1-2BIHLGUALKb3cJFN6wbzYVWv4QN1Y-2B7YDr3yr8hsYtpe5qkd4vOg5ARc=
+Soz2d5g7F3FQ-3D-3D1do6_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6i=
+CwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PV=
+w7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmF=
+SD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnG=
+lTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW=
+7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veqSjh8lSzAITuI=
+7AqLUMMW9OBtiKrWJjPkEjwJLW1TqpZX6c91AfjN9WE-2BZ48pSYPR-2FHHKFoowI-2BAsD9QY3=
+U76yY9z2lKu-2FLuhPT4zsEpYROFpGakMTBVYqyYwxihvRhD-2Bih8zO8UzgdFHtA0pWvgxS7GP=
+0KPNuXrB50VWaV4Qrg-3D>   [T=DCV-zertifiziert]
+________________________________
+=9B=9B Neue Anfrage: Std. Betreuung
+Sehr geehrter Herr Maghrebi, Sehr geehrte Frau Rubenbauer,
+
+aufgrund Ihrer Kapazit=E4tsmeldung erhalten Sie untenstehend die Kontaktdat=
+en mit der Anfragen-Nummer 11737061. Wir danken Ihnen f=FCr eine zeitnahe K=
+ontaktaufnahme.
+
+Die Kontaktdaten wurden an bis zu drei Anbieter gesendet.
+[Kontakt]
+Kontakt=ADinformationen des Interessenten
+Name:
+Frau Sabine B=E4uml
+Mobil:
++49 1717265494<tel:+49%201717265494>
+E-Mail-Adresse:
+sabine@baeumls.de<mailto:sabine@baeumls.de>
+Erreichbarkeit:
+Ganzt=E4gig telefonisch gut erreichbar
+
+Informationen zum Senior
+Beziehung:
+Ehepartner
+Pflegegrad:
+Pflegegrad 2
+Lebenssituation:
+Lebt mit Ehepartner*in, Mehrfamilienhaus (MFH), Wohnung
+Mobilit=E4t:
+Mobil im Rollstuhl
+Medizinisches:
+Gehirntumor, L=E4hmungen
+________________________________
+
+Anfragedetails: Std. Betreuung
+Anfragen-Nr.:
+11737061
+Bedarfsort:
+85445 Oberding-DE
+Weitere Details:
+Pflegegrad/-stufe: 2
+Aufgaben: Betreuung + Haushalt
+W=F6chentlicher Umfang: Einmal w=F6chentlich
+Umfang am St=FCck: 1 Stunde
+Abrechnung =FCber Bet.- & Entlastungsleistungen: Ja
+Budgetrahmen: 25 =80 bis 55 =80 pro Stunde
+Geschlecht der Betreuungskraft: Weiblich
+Bedarf: Schnellstm=F6glich
+                        [Datenschutz]
+Datenschutz
+
+Zustimmung zur Datenschutz=ADerkl=E4rung:
+11.02.2026 13:40 Uhr
+
+Zustimmung zur Kontaktweitergabe:
+11.02.2026 13:45 Uhr
+
+Das Beratungsgespr=E4ch wurde am
+11.02.2026 13:45 Uhr
+ von
+Merisa Aliti
+ gef=FChrt.
+[?]
+Anfragen-Manager: Anfragen digital verwalten
+Steigen Sie mit dem Anfragen-Manager in die digitale Kundengewinnung ein. E=
+infach, effizient und zukunftsorientiert. Das sind Ihre Vorteile:
+[-]
+Anfragen zentral verwalten
+[-]
+Buchungspotenziale optimieren
+[-]
+Kapazit=E4ten mit passenden Anfragen auslasten
+<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7ey=
+Oci0eMGZzJ8KO7UIFwVFSWUJxVcNCfaF-2BtYf1eNuggM3e6ZwV4VqF2YAZyK7W-2FcRkfp5vke=
+BXcNLjs5Mdya-2FTKq6pTtIJrscjROWJmCLpeDCkA0B5zOouxZyvogcNdp-2BQ-3D-3DlZd9_CB=
+tBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B=
+-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgG=
+N4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt=
+825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0=
+DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv=
+6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veNjXAxYrRa9zqwZXyVQWfL-2Fop7At9vH2A97zh=
+gMKalH-2FhjvEnydoffn69Fd6mTk5rffyiO4cJbudlmcpgGrJX1YoZSE4GpamAfUw9ZrHDpGVY6=
+nIrMO3bEu9Z-2FRJTAkqKuGi5QGxDanq70ZnqAl2fZCYE0porhHG8V1CrT1kNxuc-3D>
+Zum Anfragen-Manager =BB<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du0=
+01.nbkQ8cxEjPIayrSY3E7eyOci0eMGZzJ8KO7UIFwVFSWUJxVcNCfaF-2BtYf1eNuggM3e6ZwV=
+4VqF2YAZyK7W-2FcRkfp5vkeBXcNLjs5Mdya-2FTKq6pTtIJrscjROWJmCLpeDCkA0B5zOouxZy=
+vogcNdp-2BQ-3D-3DlZd9_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iC=
+wyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw=
+7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFS=
+D-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGl=
+TShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7=
+q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veNjXAxYrRa9zqwZ=
+XyVQWfL-2Fop7At9vH2A97zhgMKalH-2FhjvEnydoffn69Fd6mTk5rffyiO4cJbudlmcpgGrJX1=
+YoZSE4GpamAfUw9ZrHDpGVY6nIrMO3bEu9Z-2FRJTAkqKuGi5QGxDanq70ZnqAl2fZCYE0porhH=
+G8V1CrT1kNxuc-3D>
+
+Anfrage reklamieren
+Sollte diese Anfrage nicht den vereinbarten Qualit=E4tsstandards gen=FCgen,=
+ k=F6nnen Sie diese <https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.n=
+bkQ8cxEjPIayrSY3E7eyHY0s1ZtFHfON6I2FHRkY-2FMNBoNpL4RMopbgbuCyfCsXuWxshPDhU1=
+snjvFVB5MddgI0LOsanVokBC9senZg8sxo8R-2BGtUz8aQwWdfat2uqvOruvi3S0Tk1mLQYPdLC=
+9wg-3D-3D1fNl_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJ=
+WaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm=
+1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEd=
+rV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9=
+nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJK=
+bhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veF-2BlbXH1bePJrHFKuoLFJ=
+6i-2BlrfDJGg9kyHSt6PRSd0WDp-2B8X3yEnzXvhJ-2FzfQbdBjdrS9rVOp35OZeTMcUrOuBY1M=
+7xJLdYAzLaJZ23T0q-2BQBZMtIacfYDwbdIenMyYd8uBBsNwVQOpVkxOF-2B-2B5WohYqZQiBeH=
+YY0myhTMmnH3g-3D> innerhalb der n=E4chsten 7 Tage<https://u7110386.ct.sendg=
+rid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyHY0s1ZtFHfON6I2FHRkY-2FMNB=
+oNpL4RMopbgbuCyfCsXuWxshPDhU1snjvFVB5MddgI0LOsanVokBC9senZg8sxo8R-2BGtUz8aQ=
+wWdfat2uqvOruvi3S0Tk1mLQYPdLC9wg-3D-3D1fNl_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzz=
+k2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9Y=
+P1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2B=
+trzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pv=
+mf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-=
+2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkA=
+pkXX8veF-2BlbXH1bePJrHFKuoLFJ6i-2BlrfDJGg9kyHSt6PRSd0WDp-2B8X3yEnzXvhJ-2Fzf=
+QbdBjdrS9rVOp35OZeTMcUrOuBY1M7xJLdYAzLaJZ23T0q-2BQBZMtIacfYDwbdIenMyYd8uBBs=
+NwVQOpVkxOF-2B-2B5WohYqZQiBeHYY0myhTMmnH3g-3D> reklamieren. Bitte haben Sie=
+ Verst=E4ndnis, dass nach dieser Frist keine Reklamation mehr m=F6glich ist=
+. <https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7=
+eyHY0s1ZtFHfON6I2FHRkY-2FMNBoNpL4RMopbgbuCyfCsXuWxshPDhU1snjvFVB5MddgI0LOsa=
+nVokBC9senZg8sxo8R-2BGtUz8aQwWdfat2uqvOruvi3S0Tk1mLQYPdLC9wg-3D-3D1fNl_CBtB=
+lRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2=
+FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4=
+FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt82=
+5wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DS=
+hXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6u=
+DcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veF-2BlbXH1bePJrHFKuoLFJ6i-2BlrfDJGg9kyHSt=
+6PRSd0WDp-2B8X3yEnzXvhJ-2FzfQbdBjdrS9rVOp35OZeTMcUrOuBY1M7xJLdYAzLaJZ23T0q-=
+2BQBZMtIacfYDwbdIenMyYd8uBBsNwVQOpVkxOF-2B-2B5WohYqZQiBeHYY0myhTMmnH3g-3D>
+Anfrage reklamieren =BB<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du00=
+1.nbkQ8cxEjPIayrSY3E7eyHY0s1ZtFHfON6I2FHRkY-2FMNBoNpL4RMopbgbuCyfCsXuWxshPD=
+hU1snjvFVB5MddgI0LOsanVokBC9senZg8sxo8R-2BGtUz8aQwWdfat2uqvOruvi3S0Tk1mLQYP=
+dLC9wg-3D-3D1fNl_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTc=
+bXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5y=
+inm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2Br=
+LEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTr=
+Su9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05=
+DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veF-2BlbXH1bePJrHFKuo=
+LFJ6i-2BlrfDJGg9kyHSt6PRSd0WDp-2B8X3yEnzXvhJ-2FzfQbdBjdrS9rVOp35OZeTMcUrOuB=
+Y1M7xJLdYAzLaJZ23T0q-2BQBZMtIacfYDwbdIenMyYd8uBBsNwVQOpVkxOF-2B-2B5WohYqZQi=
+BeHYY0myhTMmnH3g-3D>
+Bei R=FCckfragen stehen wir Ihnen gerne telefonisch oder per E-Mail zur Ver=
+f=FCgung.
+
+Wir w=FCnschen Ihnen viel Erfolg!
+Ihr Verbund Pflegehilfe
+________________________________
+[Verbund Pflegehilfe]<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.=
+nbkQ8cxEjPIayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2BW-2F1Sd8a4CjWmnPs6hobUZIvlWUA9x=
+4R1ML-2FId29Oxg1-2BIHLGUALKb3cJFN6wbzYVWv4QN1Y-2B7YDr3yr8hsYtpe5qKmKxIZg2Yt=
+MdmztUthWRYUZVXyYDlqpID8y3fcmlUb8-3D1BhH_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2=
+-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1=
+cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2Btr=
+zNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf=
+7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F=
+60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApk=
+XX8ve1591tkZhpFVJ3Vb7s9JnFbHUyNTuMvMhIadHb5WN2-2FT7o9OW43KcRiziGY67nwY-2BgS=
+0dAnx1vpzy-2FMMZeg8WTlfWcUnsVUJWsuNL-2B72Ee8PAAWgmhtwxxqWUTzcW-2FWQVNHErW2E=
+vEogl6-2B963of0f1Ejd-2FocBEpFE1xcfVDdPwE-3D>
+[Telefon]
+06131/26 52 011<tel:004961312652011>
+[Fax]
+06131/83 82 168<tel:004961318382168>
+[E-Mail]
+partnerbetreuung@pflegehilfe.de<mailto:partnerbetreuung@pflegehilfe.de>
+
+[Human score]<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ8cxE=
+jPIayrSY3E7eyOLbMC7pSHsHpM8SZX2mQVH-2FXLtbLNhm0jNxh-2BKNU4irMl3jfEYbVeiwfhU=
+xKRM34Uf92xQO1vWcQz7CM4NdsQ6ZkkjW5r9tjw6tdkXCgd2xbInITo4AwCYI-2BPKIzH7fbA-3=
+D-3DheXb_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiS=
+QZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg0=
+5YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2=
+FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI=
+-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiK=
+pBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veBfY3n7lag2HQMP-2FoXoc6c1Ki5=
+hQmwmsrxgOQwVMU4I9sbq8W37eK5-2FUKbK1Y3WskNwyz-2FyNY7S6luk5QQQFWY12nj5sgmshh=
+6heSkMZmWlImAb5-2BMRJUTEAWqGrpWWp-2FD9P6QM5lTJY1ZjLSpatqNmP0yAfU-2B1-2FIQiY=
+EYck5E8s-3D>  [Trustpilot Stars] <https://u7110386.ct.sendgrid.net/ls/click=
+?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyOLbMC7pSHsHpM8SZX2mQVH-2FXLtbLNhm0jNxh-2BK=
+NU4irMl3jfEYbVeiwfhUxKRM34Uf92xQO1vWcQz7CM4NdsQ6ZkkjW5r9tjw6tdkXCgd2xbInITo=
+4AwCYI-2BPKIzH7fbA-3D-3Dzsch_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A=
+-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhI=
+VQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kCh=
+mkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWu=
+lwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MS=
+SHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veaNRbNYJ=
+upELVeaH-2FQjhTaUw4EwGeBp33jINJz-2FbwjiTDw8WpJgdQsLoczTo9LMNBuQrdGonTMCsxap=
+CU-2BGih-2FwHo1nXvF4mltb4q1SYRg5M0Uirbwnw4cuZhA9lWQm7jdy0jUskTJoJZ16pPfTovl=
+xxYKX9KJ4WRgzTyxeDzeAU-3D>
+
+[number of reviews]<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nb=
+kQ8cxEjPIayrSY3E7eyOLbMC7pSHsHpM8SZX2mQVH-2FXLtbLNhm0jNxh-2BKNU4irMl3jfEYbV=
+eiwfhUxKRM34Uf92xQO1vWcQz7CM4NdsQ6ZkkjW5r9tjw6tdkXCgd2xbInITo4AwCYI-2BPKIzH=
+7fbA-3D-3Dz2SY_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbX=
+JWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yin=
+m1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLE=
+drV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu=
+9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJ=
+KbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8ve2EHTgj7Lky-2F7mW1LjLg=
+tPuuJFEuH81DPeQfrLy2pJvzsAbjr-2BgGA6O-2FbKB3K3WLPTWwOJLH0B-2FkKcPSRheXrkBa0=
+ZCwcSFVzu8NOKPca-2ByoTjHt9-2FKbud2gBgAJP7s1XeddsCx66U0eq-2BaMF-2FLG4-2Bq19S=
+xSryf2ijPKkzziwzkI-3D>  [Trustpilot Logo] <https://u7110386.ct.sendgrid.net=
+/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyOLbMC7pSHsHpM8SZX2mQVH-2FXLtbLNhm=
+0jNxh-2BKNU4irMl3jfEYbVeiwfhUxKRM34Uf92xQO1vWcQz7CM4NdsQ6ZkkjW5r9tjw6tdkXCg=
+d2xbInITo4AwCYI-2BPKIzH7fbA-3D-3DrQEq_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2B=
+p9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF=
+8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQ=
+gghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7Kz=
+qyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c=
+5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8=
+ve-2BqHpb7R9s3MXP-2BYnfZWV8cSdfNSz-2FFLw82ii-2BkZ7AEFIwpunrF9WTeMXDMYThZ0bR=
+Wqb0QNbwzXjHn45RwVdRU9o6UF5-2Bo8QZJGhzxdc9JbbtWYJyk3uVP5wdpXbvaUGxaWaTkjd7s=
+FMTqtYLv20MPfrr9bRKdSsi6m3WmFKJwg-3D>
+
+Datenschutz<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ8cxEjP=
+IayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2BW-2F3-2BuPQI-2BfFzU5AY3n33mxrlvPtKjKS3ab2=
+S4yFTJiP9cVdI0iFbInzYUuqsXFm6gScewWsV13znuvXvX8YYf7VSicGGi-2FvuOXp5Tcr3K-2F=
+U4FzCTnw-2BQkysMTHqLBrhQrWZ3wleEM87Jbs-2Bwe8ZYpxre0Ele_CBtBlRXWwa-2FzgSHW2e=
+6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4=
+YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWv=
+LnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2M=
+E-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xo=
+zUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RP=
+b8B0xrZjDBkApkXX8ve5aTl0Hxr7vWOKKD35torQmn4PzP9WWfz6SEc4SB5tENMTR9nj0Eq8SeM=
+3vSDnuY2-2FtiGqVDyEeCzNa0ewjLEVfTe3BNxvT3QpbPHta0OUUoAqAAg8U9GqMRSPotoKymR-=
+2F5-2BlqrpzyI0UI37s5LH6yjKvXu3gUfu9ukZG7L-2FnC-2BQ-3D>  |  AGB<https://u711=
+0386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyJgY-2F5rppRGW=
+BMvCvnY-2BW-2F3Ej9siR6jskpLcZSQ4QtNsSoIsTnF-2Bk9Ul0VqMBBIsDnwCUkBEn9EmQWEbn=
+rzrxfG92sldTSC4LCFB64WL8-2B8zUfPFPOZ9Z4WChS7zgSvJ2cj2ryyemWBVrt8-2B406kiEA-=
+3DsBLy_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZ=
+l-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05Y=
+XdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW=
+9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2=
+F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpB=
+Mdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8ve8h9JNcf-2Fe8985L26gd3SWUub6J2=
+7sjfwfWPQGMJ9ESHPaqMbp0R2LRomeZistV91pzqBv818SnDgDtJkDYxmgPbISh3fgnVZBQQWRP=
+bkD6IpgTXcTtAP0KD6EoHIeoYue4dublx2I3AJDrMaLDtChVu3GB1aH5EeQeGQI63yOGY-3D>  =
+|  Impressum<https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ8cxEj=
+PIayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2BW-2F2GfTYhiKuz5L4vO1f7V2eStHddo77rDQiS9k=
+Iq5d-2FLIHskmVjChmcQqtL1HE5X08PwzknmxV54G4JEnZnQsGnGGi-2Fs-2FxHPB9dUnJflHpO=
+wEhHO8u9ujcs8lRcli8-2B2G7Y-3Dmywl_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9Vf=
+ejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl=
+7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghS=
+Z8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOt=
+rhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHT=
+C55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8verg=
+n3zaKwE0N9rUsbF18sQsyN2erC4DDY4kGeoq-2F53CBtU-2FlMSp6WCkLfKOcsCT8DmIIFXXl8D=
+I8j1GvP6p2DJ22f89eJmPxbBisw6RcI0yvcfxvJ12YNJwTH9KWParXOSLKYinE5dJwqbDAm6jRO=
+C9G6BjSHW6YP3A1fI029EdI-3D>
+VP Verbund Pflegehilfe GmbH | Inge-Reitz-Stra=DFe 5-7 | 55120 Mainz | Deuts=
+chland
+Gesch=E4ftsf=FChrer: Johannes Haas, Michael Haas, Maximilian Haas
+Sitz der Gesellschaft: Mainz, Rheinland Pfalz
+Registergericht: Amtsgericht Frankfurt am Main | Registernummer: HRB 109505
+Umsatzsteuer-Identifikationsnummer gem=E4=DF =A7 27 a Umsatzsteuergesetz: D=
+E315652480
+________________________________
+Diese E-Mail k=F6nnte vertrauliche und/oder rechtlich gesch=FCtzte Informat=
+ionen enthalten. Wenn Sie nicht der richtige Adressat sind oder diese E-Mai=
+l irrt=FCmlich erhalten haben, informieren Sie bitte sofort den Absender un=
+d vernichten Sie diese E-Mail. Das unerlaubte Kopieren sowie die unbefugte =
+Weitergabe dieser E-Mail sind nicht gestattet.
+
+
+--_000_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_
+Content-Type: text/html; charset="Windows-1252"
+Content-Transfer-Encoding: quoted-printable
+
+<html>
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3DWindows-1=
+252">
+</head>
+<body>
+<div dir=3D"ltr" style=3D"font-family: Aptos, Arial, Helvetica, sans-serif;=
+ font-size: 12pt; color: rgb(0, 0, 0);">
+<br>
+</div>
+<div dir=3D"ltr" style=3D"font-family: Aptos, Arial, Helvetica, sans-serif;=
+ font-size: 12pt; color: rgb(0, 0, 0);">
+<br>
+</div>
+<div id=3D"mail-editor-reference-message-container" style=3D"color: inherit=
+; background-color: inherit;">
+<div dir=3D"ltr" class=3D"ms-outlook-mobile-reference-message skipProofing"=
+>
+<meta name=3D"viewport" content=3D"width=3Ddevice-width" style=3D"color: in=
+herit; background-color: inherit;">
+</div>
+<div class=3D"ms-outlook-mobile-reference-message skipProofing" style=3D"te=
+xt-align: left; padding: 3pt 0in 0in; border-width: 1pt medium medium; bord=
+er-style: solid none none; border-color: rgb(181, 196, 223) currentcolor cu=
+rrentcolor; font-family: Aptos; font-size: 12pt; color: black;">
+<b>Von: </b>Anfragen - Verbund Pflegehilfe &lt;anfragen@pflegehilfe.de&gt;<=
+br>
+<b>Datum: </b>Mittwoch, 11. Februar 2026 um 13:45<br>
+<b>An: </b>Info Vitalis &lt;Info@vitalis-seniorendienst.de&gt;, Marcia Rube=
+nbauer &lt;m.rubenbauer@vitalis-seniorendienst.de&gt;<br>
+<b>Betreff: </b>Neue Anfrage: Sabine B=E4uml<br>
+<br>
+</div>
+<center style=3D"color: inherit; background-color: inherit;">
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"text-align: left; margi=
+n: 0px; width: 100%; height: 100%; color: rgb(72, 69, 59); box-sizing: bord=
+er-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; background-color: rgb(242, 244, 247); paddin=
+g-top: 20px; vertical-align: top;">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"line-height: 1px; color: rgb(255, 255, 255); =
+max-width: 0px; max-height: 0px;">
+<center style=3D"color: inherit; background-color: inherit;"></center>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; padding: 20px 10px 15px 25px; vertical-align=
+: middle;">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 16px; color: rgb(72, 69, 59);"><b><a href=3D"https://u7110386.ct.sendgrid=
+.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2BW-2F1S=
+d8a4CjWmnPs6hobUZIvlWUA9x4R1ML-2FId29Oxg1-2BIHLGUALKb3cJFN6wbzYVWv4QN1Y-2B7=
+YDr3yr8hsYtpe5qkd4vOg5ARcSoz2d5g7F3FQ-3D-3D1do6_CBtBlRXWwa-2FzgSHW2e6n9THvZ=
+IWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX=
+06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcy=
+Ej-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWk=
+hd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA=
+4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZ=
+jDBkApkXX8veqSjh8lSzAITuI7AqLUMMW9OBtiKrWJjPkEjwJLW1TqpZX6c91AfjN9WE-2BZ48p=
+SYPR-2FHHKFoowI-2BAsD9QY3U76yY9z2lKu-2FLuhPT4zsEpYROFpGakMTBVYqyYwxihvRhD-2=
+Bih8zO8UzgdFHtA0pWvgxS7GP0KPNuXrB50VWaV4Qrg-3D" target=3D"_blank" title=3D"=
+Verbund Pflegehilfe" data-outlook-id=3D"395dfeeb-1896-40db-8e04-a5fe8f12b7f=
+b" style=3D"color: rgb(72, 69, 59); text-decoration: none;"><img src=3D"htt=
+ps://static.pflegehilfe.org/newsletter/logo-vp-186-59-1.png" alt=3D"Verbund=
+ Pflegehilfe" title=3D"Verbund Pflegehilfe" style=3D"max-width: 90%; max-he=
+ight: 70px;"></a></b></span></td>
+<td style=3D"text-align: right; padding: 20px 25px 15px 10px; vertical-alig=
+n: middle;">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 14px; color: rgb(72, 69, 59);"><img src=3D"https://static.pflegehilfe.org=
+/newsletter/tuev-siegel-124-65.png" alt=3D"T=DCV-zertifiziert" title=3D"T=
+=DCV-zertifiziert" style=3D"max-width: 75%; max-height: 65px;"></span></td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; box-sizing: border-box; border-collapse: collapse; border-spacing: 0px=
+;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 12px; padding-left: 25px;=
+">
+<hr style=3D"background-color: rgb(152, 196, 76); margin: 0px; height: 1px;=
+">
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 25px; padding: 5px 25px 10px; c=
+olor: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 25px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 22px;">
+<span style=3D"color: rgb(152, 196, 76);"><b>=9B=9B</b></span><b>&nbsp;Neue=
+ Anfrage: </b><span style=3D"color: rgb(152, 196, 76);"><b>Std. Betreuung</=
+b></span></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; padding: 14px 25px 10px; =
+color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Sehr geehrter Herr Maghrebi, Sehr geehrte Frau Rubenbauer,</b><br>
+<br>
+aufgrund Ihrer Kapazit=E4tsmeldung erhalten Sie untenstehend die <b>Kontakt=
+daten</b>&nbsp;mit der Anfragen-Nummer 11737061. Wir danken Ihnen f=FCr ein=
+e zeitnahe Kontaktaufnahme.<br>
+<br>
+Die Kontaktdaten wurden <b>an bis zu drei Anbieter</b>&nbsp;gesendet.</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255); padding: 10px 25px 25px;=
+">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 550px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"background-color: rgb(242, 244, 247);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 550px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 550px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding: 20px 25px 7px;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; padding-right: 15px;"><span style=3D"font-fa=
+mily: Arial, Helvetica, Tahoma, sans-serif; font-size: 8px; color: rgb(0, 0=
+, 0);"><img src=3D"https://static.pflegehilfe.org/newsletter/icons/icon-vis=
+itenkarte-43-35-1.png" alt=3D"Kontakt" title=3D"Kontakt" width=3D"43" style=
+=3D"width: 43px;"></span></td>
+<td style=3D"text-align: left; line-height: 23px; padding-top: 3px; color: =
+rgb(76, 139, 165);">
+<div style=3D"text-align: left; line-height: 23px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 18px;">
+<b>Kontakt=ADinformationen des Interessenten</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 550px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"padding-top: 5px; padding-right: 25px; padding-=
+left: 25px; vertical-align: top;">
+<div style=3D"margin-right: 30px; width: 100%; max-width: 130px; display: i=
+nline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 130px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Name:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 315px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 315px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Frau Sabine B=E4uml</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"padding-top: 5px; padding-right: 25px; padding-=
+left: 25px; vertical-align: top;">
+<div style=3D"margin-right: 30px; width: 100%; max-width: 130px; display: i=
+nline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 130px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Mobil:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 315px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 315px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px; color: rgb(76, 139, 165);">
+<a href=3D"tel:+49 1717265494" target=3D"_blank" title=3D"Telefon" data-out=
+look-id=3D"01ff761e-8027-4cb2-8117-9f92b52501c3" style=3D"color: rgb(76, 13=
+9, 165); text-decoration: none;">+49 1717265494</a></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"padding-top: 5px; padding-right: 25px; padding-=
+left: 25px; vertical-align: top;">
+<div style=3D"margin-right: 30px; width: 100%; max-width: 130px; display: i=
+nline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 130px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>E-Mail-Adresse:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 315px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 315px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"text-align: left; line-=
+height: 19px; box-sizing: border-box; border-collapse: collapse; border-spa=
+cing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px; color: rgb(76, 139, 165);">
+<a href=3D"mailto:sabine@baeumls.de" target=3D"_blank" title=3D"E-Mail-Adre=
+sse" data-outlook-id=3D"83aa2e3a-f041-401f-942d-0420e9f31b6c" style=3D"colo=
+r: rgb(76, 139, 165); text-decoration: none;">sabine@baeumls.de</a></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+<tr>
+<td align=3D"left" style=3D"padding-top: 5px; padding-right: 25px; padding-=
+left: 25px; vertical-align: top;">
+<div style=3D"margin-right: 30px; width: 100%; max-width: 130px; display: i=
+nline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 130px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Erreichbarkeit:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 315px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 315px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"text-align: left; line-=
+height: 19px; box-sizing: border-box; border-collapse: collapse; border-spa=
+cing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Ganzt=E4gig telefonisch gut erreichbar</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 550px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-top: 20px;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"line-height: 1px;">
+<div style=3D"line-height: 1px; font-family: Arial, Helvetica, Tahoma, sans=
+-serif; font-size: 1px; color: rgb(72, 69, 59);">
+&nbsp;</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 25px; background-color: rgb(255=
+, 255, 255); padding-right: 25px; padding-bottom: 15px; padding-left: 25px;=
+ color: rgb(152, 196, 76);">
+<div style=3D"text-align: left; line-height: 25px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 20px;">
+<b>Informationen zum Senior</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 5px; padding-left: 25px;"=
+>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"width: 100%; max-width: 140px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 140px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Beziehung:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 390px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 390px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Ehepartner</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 5px; padding-left: 25px;"=
+>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"width: 100%; max-width: 140px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 140px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Pflegegrad:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 390px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 390px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Pflegegrad 2</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 5px; padding-left: 25px;"=
+>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"width: 100%; max-width: 140px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 140px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Lebenssituation:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 390px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 390px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Lebt mit Ehepartner*in, Mehrfamilienhaus (MFH), Wohnung</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 5px; padding-left: 25px;"=
+>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"width: 100%; max-width: 140px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 140px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Mobilit=E4t:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 390px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 390px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Mobil im Rollstuhl</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 5px; padding-left: 25px;"=
+>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"width: 100%; max-width: 140px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 140px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Medizinisches:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 390px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 390px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Gehirntumor, L=E4hmungen</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; box-sizing: border-box; border-collapse: collapse; border-spacing: 0px=
+;">
+<tbody>
+<tr>
+<td style=3D"padding: 15px 50px 20px;">
+<hr style=3D"background-color: rgb(200, 199, 196); margin: 0px; height: 1px=
+;">
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(242, 244, 247);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; padding-top: 3px; padding=
+-bottom: 3px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+&nbsp;</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 25px; padding: 20px 25px 10px; =
+color: rgb(152, 196, 76);">
+<div style=3D"text-align: left; line-height: 25px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 20px;">
+<b>Anfragedetails: Std. Betreuung</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 5px; padding-left: 25px;"=
+>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"width: 100%; max-width: 140px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 140px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Anfragen-Nr.:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 390px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 390px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+11737061</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 5px; padding-left: 25px;"=
+>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"width: 100%; max-width: 140px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 140px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Bedarfsort:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 390px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 390px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+85445 Oberding-DE</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-right: 25px; padding-bottom: 5px; padding-left: 25px;"=
+>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"width: 100%; max-width: 140px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 140px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+<b>Weitere Details:</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 390px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 390px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Pflegegrad/-stufe: 2<br>
+Aufgaben: Betreuung + Haushalt<br>
+W=F6chentlicher Umfang: Einmal w=F6chentlich<br>
+Umfang am St=FCck: 1 Stunde<br>
+Abrechnung =FCber Bet.- &amp; Entlastungsleistungen: Ja<br>
+Budgetrahmen: 25 =80 bis 55 =80 pro Stunde<br>
+Geschlecht der Betreuungskraft: Weiblich<br>
+Bedarf: Schnellstm=F6glich</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding: 15px;">
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"width: 10px;"><span style=3D"font-family: Arial, Helvetica, Ta=
+homa, sans-serif; font-size: 1px; color: rgb(72, 69, 59);">&nbsp;</span></t=
+d>
+<td style=3D"background-color: rgb(152, 196, 76); padding: 2px; width: 1px;=
+"><span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-si=
+ze: 1px; color: rgb(72, 69, 59);">&nbsp;</span></td>
+<td style=3D"width: 10px;"><span style=3D"font-family: Arial, Helvetica, Ta=
+homa, sans-serif; color: rgb(72, 69, 59);">&nbsp;</span></td>
+<td style=3D"text-align: left; padding-top: 10px; padding-right: 15px; padd=
+ing-left: 15px;">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 8px; color: rgb(0, 0, 0);"><img src=3D"https://static.pflegehilfe.org/new=
+sletter/icons/icon-info-gruen-19-35-1.png" alt=3D"Datenschutz" title=3D"Dat=
+enschutz" width=3D"19" style=3D"width: 19px;"></span></td>
+<td style=3D"text-align: left; line-height: 23px; padding-top: 15px; paddin=
+g-right: 10px; color: rgb(76, 139, 165);">
+<div style=3D"text-align: left; line-height: 23px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 18px;">
+<b>Datenschutz</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"width: 10px;"><span style=3D"font-family: Arial, Helvetica, Ta=
+homa, sans-serif; font-size: 1px; color: rgb(72, 69, 59);">&nbsp;</span></t=
+d>
+<td style=3D"background-color: rgb(152, 196, 76); padding: 2px; width: 1px;=
+"><span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-si=
+ze: 1px; color: rgb(72, 69, 59);">&nbsp;</span></td>
+<td style=3D"width: 10px;"><span style=3D"font-family: Arial, Helvetica, Ta=
+homa, sans-serif; color: rgb(72, 69, 59);">&nbsp;</span></td>
+<td style=3D"line-height: 19px; padding: 10px; color: rgb(72, 69, 59);">
+<div style=3D"line-height: 19px; font-family: Arial, Helvetica, Tahoma, san=
+s-serif; font-size: 14px;">
+Zustimmung zur Datenschutz=ADerkl=E4rung: <nobr style=3D"color: inherit; ba=
+ckground-color: inherit;">
+<div style=3D"line-height: 19px;">11.02.2026 13:40 Uhr</div>
+</nobr></div>
+</td>
+</tr>
+<tr>
+<td style=3D"width: 10px;"><span style=3D"font-family: Arial, Helvetica, Ta=
+homa, sans-serif; font-size: 1px; color: rgb(72, 69, 59);">&nbsp;</span></t=
+d>
+<td style=3D"background-color: rgb(152, 196, 76); padding: 2px; width: 1px;=
+"><span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-si=
+ze: 1px; color: rgb(72, 69, 59);">&nbsp;</span></td>
+<td style=3D"width: 10px;"><span style=3D"font-family: Arial, Helvetica, Ta=
+homa, sans-serif; color: rgb(72, 69, 59);">&nbsp;</span></td>
+<td style=3D"line-height: 19px; padding-right: 10px; padding-bottom: 10px; =
+padding-left: 10px; color: rgb(72, 69, 59);">
+<div style=3D"line-height: 19px; font-family: Arial, Helvetica, Tahoma, san=
+s-serif; font-size: 14px;">
+Zustimmung zur Kontaktweitergabe: <nobr style=3D"color: inherit; background=
+-color: inherit;">
+<div style=3D"line-height: 19px;">11.02.2026 13:45 Uhr</div>
+</nobr></div>
+</td>
+</tr>
+<tr>
+<td style=3D"width: 10px;"><span style=3D"font-family: Arial, Helvetica, Ta=
+homa, sans-serif; font-size: 1px; color: rgb(72, 69, 59);">&nbsp;</span></t=
+d>
+<td style=3D"background-color: rgb(152, 196, 76); padding: 2px; width: 1px;=
+"><span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-si=
+ze: 1px; color: rgb(72, 69, 59);">&nbsp;</span></td>
+<td style=3D"width: 10px;"><span style=3D"font-family: Arial, Helvetica, Ta=
+homa, sans-serif; color: rgb(72, 69, 59);">&nbsp;</span></td>
+<td style=3D"line-height: 19px; padding-right: 10px; padding-bottom: 15px; =
+padding-left: 10px; color: rgb(72, 69, 59);">
+<div style=3D"line-height: 19px; font-family: Arial, Helvetica, Tahoma, san=
+s-serif; font-size: 14px;">
+Das Beratungsgespr=E4ch wurde am <nobr style=3D"color: inherit; background-=
+color: inherit;">
+<div style=3D"line-height: 19px;">11.02.2026 13:45 Uhr</div>
+</nobr>&nbsp;von <nobr style=3D"color: inherit; background-color: inherit;"=
+>
+<div style=3D"line-height: 19px;">Merisa Aliti</div>
+</nobr>&nbsp;gef=FChrt.</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding: 15px 25px 25px;">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"border=
+-width: 2px; border-style: solid; border-color: rgb(76, 139, 165); width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"padding-top: 18px; padding-right: 20px; padding-left: 20px;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; padding-right: 10px;"><span style=3D"font-fa=
+mily: Arial, Helvetica, Tahoma, sans-serif; font-size: 18px; color: rgb(72,=
+ 69, 59);"><b><img src=3D"https://static.pflegehilfe.org/newsletter/icons/i=
+con-pfeil-39-27-1.png" alt=3D"&#8658;" title=3D"&#8658;" width=3D"39" style=
+=3D"width: 39px;"></b></span></td>
+<td style=3D"text-align: left; line-height: 23px; padding-top: 4px; color: =
+rgb(76, 139, 165);">
+<div style=3D"text-align: left; line-height: 23px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 18px;">
+<b>Anfragen-Manager</b>: Anfragen digital verwalten</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizi=
+ng: border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; padding: 10px 20px 15px; =
+color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Steigen Sie mit dem Anfragen-Manager in die digitale Kundengewinnung ein. <=
+b>Einfach, effizient</b>&nbsp;und
+<b>zukunftsorientiert</b>. Das sind Ihre Vorteile:</div>
+</td>
+</tr>
+<tr>
+<td style=3D"padding-right: 20px; padding-bottom: 20px; padding-left: 20px;=
+">
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; padding-top: 4px; padding-right: 10px; paddi=
+ng-bottom: 3px; vertical-align: top; width: 22px;">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 8px; color: rgb(0, 0, 0);"><img src=3D"https://static.pflegehilfe.org/new=
+sletter/icons/icon-haken-22-19-1.png" alt=3D"-" title=3D"-" width=3D"22" st=
+yle=3D"width: 22px;"></span></td>
+<td style=3D"line-height: 19px; padding-top: 5px; color: rgb(72, 69, 59);">
+<div style=3D"line-height: 19px; font-family: Arial, Helvetica, Tahoma, san=
+s-serif; font-size: 14px;">
+Anfragen zentral verwalten</div>
+</td>
+</tr>
+<tr>
+<td style=3D"text-align: left; padding-top: 4px; padding-right: 10px; paddi=
+ng-bottom: 3px; vertical-align: top; width: 22px;">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 8px; color: rgb(0, 0, 0);"><img src=3D"https://static.pflegehilfe.org/new=
+sletter/icons/icon-haken-22-19-1.png" alt=3D"-" title=3D"-" width=3D"22" st=
+yle=3D"width: 22px;"></span></td>
+<td style=3D"line-height: 19px; padding-top: 5px; color: rgb(72, 69, 59);">
+<div style=3D"line-height: 19px; font-family: Arial, Helvetica, Tahoma, san=
+s-serif; font-size: 14px;">
+Buchungspotenziale optimieren</div>
+</td>
+</tr>
+<tr>
+<td style=3D"text-align: left; padding-top: 4px; padding-right: 10px; paddi=
+ng-bottom: 3px; vertical-align: top; width: 22px;">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 8px; color: rgb(0, 0, 0);"><img src=3D"https://static.pflegehilfe.org/new=
+sletter/icons/icon-haken-22-19-1.png" alt=3D"-" title=3D"-" width=3D"22" st=
+yle=3D"width: 22px;"></span></td>
+<td style=3D"line-height: 19px; padding-top: 5px; color: rgb(72, 69, 59);">
+<div style=3D"line-height: 19px; font-family: Arial, Helvetica, Tahoma, san=
+s-serif; font-size: 14px;">
+Kapazit=E4ten mit passenden Anfragen auslasten</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"line-height: 19px; padding-right: 20px; padding-bottom: 20px; =
+padding-left: 20px; color: rgb(72, 69, 59);">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 14px; color: rgb(76, 139, 165);"><a href=3D"https://u7110386.ct.sendgrid.=
+net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyOci0eMGZzJ8KO7UIFwVFSWUJxVcNCf=
+aF-2BtYf1eNuggM3e6ZwV4VqF2YAZyK7W-2FcRkfp5vkeBXcNLjs5Mdya-2FTKq6pTtIJrscjRO=
+WJmCLpeDCkA0B5zOouxZyvogcNdp-2BQ-3D-3DlZd9_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzz=
+k2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9Y=
+P1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2B=
+trzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pv=
+mf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-=
+2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkA=
+pkXX8veNjXAxYrRa9zqwZXyVQWfL-2Fop7At9vH2A97zhgMKalH-2FhjvEnydoffn69Fd6mTk5r=
+ffyiO4cJbudlmcpgGrJX1YoZSE4GpamAfUw9ZrHDpGVY6nIrMO3bEu9Z-2FRJTAkqKuGi5QGxDa=
+nq70ZnqAl2fZCYE0porhHG8V1CrT1kNxuc-3D" target=3D"_blank" title=3D"Anfragen-=
+Manager" data-outlook-id=3D"bbb6bfbe-081a-46ac-b9c9-89dfed93f22e" style=3D"=
+color: rgb(76, 139, 165); text-decoration: none;"><nobr style=3D"color: rgb=
+(76, 139, 165); background-color: inherit;">
+<div style=3D"line-height: 19px;"><span style=3D"color: rgb(76, 139, 165);"=
+></a><a href=3D"https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ8c=
+xEjPIayrSY3E7eyOci0eMGZzJ8KO7UIFwVFSWUJxVcNCfaF-2BtYf1eNuggM3e6ZwV4VqF2YAZy=
+K7W-2FcRkfp5vkeBXcNLjs5Mdya-2FTKq6pTtIJrscjROWJmCLpeDCkA0B5zOouxZyvogcNdp-2=
+BQ-3D-3DlZd9_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJW=
+aQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1=
+RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdr=
+V2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9n=
+xedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKb=
+hYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veNjXAxYrRa9zqwZXyVQWfL-2=
+Fop7At9vH2A97zhgMKalH-2FhjvEnydoffn69Fd6mTk5rffyiO4cJbudlmcpgGrJX1YoZSE4Gpa=
+mAfUw9ZrHDpGVY6nIrMO3bEu9Z-2FRJTAkqKuGi5QGxDanq70ZnqAl2fZCYE0porhHG8V1CrT1k=
+Nxuc-3D" target=3D"_blank" title=3D"Anfragen-Manager" data-outlook-id=3D"7b=
+b2f643-4b51-45f7-9a4b-a98589311771" style=3D"color: rgb(76, 139, 165); text=
+-decoration: none;">Zum
+ Anfragen-Manager&nbsp;=BB</a></span></div>
+</nobr></span></td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(242, 244, 247);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; padding-top: 3px; padding=
+-bottom: 3px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+&nbsp;</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 25px; padding: 20px 25px 10px; =
+color: rgb(152, 196, 76);">
+<div style=3D"text-align: left; line-height: 25px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 20px;">
+<b>Anfrage reklamieren</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; padding-right: 25px; padd=
+ing-bottom: 10px; padding-left: 25px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px; color: rgb(72, 69, 59);">
+<a href=3D"https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPI=
+ayrSY3E7eyHY0s1ZtFHfON6I2FHRkY-2FMNBoNpL4RMopbgbuCyfCsXuWxshPDhU1snjvFVB5Md=
+dgI0LOsanVokBC9senZg8sxo8R-2BGtUz8aQwWdfat2uqvOruvi3S0Tk1mLQYPdLC9wg-3D-3D1=
+fNl_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2=
+FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ=
+5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2=
+F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3I=
+rTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm=
+5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veF-2BlbXH1bePJrHFKuoLFJ6i-2BlrfDJ=
+Gg9kyHSt6PRSd0WDp-2B8X3yEnzXvhJ-2FzfQbdBjdrS9rVOp35OZeTMcUrOuBY1M7xJLdYAzLa=
+JZ23T0q-2BQBZMtIacfYDwbdIenMyYd8uBBsNwVQOpVkxOF-2B-2B5WohYqZQiBeHYY0myhTMmn=
+H3g-3D" target=3D"_blank" title=3D"Anfrage reklamieren" data-outlook-id=3D"=
+cd2f6e39-c227-4ed2-83d5-b8708c5a21a7" style=3D"color: rgb(72, 69, 59); text=
+-decoration: none;">Sollte
+ diese Anfrage nicht den vereinbarten Qualit=E4tsstandards gen=FCgen, k=F6n=
+nen Sie diese
+</a><b><a href=3D"https://u7110386.ct.sendgrid.net/ls/click?upn=3Du001.nbkQ=
+8cxEjPIayrSY3E7eyHY0s1ZtFHfON6I2FHRkY-2FMNBoNpL4RMopbgbuCyfCsXuWxshPDhU1snj=
+vFVB5MddgI0LOsanVokBC9senZg8sxo8R-2BGtUz8aQwWdfat2uqvOruvi3S0Tk1mLQYPdLC9wg=
+-3D-3D1fNl_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQ=
+iSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RX=
+g05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2=
+-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxe=
+dI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhY=
+iKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veF-2BlbXH1bePJrHFKuoLFJ6i-=
+2BlrfDJGg9kyHSt6PRSd0WDp-2B8X3yEnzXvhJ-2FzfQbdBjdrS9rVOp35OZeTMcUrOuBY1M7xJ=
+LdYAzLaJZ23T0q-2BQBZMtIacfYDwbdIenMyYd8uBBsNwVQOpVkxOF-2B-2B5WohYqZQiBeHYY0=
+myhTMmnH3g-3D" target=3D"_blank" title=3D"Anfrage reklamieren" data-outlook=
+-id=3D"d15f1b76-f7c3-4963-8457-d91fcc9292c3" style=3D"color: rgb(72, 69, 59=
+); text-decoration: none;">innerhalb
+ der n=E4chsten 7 Tage</a></b><a href=3D"https://u7110386.ct.sendgrid.net/l=
+s/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyHY0s1ZtFHfON6I2FHRkY-2FMNBoNpL4RMop=
+bgbuCyfCsXuWxshPDhU1snjvFVB5MddgI0LOsanVokBC9senZg8sxo8R-2BGtUz8aQwWdfat2uq=
+vOruvi3S0Tk1mLQYPdLC9wg-3D-3D1fNl_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9Vf=
+ejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl=
+7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghS=
+Z8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOt=
+rhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHT=
+C55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veF-=
+2BlbXH1bePJrHFKuoLFJ6i-2BlrfDJGg9kyHSt6PRSd0WDp-2B8X3yEnzXvhJ-2FzfQbdBjdrS9=
+rVOp35OZeTMcUrOuBY1M7xJLdYAzLaJZ23T0q-2BQBZMtIacfYDwbdIenMyYd8uBBsNwVQOpVkx=
+OF-2B-2B5WohYqZQiBeHYY0myhTMmnH3g-3D" target=3D"_blank" title=3D"Anfrage re=
+klamieren" data-outlook-id=3D"f61d7ccb-f129-4775-9709-bbd8289566be" style=
+=3D"color: rgb(72, 69, 59); text-decoration: none;">&nbsp;reklamieren.
+ Bitte haben Sie Verst=E4ndnis, dass nach dieser Frist keine Reklamation me=
+hr m=F6glich ist.
+<nobr style=3D"color: inherit; background-color: inherit;">
+<div style=3D"text-align: left; line-height: 19px;"><span style=3D"color: r=
+gb(76, 139, 165);"></a><a href=3D"https://u7110386.ct.sendgrid.net/ls/click=
+?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyHY0s1ZtFHfON6I2FHRkY-2FMNBoNpL4RMopbgbuCyf=
+CsXuWxshPDhU1snjvFVB5MddgI0LOsanVokBC9senZg8sxo8R-2BGtUz8aQwWdfat2uqvOruvi3=
+S0Tk1mLQYPdLC9wg-3D-3D1fNl_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2=
+Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQ=
+Y6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmk=
+UNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulw=
+HjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSH=
+J6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8veF-2BlbXH1=
+bePJrHFKuoLFJ6i-2BlrfDJGg9kyHSt6PRSd0WDp-2B8X3yEnzXvhJ-2FzfQbdBjdrS9rVOp35O=
+ZeTMcUrOuBY1M7xJLdYAzLaJZ23T0q-2BQBZMtIacfYDwbdIenMyYd8uBBsNwVQOpVkxOF-2B-2=
+B5WohYqZQiBeHYY0myhTMmnH3g-3D" target=3D"_blank" title=3D"Anfrage reklamier=
+en" data-outlook-id=3D"3189963c-9840-438f-a903-7cf2d91e3d11" style=3D"color=
+: rgb(76, 139, 165); text-decoration: none;">Anfrage
+ reklamieren =BB</a></span></div>
+</nobr></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 19px; padding: 15px 25px; color=
+: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px;">
+Bei R=FCckfragen stehen wir Ihnen gerne telefonisch oder per E-Mail zur Ver=
+f=FCgung.<br>
+<br>
+Wir w=FCnschen Ihnen viel Erfolg!<br>
+<b>Ihr Verbund Pflegehilfe</b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; box-sizing: border-box; border-collapse: collapse; border-spacing: 0px=
+;">
+<tbody>
+<tr>
+<td style=3D"padding: 10px 25px 16px;">
+<hr style=3D"background-color: rgb(152, 196, 76); margin: 0px; height: 1px;=
+">
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255); padding-right: 25px; pad=
+ding-bottom: 30px; padding-left: 25px;">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"center" style=3D"vertical-align: top; width: 100%; height: 100=
+%;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 600px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td align=3D"left" style=3D"vertical-align: top;">
+<div style=3D"margin-right: 30px; width: 100%; max-width: 170px; display: i=
+nline-block;">
+<table dir=3D"ltr" align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=
+=3D"width: 100%; max-width: 170px; box-sizing: border-box; border-collapse:=
+ collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td dir=3D"ltr">
+<table dir=3D"ltr" cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing:=
+ border-box; border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td dir=3D"ltr" style=3D"text-align: left; padding-top: 15px;"><span style=
+=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size: 14px; col=
+or: rgb(72, 69, 59);"><b><a href=3D"https://u7110386.ct.sendgrid.net/ls/cli=
+ck?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2BW-2F1Sd8a4CjWmnPs=
+6hobUZIvlWUA9x4R1ML-2FId29Oxg1-2BIHLGUALKb3cJFN6wbzYVWv4QN1Y-2B7YDr3yr8hsYt=
+pe5qKmKxIZg2YtMdmztUthWRYUZVXyYDlqpID8y3fcmlUb8-3D1BhH_CBtBlRXWwa-2FzgSHW2e=
+6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4=
+YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWv=
+LnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2M=
+E-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xo=
+zUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RP=
+b8B0xrZjDBkApkXX8ve1591tkZhpFVJ3Vb7s9JnFbHUyNTuMvMhIadHb5WN2-2FT7o9OW43KcRi=
+ziGY67nwY-2BgS0dAnx1vpzy-2FMMZeg8WTlfWcUnsVUJWsuNL-2B72Ee8PAAWgmhtwxxqWUTzc=
+W-2FWQVNHErW2EvEogl6-2B963of0f1Ejd-2FocBEpFE1xcfVDdPwE-3D" target=3D"_blank=
+" title=3D"Verbund Pflegehilfe" data-outlook-id=3D"add85ab9-1971-4d71-b0a3-=
+d1e7d6cfab62" style=3D"color: rgb(72, 69, 59); text-decoration: none;"><img=
+ src=3D"https://static.pflegehilfe.org/newsletter/logo-vp-145-46-1.png" alt=
+=3D"Verbund Pflegehilfe" title=3D"Verbund Pflegehilfe" width=3D"145" style=
+=3D"width: 145px;"></a></b></span></td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div style=3D"width: 100%; max-width: 330px; display: inline-block;">
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; max-width: 330px; box-sizing: border-box; border-collapse: collapse; b=
+order-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; padding-top: 15px; padding-right: 10px; vert=
+ical-align: top;">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 8px; color: rgb(0, 0, 0);"><img src=3D"https://static.pflegehilfe.org/new=
+sletter/icons/icon-telefon-kontur-27-27-2.png" alt=3D"Telefon" title=3D"Tel=
+efon" width=3D"27" style=3D"width: 27px;"></span></td>
+<td style=3D"text-align: left; line-height: 19px; padding-top: 15px; color:=
+ rgb(72, 69, 59);">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 14px;"><nobr style=3D"color: inherit; background-color: inherit;">
+<div style=3D"text-align: left; line-height: 19px;"><span style=3D"color: r=
+gb(72, 69, 59);"><b><a href=3D"tel:004961312652011" target=3D"_blank" title=
+=3D"Telefon" data-outlook-id=3D"5a7ece97-2dce-4f3b-ab8a-c826e48fa4ae" style=
+=3D"color: rgb(72, 69, 59); text-decoration: none;">06131/26
+ 52 011</a></b></span></div>
+</nobr></span></td>
+</tr>
+</tbody>
+</table>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; padding-top: 10px; padding-right: 12px; vert=
+ical-align: top;">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 8px; color: rgb(0, 0, 0);"><img src=3D"https://static.pflegehilfe.org/new=
+sletter/icons/icon-fax-25-26-1.png" alt=3D"Fax" title=3D"Fax" width=3D"25" =
+style=3D"width: 25px;"></span></td>
+<td style=3D"text-align: left; line-height: 19px; padding-top: 10px; color:=
+ rgb(72, 69, 59);">
+<span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size=
+: 14px;"><nobr style=3D"color: inherit; background-color: inherit;">
+<div style=3D"text-align: left; line-height: 19px;"><span style=3D"color: r=
+gb(72, 69, 59);"><b><a href=3D"tel:004961318382168" target=3D"_blank" title=
+=3D"Fax" data-outlook-id=3D"405ea5f1-8f8c-4383-a161-c9d148994d52" style=3D"=
+color: rgb(72, 69, 59); text-decoration: none;">06131/83
+ 82 168</a></b></span></div>
+</nobr></span></td>
+</tr>
+</tbody>
+</table>
+<table cellspacing=3D"0" cellpadding=3D"0" style=3D"box-sizing: border-box;=
+ border-collapse: collapse; border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; padding-top: 10px; padding-right: 10px;"><sp=
+an style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-size: 8=
+px; color: rgb(0, 0, 0);"><img src=3D"https://static.pflegehilfe.org/newsle=
+tter/icons/icon-brief-kontur-27-26-1.png" alt=3D"E-Mail" title=3D"E-Mail" w=
+idth=3D"27" style=3D"width: 27px;"></span></td>
+<td style=3D"text-align: left; line-height: 19px; padding-top: 13px; color:=
+ rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 19px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 14px; color: rgb(72, 69, 59);">
+<b><a href=3D"mailto:partnerbetreuung@pflegehilfe.de" target=3D"_blank" tit=
+le=3D"E-Mail-Adresse" data-outlook-id=3D"94ba933f-4290-428d-b5dc-e0e452478d=
+c1" style=3D"color: rgb(72, 69, 59); text-decoration: none;">partnerbetreuu=
+ng@pflegehilfe.de</a></b></div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(242, 244, 247); padding-top: 30px;">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: center; line-height: 19px; background-color: rgb(2=
+55, 255, 255); padding-top: 25px; color: rgb(72, 69, 59);">
+<p style=3D"text-align: center; line-height: 19px; margin: 0px; padding: 5p=
+x;"><span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-=
+size: 14px; color: rgb(76, 139, 165);"><a href=3D"https://u7110386.ct.sendg=
+rid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyOLbMC7pSHsHpM8SZX2mQVH-2FX=
+LtbLNhm0jNxh-2BKNU4irMl3jfEYbVeiwfhUxKRM34Uf92xQO1vWcQz7CM4NdsQ6ZkkjW5r9tjw=
+6tdkXCgd2xbInITo4AwCYI-2BPKIzH7fbA-3D-3DheXb_CBtBlRXWwa-2FzgSHW2e6n9THvZIWF=
+zzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p=
+9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-=
+2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9=
+Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xS=
+q-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDB=
+kApkXX8veBfY3n7lag2HQMP-2FoXoc6c1Ki5hQmwmsrxgOQwVMU4I9sbq8W37eK5-2FUKbK1Y3W=
+skNwyz-2FyNY7S6luk5QQQFWY12nj5sgmshh6heSkMZmWlImAb5-2BMRJUTEAWqGrpWWp-2FD9P=
+6QM5lTJY1ZjLSpatqNmP0yAfU-2B1-2FIQiYEYck5E8s-3D" target=3D"_blank" title=3D=
+"Trustpilot" data-outlook-id=3D"9bbd5346-ea5a-43dc-8498-a7552d41332c" style=
+=3D"color: rgb(76, 139, 165); text-decoration: none; margin-top: 0px; margi=
+n-bottom: 0px;"><img src=3D"https://emailsignature.trustpilot.com/newslette=
+r/de-DE/1/5033beaa000064000519d510/text1@2x.png" alt=3D"Human score" height=
+=3D"30" style=3D"height: 30px; max-height: 30px; margin-top: 0px; margin-bo=
+ttom: 0px;"></a></span><span style=3D"font-family: Arial, Helvetica, Tahoma=
+, sans-serif; font-size: 14px;">&nbsp;
+</span><span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; fo=
+nt-size: 14px; color: rgb(76, 139, 165);"><a href=3D"https://u7110386.ct.se=
+ndgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyOLbMC7pSHsHpM8SZX2mQVH-=
+2FXLtbLNhm0jNxh-2BKNU4irMl3jfEYbVeiwfhUxKRM34Uf92xQO1vWcQz7CM4NdsQ6ZkkjW5r9=
+tjw6tdkXCgd2xbInITo4AwCYI-2BPKIzH7fbA-3D-3Dzsch_CBtBlRXWwa-2FzgSHW2e6n9THvZ=
+IWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX=
+06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcy=
+Ej-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWk=
+hd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA=
+4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZ=
+jDBkApkXX8veaNRbNYJupELVeaH-2FQjhTaUw4EwGeBp33jINJz-2FbwjiTDw8WpJgdQsLoczTo=
+9LMNBuQrdGonTMCsxapCU-2BGih-2FwHo1nXvF4mltb4q1SYRg5M0Uirbwnw4cuZhA9lWQm7jdy=
+0jUskTJoJZ16pPfTovlxxYKX9KJ4WRgzTyxeDzeAU-3D" target=3D"_blank" title=3D"Tr=
+ustpilot" data-outlook-id=3D"69a3e657-bb53-43f9-953c-79b6a371a17c" style=3D=
+"color: rgb(76, 139, 165); text-decoration: none; margin-top: 0px; margin-b=
+ottom: 0px;"><img src=3D"https://emailsignature.trustpilot.com/newsletter/d=
+e-DE/1/5033beaa000064000519d510/stars@2x.png" alt=3D"Trustpilot Stars" heig=
+ht=3D"30" style=3D"height: 30px; max-height: 30px; margin-top: 0px; margin-=
+bottom: 0px;"></a></span></p>
+<p style=3D"text-align: center; line-height: 19px; margin: 0px; padding: 5p=
+x;"><span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; font-=
+size: 14px; color: rgb(76, 139, 165);"><a href=3D"https://u7110386.ct.sendg=
+rid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyOLbMC7pSHsHpM8SZX2mQVH-2FX=
+LtbLNhm0jNxh-2BKNU4irMl3jfEYbVeiwfhUxKRM34Uf92xQO1vWcQz7CM4NdsQ6ZkkjW5r9tjw=
+6tdkXCgd2xbInITo4AwCYI-2BPKIzH7fbA-3D-3Dz2SY_CBtBlRXWwa-2FzgSHW2e6n9THvZIWF=
+zzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p=
+9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-=
+2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9=
+Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xS=
+q-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDB=
+kApkXX8ve2EHTgj7Lky-2F7mW1LjLgtPuuJFEuH81DPeQfrLy2pJvzsAbjr-2BgGA6O-2FbKB3K=
+3WLPTWwOJLH0B-2FkKcPSRheXrkBa0ZCwcSFVzu8NOKPca-2ByoTjHt9-2FKbud2gBgAJP7s1Xe=
+ddsCx66U0eq-2BaMF-2FLG4-2Bq19SxSryf2ijPKkzziwzkI-3D" target=3D"_blank" titl=
+e=3D"Trustpilot" data-outlook-id=3D"85daa57a-e8e4-4f76-b9ea-3783d2f41ce3" s=
+tyle=3D"color: rgb(76, 139, 165); text-decoration: none; margin-top: 0px; m=
+argin-bottom: 0px;"><img src=3D"https://emailsignature.trustpilot.com/newsl=
+etter/de-DE/1/5033beaa000064000519d510/text2@2x.png" alt=3D"number of revie=
+ws" height=3D"18" style=3D"height: 18px; max-height: 18px; margin-top: 0px;=
+ margin-bottom: 0px;"></a></span><span style=3D"font-family: Arial, Helveti=
+ca, Tahoma, sans-serif; font-size: 14px;">&nbsp;
+</span><span style=3D"font-family: Arial, Helvetica, Tahoma, sans-serif; fo=
+nt-size: 14px; color: rgb(76, 139, 165);"><a href=3D"https://u7110386.ct.se=
+ndgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyOLbMC7pSHsHpM8SZX2mQVH-=
+2FXLtbLNhm0jNxh-2BKNU4irMl3jfEYbVeiwfhUxKRM34Uf92xQO1vWcQz7CM4NdsQ6ZkkjW5r9=
+tjw6tdkXCgd2xbInITo4AwCYI-2BPKIzH7fbA-3D-3DrQEq_CBtBlRXWwa-2FzgSHW2e6n9THvZ=
+IWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX=
+06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcy=
+Ej-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWk=
+hd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA=
+4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZ=
+jDBkApkXX8ve-2BqHpb7R9s3MXP-2BYnfZWV8cSdfNSz-2FFLw82ii-2BkZ7AEFIwpunrF9WTeM=
+XDMYThZ0bRWqb0QNbwzXjHn45RwVdRU9o6UF5-2Bo8QZJGhzxdc9JbbtWYJyk3uVP5wdpXbvaUG=
+xaWaTkjd7sFMTqtYLv20MPfrr9bRKdSsi6m3WmFKJwg-3D" target=3D"_blank" title=3D"=
+Trustpilot" data-outlook-id=3D"4f2117c5-3f2c-4eaf-b10c-b0db1cfe241c" style=
+=3D"color: rgb(76, 139, 165); text-decoration: none; margin-top: 0px; margi=
+n-bottom: 0px;"><img src=3D"https://emailsignature.trustpilot.com/brand/n/1=
+/logo.png" alt=3D"Trustpilot Logo" height=3D"20" style=3D"height: 20px; max=
+-height: 20px; margin-top: 0px; margin-bottom: 0px; display: inline-block;"=
+></a></span></p>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td>
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: center; line-height: 19px; background-color: rgb(2=
+55, 255, 255); padding: 15px 25px 10px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: center; line-height: 19px; font-family: Arial, He=
+lvetica, Tahoma, sans-serif; font-size: 14px;">
+<span style=3D"color: rgb(76, 139, 165);"><a href=3D"https://u7110386.ct.se=
+ndgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2B=
+W-2F3-2BuPQI-2BfFzU5AY3n33mxrlvPtKjKS3ab2S4yFTJiP9cVdI0iFbInzYUuqsXFm6gScew=
+WsV13znuvXvX8YYf7VSicGGi-2FvuOXp5Tcr3K-2FU4FzCTnw-2BQkysMTHqLBrhQrWZ3wleEM8=
+7Jbs-2Bwe8ZYpxre0Ele_CBtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCw=
+yHTcbXJWaQiSQZl-2FIbb5B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7=
+MB5yinm1RXg05YXdZ5KKmgGN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD=
+-2BrLEdrV2-2FW9-2F8-2Bt825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlT=
+ShTrSu9nxedI-2F3IrTWNF0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q=
+5R05DJKbhYiKpBMdm5pXwfv6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8ve5aTl0Hxr7vWOKKD=
+35torQmn4PzP9WWfz6SEc4SB5tENMTR9nj0Eq8SeM3vSDnuY2-2FtiGqVDyEeCzNa0ewjLEVfTe=
+3BNxvT3QpbPHta0OUUoAqAAg8U9GqMRSPotoKymR-2F5-2BlqrpzyI0UI37s5LH6yjKvXu3gUfu=
+9ukZG7L-2FnC-2BQ-3D" target=3D"_blank" title=3D"Datenschutz" data-outlook-i=
+d=3D"edea3918-71a3-4da6-8a9b-9f2e7502f815" style=3D"color: rgb(76, 139, 165=
+); text-decoration: none;">Datenschutz</a></span>&nbsp;&nbsp;|&nbsp;
+<span style=3D"color: rgb(76, 139, 165);"><a href=3D"https://u7110386.ct.se=
+ndgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2B=
+W-2F3Ej9siR6jskpLcZSQ4QtNsSoIsTnF-2Bk9Ul0VqMBBIsDnwCUkBEn9EmQWEbnrzrxfG92sl=
+dTSC4LCFB64WL8-2B8zUfPFPOZ9Z4WChS7zgSvJ2cj2ryyemWBVrt8-2B406kiEA-3DsBLy_CBt=
+BlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5B-=
+2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmgGN=
+4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2Bt8=
+25wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF0D=
+ShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwfv6=
+uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8ve8h9JNcf-2Fe8985L26gd3SWUub6J27sjfwfWPQG=
+MJ9ESHPaqMbp0R2LRomeZistV91pzqBv818SnDgDtJkDYxmgPbISh3fgnVZBQQWRPbkD6IpgTXc=
+TtAP0KD6EoHIeoYue4dublx2I3AJDrMaLDtChVu3GB1aH5EeQeGQI63yOGY-3D" target=3D"_=
+blank" title=3D"AGB" data-outlook-id=3D"4a182b5e-36d8-4073-937e-0becdf2240f=
+d" style=3D"color: rgb(76, 139, 165); text-decoration: none;">AGB</a></span=
+>&nbsp;&nbsp;|&nbsp;
+<span style=3D"color: rgb(76, 139, 165);"><a href=3D"https://u7110386.ct.se=
+ndgrid.net/ls/click?upn=3Du001.nbkQ8cxEjPIayrSY3E7eyJgY-2F5rppRGWBMvCvnY-2B=
+W-2F2GfTYhiKuz5L4vO1f7V2eStHddo77rDQiS9kIq5d-2FLIHskmVjChmcQqtL1HE5X08Pwzkn=
+mxV54G4JEnZnQsGnGGi-2Fs-2FxHPB9dUnJflHpOwEhHO8u9ujcs8lRcli8-2B2G7Y-3Dmywl_C=
+BtBlRXWwa-2FzgSHW2e6n9THvZIWFzzk2-2Bp9VfejD0A-2Fz6iCwyHTcbXJWaQiSQZl-2FIbb5=
+B-2FJMBDqt8JSY2alw4YdL1YNX06p9YP1cmF8zGl7vQhIVQY6PVw7MB5yinm1RXg05YXdZ5KKmg=
+GN4FwZVcFtB9pnl0BWvLnCvIcyEj-2BtrzNQgghSZ8kChmkUNmFSD-2BrLEdrV2-2FW9-2F8-2B=
+t825wYyakq-2B-2Fb2ME-2FjWkhd9Pvmf7KzqyOtrhdWulwHjnGlTShTrSu9nxedI-2F3IrTWNF=
+0DShXdzlzCG8dTno5xozUI30RA4xSq-2F60c5jHTC55MSSHJ6QW7q5R05DJKbhYiKpBMdm5pXwf=
+v6uDcqlmsV1K1WIH0RPb8B0xrZjDBkApkXX8vergn3zaKwE0N9rUsbF18sQsyN2erC4DDY4kGeo=
+q-2F53CBtU-2FlMSp6WCkLfKOcsCT8DmIIFXXl8DI8j1GvP6p2DJ22f89eJmPxbBisw6RcI0yvc=
+fxvJ12YNJwTH9KWParXOSLKYinE5dJwqbDAm6jROC9G6BjSHW6YP3A1fI029EdI-3D" target=
+=3D"_blank" title=3D"Impressum" data-outlook-id=3D"4d4b2bae-e777-4825-8d22-=
+ac7fd1b2d719" style=3D"color: rgb(76, 139, 165); text-decoration: none;">Im=
+pressum</a></span></div>
+</td>
+</tr>
+<tr>
+<td style=3D"text-align: left; line-height: 17px; background-color: rgb(255=
+, 255, 255); padding: 10px 25px 15px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 17px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 12px;">
+VP Verbund Pflegehilfe GmbH | Inge-Reitz-Stra=DFe 5-7 | 55120 Mainz | Deuts=
+chland<br>
+Gesch=E4ftsf=FChrer: Johannes Haas, Michael Haas, Maximilian Haas<br>
+Sitz der Gesellschaft: Mainz, Rheinland Pfalz<br>
+Registergericht: Amtsgericht Frankfurt am Main | Registernummer: HRB 109505=
+<br>
+Umsatzsteuer-Identifikationsnummer gem=E4=DF =A7 27 a Umsatzsteuergesetz: D=
+E315652480</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(255, 255, 255);">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td>
+<table align=3D"left" cellspacing=3D"0" cellpadding=3D"0" style=3D"width: 1=
+00%; box-sizing: border-box; border-collapse: collapse; border-spacing: 0px=
+;">
+<tbody>
+<tr>
+<td style=3D"padding: 10px 25px 15px;">
+<hr style=3D"background-color: rgb(72, 69, 59); margin: 0px; height: 1px;">
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+<tr>
+<td style=3D"background-color: rgb(242, 244, 247); padding-bottom: 50px;">
+<table align=3D"center" cellspacing=3D"0" cellpadding=3D"0" style=3D"width:=
+ 100%; max-width: 600px; box-sizing: border-box; border-collapse: collapse;=
+ border-spacing: 0px;">
+<tbody>
+<tr>
+<td style=3D"text-align: left; line-height: 17px; background-color: rgb(255=
+, 255, 255); padding: 10px 25px 25px; color: rgb(72, 69, 59);">
+<div style=3D"text-align: left; line-height: 17px; font-family: Arial, Helv=
+etica, Tahoma, sans-serif; font-size: 12px;">
+Diese E-Mail k=F6nnte vertrauliche und/oder rechtlich gesch=FCtzte Informat=
+ionen enthalten. Wenn Sie nicht der richtige Adressat sind oder diese E-Mai=
+l irrt=FCmlich erhalten haben, informieren Sie bitte sofort den Absender un=
+d vernichten Sie diese E-Mail. Das unerlaubte
+ Kopieren sowie die unbefugte Weitergabe dieser E-Mail sind nicht gestattet=
+.</div>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</td>
+</tr>
+</tbody>
+</table>
+</center>
+<img src=3D"https://u7110386.ct.sendgrid.net/wf/open?upn=3Du001.Vk1lvOTnrxw=
+-2FfL8-2BmGyNhz-2FNo5YStHbHk-2BDPcnkg0TdRC0o9fNVunS0QMHULygigeyWIzy4FGjqCS5=
+6c3ueMg6ZbPCiGLbASq8SUqDQJB5YZQpxMOGKq88X3Hdz-2FipPSLqqQ8e89Fb2cuDtNu-2FPQF=
+a-2F8t-2F819Rx00U4tIOTI4UMwpwKoHFYY-2BnaVQhxN1YcEWZmbNmD9sFSB5XAQGBazJxm1U5=
+K50aMH7hs5Ly4w-2FMGZQbChC7onlkPRgIAqhnIwVmuyZjAtZ3y5jWNyNhxq-2BfcHLHy4vzmhF=
+GTMCkls-2FfRDOy-2FEsMc22pX2wewD5BjzauNG2CA7Z1NuRGULr6MeWPHZRsLoZf9FWQbsXYxt=
+qlzYBn9b-2F-2F-2FzAiyBNSF8Ngw4Cr4sV4frzexAEkOdM8K-2FGYsF-2B5Nhp27d43kGoeO-2=
+BI-2Fxh6OWQIDOy-2Fj6-2B2k-2BlCeHEifGOcJQAHkuin0kEkK7zPkAHFpdsuKrNmqlMfA-2Bj=
+A3yUPSM19HWTYkYSmaZn-2F48WUdwCA-2BFFjbexebMaAO7r9l9N91ZZc3-2Fr8bQSHK9IzI8-3=
+D" width=3D"1" height=3D"1" style=3D"width: 1px; height: 1px; margin: 0px;"=
+></div>
+</body>
+</html>
+
+--_000_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_--
+
+--_005_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_
+Content-Type: application/octet-stream; name="sabine_bauml.csv"
+Content-Description: sabine_bauml.csv
+Content-Disposition: attachment; filename="sabine_bauml.csv"; size=1054;
+	creation-date="Wed, 11 Feb 2026 12:45:56 GMT";
+	modification-date="Sun, 15 Feb 2026 15:20:18 GMT"
+Content-ID: <D8D7DD3912AEF0478AF70CCEECFA1BBD@DEUP281.PROD.OUTLOOK.COM>
+Content-Transfer-Encoding: base64
+
+77u/UmVxdWVzdE51bWJlcixTZXgsQWNhZGVtaWNEZWdyZWUsRmlyc3ROYW1lLFN1ck5hbWUsQWRk
+cmVzc0xpbmUxLFppcENvZGUsQ2l0eSxDb3VudHJ5SXNvMixFbWFpbCxQaG9uZVR5cGUsUGhvbmUs
+QXZhaWxhYmlsaXR5LFNlbmlvclNleCxTZW5pb3JBY2FkZW1pY0RlZ3JlZSxTZW5pb3JGaXJzdE5h
+bWUsU2VuaW9yU3VyTmFtZSxTZW5pb3JSZWxhdGlvbnNoaXAsU2VuaW9yTGl2ZVNpdHVhdGlvbixT
+ZW5pb3JDYXJlTGV2ZWwsU2VuaW9yTW9iaWxpdHksU2VuaW9yQWdlLFNlbmlvck1lZGljYWxQcm9j
+ZXNzLFJlcXVlc3RaaXBDb2RlLFJlcXVlc3RSZWdpb24sUmVxdWVzdENvdW50cnlJc28yLFJlcXVl
+c3REZXRhaWwsUHJvZHVjdE5hbWUsRW1wbG95ZWVGaXJzdE5hbWUsRW1wbG95ZWVTdXJOYW1lLEZp
+bmlzaGVkRGF0ZVRpbWUsQ3JlYXRlRGF0ZVRpbWUNCjExNzM3MDYxLEZyYXUsLFNhYmluZSxCw6R1
+bWwsLCwsREUsc2FiaW5lQGJhZXVtbHMuZGUsTW9iaWxlLCs0OSAxNzE3MjY1NDk0LEdhbnp0w6Rn
+aWcgdGVsZWZvbmlzY2ggZ3V0IGVycmVpY2hiYXIsLCwsLEVoZXBhcnRuZXIsIkxlYnQgbWl0IEVo
+ZXBhcnRuZXIqaW4sIE1laHJmYW1pbGllbmhhdXMgKE1GSCksIFdvaG51bmciLFBmbGVnZWdyYWQg
+MixNb2JpbCBpbSBSb2xsc3R1aGwsLCJHZWhpcm50dW1vciwgTMOkaG11bmdlbiIsODU0NDUsT2Jl
+cmRpbmcsREUsIlBmbGVnZWdyYWQvLXN0dWZlOiAyDQpBdWZnYWJlbjogQmV0cmV1dW5nICsgSGF1
+c2hhbHQNClfDtmNoZW50bGljaGVyIFVtZmFuZzogRWlubWFsIHfDtmNoZW50bGljaA0KVW1mYW5n
+IGFtIFN0w7xjazogMSBTdHVuZGUNCkFicmVjaG51bmcgw7xiZXIgQmV0Li0gJiBFbnRsYXN0dW5n
+c2xlaXN0dW5nZW46IEphDQpCdWRnZXRyYWhtZW46IDI1IOKCrCBiaXMgNTUg4oKsIHBybyBTdHVu
+ZGUNCkdlc2NobGVjaHQgZGVyIEJldHJldXVuZ3NrcmFmdDogV2VpYmxpY2gNCkJlZGFyZjogU2No
+bmVsbHN0bcO2Z2xpY2giLFN0ZC4gQmV0cmV1dW5nLE1lcmlzYSxBbGl0aSwxMS4wMi4yMDI2IDEz
+OjQ1OjUyLDExLjAyLjIwMjYgMTM6NDA6MDcNCg==
+
+--_005_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_
+Content-Type: text/x-vcard; name="sabine_bauml.vcf"
+Content-Description: sabine_bauml.vcf
+Content-Disposition: attachment; filename="sabine_bauml.vcf"; size=1184;
+	creation-date="Wed, 11 Feb 2026 12:45:56 GMT";
+	modification-date="Sun, 15 Feb 2026 15:20:18 GMT"
+Content-ID: <4EAA0C06D23C4C4D950E8D42FB5FA60E@DEUP281.PROD.OUTLOOK.COM>
+Content-Transfer-Encoding: base64
+
+QkVHSU46VkNBUkQNClZFUlNJT046NC4wDQpVSUQ6dXJuOnV1aWQ6ZDg3ZDMzM2QtNzEyZi1jMmYy
+LWQ5YzgtMDhkZTY5NmE5M2VmDQpQUk9ESUQ6U3RkLiBCZXRyZXV1bmcNCkZOOkZyYXUgU2FiaW5l
+IELDpHVtbA0KTjpCw6R1bWw7U2FiaW5lOzs7DQpHRU5ERVI6Rg0KQURSO1RZUEU9SE9NRTo7Ozs7
+OztERQ0KVEVMO1RZUEU9Q0VMTDorNDkgMTcxNzI2NTQ5NA0KRU1BSUw7VFlQRT1IT01FO1BSRUY9
+MTpzYWJpbmVAYmFldW1scy5kZQ0KTk9URTtFTkNPRElORz1RVU9URUQtUFJJTlRBQkxFOkVycmVp
+Y2hiYXJrZWl0OiBHYW56dD1FNGdpZyB0ZWxlZm9uaXNjaCBndXQgZXJyZWljaGJhcj0wRD0wQUJl
+emllaHVuZzogRWhlcGFydG5lcj0wRD0wQUxlYmVuc3NpdHVhdGlvbjogTGVidCBtaXQgRWhlcGFy
+dG5lcippbiwgTWVocmZhbWlsaWVuaGF1cyAoTUZIKSwgV29obnVuZz0wRD0wQVBmbGVnZWdyYWQ6
+IFBmbGVnZWdyYWQgMj0wRD0wQU1vYmlsaXQ9RTR0OiBNb2JpbCBpbSBSb2xsc3R1aGw9MEQ9MEFN
+ZWRpemluaXNjaGVyIEhpbnRlcmdydW5kOj0wRD0wQUdlaGlybnR1bW9yLCBMPUU0aG11bmdlbj0w
+RD0wQT0wRD0wQT0wRD0wQUludGVyZXNzaWVydDogU3RkLiBCZXRyZXV1bmc9MEQ9MEFBbmZyYWdl
+bi1OdW1tZXI6IDExNzM3MDYxPTBEPTBBQmVkYXJmc29ydDogODU0NDUgT2JlcmRpbmctREU9MEQ9
+MEFQZmxlZ2VncmFkLy1zdHVmZTogMj0wRD0wQUF1ZmdhYmVuOiBCZXRyZXV1bmcgKyBIYXVzaGFs
+dD0wRD0wQVc9RjZjaGVudGxpY2hlciBVbWZhbmc6IEVpbm1hbCB3PUY2Y2hlbnRsaWNoPTBEPTBB
+VW1mYW5nIGFtIFN0PUZDY2s6IDEgU3R1bmRlPTBEPTBBQWJyZWNobnVuZyA9RkNiZXIgQmV0Li0g
+JiBFbnRsYXN0dW5nc2xlaXN0dW5nZW46IEphPTBEPTBBQnVkZ2V0cmFobWVuOiAyNSA9ODAgYmlz
+IDU1ID04MCBwcm8gU3R1bmRlPTBEPTBBR2VzY2hsZWNodCBkZXIgQmV0cmV1dW5nc2tyYWZ0OiBX
+ZWlibGljaD0wRD0wQUJlZGFyZjogU2NobmVsbHN0bT1GNmdsaWNoPTBEPTBBQmVyYXR1bmdzZ2Vz
+cHI9RTRjaCBkdXJjaGdlZj1GQ2hydDogTWVyaXNhIEFsaXRpPTBEPTBBQW5mcmFnZSBlaW5nZWdh
+bmdlbjogMTEuIEZlYnJ1YXIgMTM6NDA9MEQ9MEFCZXJhdHVuZ3NnZXNwcj1FNGNoIGR1cmNoZ2Vm
+PUZDaHJ0OiAxMS4gRmVicnVhciAxMzo0NT0wRD0wQQ0KRU5EOlZDQVJEDQo=
+
+--_005_BEZP281MB2773C4738FEAF9157D534B358C6FABEZP281MB2773DEUP_--
