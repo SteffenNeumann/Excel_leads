@@ -200,8 +200,18 @@ Public Sub ImportLeadsFromAppleMail()
     Dim errorCount As Long
     Dim totalBlocks As Long
 
+    ' Performance- und Integritaetsschutz
+    Dim calcMode As Long
+    calcMode = Application.Calculation
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
+
     Set tbl = FindTableByName(TABLE_NAME)
     If tbl Is Nothing Then
+        Application.Calculation = calcMode
+        Application.ScreenUpdating = True
+        Application.EnableEvents = True
         Application.StatusBar = False
         MsgBox "Tabelle '" & TABLE_NAME & "' nicht gefunden.", vbExclamation
         Exit Sub
@@ -210,6 +220,9 @@ Public Sub ImportLeadsFromAppleMail()
     Application.StatusBar = "Nachrichten abrufen..."
     messagesText = FetchAppleMailMessages(KEYWORD_1, KEYWORD_2)
     If Len(messagesText) = 0 Then
+        Application.Calculation = calcMode
+        Application.ScreenUpdating = True
+        Application.EnableEvents = True
         Application.StatusBar = False
         Exit Sub
     End If
@@ -253,9 +266,21 @@ Public Sub ImportLeadsFromAppleMail()
         End If
     Next msgBlock
 
+    ' Performance-Schutz zuruecksetzen
+    Application.Calculation = calcMode
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
     Application.StatusBar = False
+
+    ' Zeitstempel schreiben (nur ausserhalb der Tabelle)
     On Error Resume Next
-    ThisWorkbook.Worksheets(SHEET_NAME).Range("B2").Value = Format$(Now, "hh:nn dd.mm.yy")
+    Dim tsCell As Range
+    Set tsCell = ThisWorkbook.Worksheets(SHEET_NAME).Range("B2")
+    If Not tsCell Is Nothing Then
+        If tsCell.ListObject Is Nothing Then
+            tsCell.Value = Format$(Now, "hh:nn dd.mm.yy")
+        End If
+    End If
     On Error GoTo 0
     MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten übertragen. Duplikate: " & duplicateCount & ". Fehler: " & errorCount & ".", vbInformation
 End Sub
@@ -3456,7 +3481,7 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     Dim newRow As ListRow
     Dim monthCell As Range
 
-    Set newRow = tbl.ListRows.Add
+    Set newRow = tbl.ListRows.Add(AlwaysInsert:=True)
 
     Dim headerMap As Object
     Set headerMap = BuildHeaderIndex(tbl)
@@ -3521,14 +3546,23 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     anschriftVal = GetField(fields, "Kontakt_Anschrift")
     If Len(anschriftVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Adresse", anschriftVal
 
-    ' Ort: nur setzen wenn Zelle keine Formel enthaelt (Formelschutz)
+    ' Ort: nur setzen wenn Spalte KEINE Calculated Column ist (schuetzt Tabellenstruktur)
     Dim ortVal As String
     ortVal = GetField(fields, "Bedarfsort_Ort")
     If Len(ortVal) > 0 Then
         Dim ortCell As Range
         Set ortCell = GetCellByHeaderMap(newRow, headerMap, "Ort")
         If Not ortCell Is Nothing Then
-            If Not ortCell.HasFormula Then
+            ' Pruefen ob die gesamte Spalte eine Calculated Column ist
+            Dim ortColIdx As Long
+            Dim isCalcColumn As Boolean
+            ortColIdx = GetHeaderIndex(headerMap, "Ort")
+            isCalcColumn = False
+            If ortColIdx > 0 And tbl.DataBodyRange.Rows.Count > 1 Then
+                ' Wenn die erste bestehende Zeile eine Formel hat, ist es eine Calculated Column
+                If tbl.DataBodyRange.Cells(1, ortColIdx).HasFormula Then isCalcColumn = True
+            End If
+            If Not isCalcColumn Then
                 ortCell.Value = ortVal
             End If
         End If
