@@ -3570,27 +3570,10 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     anschriftVal = GetField(fields, "Kontakt_Anschrift")
     If Len(anschriftVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Adresse", anschriftVal
 
-    ' Ort: nur setzen wenn Spalte KEINE Calculated Column ist (schuetzt Tabellenstruktur)
+    ' Ort: Calculated-Column-Schutz wird jetzt generisch in SetCellByHeaderMap behandelt
     Dim ortVal As String
     ortVal = GetField(fields, "Bedarfsort_Ort")
-    If Len(ortVal) > 0 Then
-        Dim ortCell As Range
-        Set ortCell = GetCellByHeaderMap(newRow, headerMap, "Ort")
-        If Not ortCell Is Nothing Then
-            ' Pruefen ob die gesamte Spalte eine Calculated Column ist
-            Dim ortColIdx As Long
-            Dim isCalcColumn As Boolean
-            ortColIdx = GetHeaderIndex(headerMap, "Ort")
-            isCalcColumn = False
-            If ortColIdx > 0 And tbl.DataBodyRange.Rows.Count > 1 Then
-                ' Wenn die erste bestehende Zeile eine Formel hat, ist es eine Calculated Column
-                If tbl.DataBodyRange.Cells(1, ortColIdx).HasFormula Then isCalcColumn = True
-            End If
-            If Not isCalcColumn Then
-                ortCell.Value = ortVal
-            End If
-        End If
-    End If
+    If Len(ortVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Ort", ortVal
 
     Dim idVal As String
     idVal = GetField(fields, "Anfrage_ID")
@@ -3675,11 +3658,25 @@ End Function
 
 Private Sub SetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Object, ByVal headerName As String, ByVal valueToSet As Variant)
     ' Zweck: Zellwert anhand vorberechneter Header-Map setzen.
+    '         Schuetzt Calculated Columns: Wenn die Spalte Formeln enthaelt,
+    '         wird der Wert NICHT geschrieben, um Tabellenkorruption zu vermeiden.
     ' Abhängigkeiten: GetHeaderIndex.
     ' Rückgabe: keine (schreibt in Zeile).
     Dim idx As Long
     idx = GetHeaderIndex(headerMap, headerName)
     If idx > 0 Then
+        ' Calculated-Column-Schutz: pruefen ob Spalte Formeln enthaelt
+        Dim tbl As ListObject
+        Set tbl = rowItem.Parent
+        If Not tbl.DataBodyRange Is Nothing Then
+            If tbl.DataBodyRange.Rows.Count > 1 Then
+                ' Erste bestehende Datenzeile pruefen (nicht die neu angelegte)
+                If tbl.DataBodyRange.Cells(1, idx).HasFormula Then
+                    Debug.Print "[SetCell] SKIP Calculated Column '" & headerName & "' (Formel geschuetzt). Wert='" & Left$(CStr(valueToSet), 40) & "'"
+                    Exit Sub
+                End If
+            End If
+        End If
         rowItem.Range.Cells(1, idx).Value = valueToSet
     Else
         Debug.Print "[SetCell] WARNUNG: Spalte '" & headerName & "' nicht in Tabelle gefunden! Wert='" & Left$(CStr(valueToSet), 40) & "'"
