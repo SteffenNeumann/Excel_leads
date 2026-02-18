@@ -178,7 +178,10 @@ Public Sub ImportLeadsFromAppleMail()
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
 
-    Debug.Print "[Main] === Version: 2026-02-16-debug-payload ==="
+    Debug.Print "[Main] === Version: 2026-02-18-clear-errlog ==="
+
+    ' --- ErrLog leeren ---
+    ClearErrorLog
 
     ' --- Eingabeprüfung ---
     If Not ValidateMailSettings() Then Exit Sub
@@ -3497,6 +3500,17 @@ Private Function GetOrCreateErrorLogSheet() As Worksheet
 
     Set GetOrCreateErrorLogSheet = ws
 End Function
+
+Private Sub ClearErrorLog()
+    ' Zweck: ErrLog-Daten vor jedem Neuauslesen leeren, Header bleibt erhalten.
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(ERROR_LOG_SHEET)
+    On Error GoTo 0
+    If ws Is Nothing Then Exit Sub
+    If ws.Cells(ws.Rows.Count, 1).End(xlUp).Row <= 1 Then Exit Sub
+    ws.Rows("2:" & ws.Cells(ws.Rows.Count, 1).End(xlUp).Row).Delete xlShiftUp
+End Sub
 
 ' =========================
 ' Excel Output
