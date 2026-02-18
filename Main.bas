@@ -275,6 +275,9 @@ Public Sub ImportLeadsFromAppleMail()
     Application.EnableEvents = True
     Application.StatusBar = False
 
+    ' Ort-Spalte fuer ALLE Zeilen aktualisieren (fehlende Orte per PLZ nachschlagen)
+    FillOrtColumn tbl
+
     ' Zeitstempel schreiben (nur ausserhalb der Tabelle)
     On Error Resume Next
     Dim tsCell As Range
@@ -3594,9 +3597,10 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     anschriftVal = GetField(fields, "Kontakt_Anschrift")
     If Len(anschriftVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Adresse", anschriftVal
 
-    ' Ort: Calculated-Column-Schutz wird jetzt generisch in SetCellByHeaderMap behandelt
+    ' Ort: per VBA-Lookup aus PLZ_Liste ermitteln (keine Excel-Formel, vermeidet Reparaturfehler)
     Dim ortVal As String
     ortVal = GetField(fields, "Bedarfsort_Ort")
+    If Len(ortVal) = 0 Then ortVal = LookupOrtByPLZ(plzVal)
     If Len(ortVal) > 0 Then SetCellByHeaderMap newRow, headerMap, "Ort", ortVal
 
     Dim idVal As String
@@ -3682,29 +3686,89 @@ End Function
 
 Private Sub SetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Object, ByVal headerName As String, ByVal valueToSet As Variant)
     ' Zweck: Zellwert anhand vorberechneter Header-Map setzen.
-    '         Schuetzt Calculated Columns: Wenn die Spalte Formeln enthaelt,
-    '         wird der Wert NICHT geschrieben, um Tabellenkorruption zu vermeiden.
     ' Abhängigkeiten: GetHeaderIndex.
     ' Rückgabe: keine (schreibt in Zeile).
     Dim idx As Long
     idx = GetHeaderIndex(headerMap, headerName)
     If idx > 0 Then
-        ' Calculated-Column-Schutz: pruefen ob Spalte Formeln enthaelt
-        Dim tbl As ListObject
-        Set tbl = rowItem.Parent
-        If Not tbl.DataBodyRange Is Nothing Then
-            If tbl.DataBodyRange.Rows.Count > 1 Then
-                ' Erste bestehende Datenzeile pruefen (nicht die neu angelegte)
-                If tbl.DataBodyRange.Cells(1, idx).HasFormula Then
-                    Debug.Print "[SetCell] SKIP Calculated Column '" & headerName & "' (Formel geschuetzt). Wert='" & Left$(CStr(valueToSet), 40) & "'"
-                    Exit Sub
-                End If
-            End If
-        End If
         rowItem.Range.Cells(1, idx).Value = valueToSet
     Else
         Debug.Print "[SetCell] WARNUNG: Spalte '" & headerName & "' nicht in Tabelle gefunden! Wert='" & Left$(CStr(valueToSet), 40) & "'"
     End If
+End Sub
+
+Private Function LookupOrtByPLZ(ByVal plzValue As String) As String
+    ' Zweck: PLZ -> Ort per VBA-VLOOKUP aus dem PLZ-Sheet (Named Range PLZ_Liste).
+    '         Ersetzt die Excel-Formel =WENNFEHLER(SVERWEIS([@PLZ];PLZ_Liste;2;0);"")
+    ' Abhängigkeiten: Named Range "PLZ_Liste" im Workbook.
+    ' Rückgabe: Ortsname oder "" bei Fehler/nicht gefunden.
+    Dim lookupRange As Range
+    Dim result As Variant
+    
+    If Len(Trim$(plzValue)) = 0 Then
+        LookupOrtByPLZ = ""
+        Exit Function
+    End If
+    
+    On Error Resume Next
+    Set lookupRange = ThisWorkbook.Names("PLZ_Liste").RefersToRange
+    On Error GoTo 0
+    
+    If lookupRange Is Nothing Then
+        Debug.Print "[LookupOrt] Named Range 'PLZ_Liste' nicht gefunden!"
+        LookupOrtByPLZ = ""
+        Exit Function
+    End If
+    
+    ' PLZ als Zahl versuchen (PLZ-Sheet speichert numerisch)
+    Dim plzNum As Variant
+    If IsNumeric(plzValue) Then
+        plzNum = CDbl(plzValue)
+    Else
+        plzNum = plzValue
+    End If
+    
+    On Error Resume Next
+    result = Application.VLookup(plzNum, lookupRange, 2, False)
+    On Error GoTo 0
+    
+    If IsError(result) Then
+        LookupOrtByPLZ = ""
+    Else
+        LookupOrtByPLZ = CStr(result)
+    End If
+End Function
+
+Private Sub FillOrtColumn(ByVal tbl As ListObject)
+    ' Zweck: Ort-Spalte fuer alle Zeilen aktualisieren, die eine PLZ aber keinen Ort haben.
+    ' Abhängigkeiten: LookupOrtByPLZ, GetHeaderIndex, BuildHeaderIndex.
+    ' Rückgabe: keine.
+    Dim headerMap As Object
+    Dim ortIdx As Long
+    Dim plzIdx As Long
+    Dim i As Long
+    Dim plzVal As String
+    Dim ortVal As String
+    
+    Set headerMap = BuildHeaderIndex(tbl)
+    ortIdx = GetHeaderIndex(headerMap, "Ort")
+    plzIdx = GetHeaderIndex(headerMap, "PLZ")
+    
+    If ortIdx = 0 Or plzIdx = 0 Then Exit Sub
+    If tbl.DataBodyRange Is Nothing Then Exit Sub
+    
+    For i = 1 To tbl.DataBodyRange.Rows.Count
+        ortVal = Trim$(CStr(tbl.DataBodyRange.Cells(i, ortIdx).Value))
+        If Len(ortVal) = 0 Then
+            plzVal = Trim$(CStr(tbl.DataBodyRange.Cells(i, plzIdx).Value))
+            If Len(plzVal) > 0 Then
+                ortVal = LookupOrtByPLZ(plzVal)
+                If Len(ortVal) > 0 Then
+                    tbl.DataBodyRange.Cells(i, ortIdx).Value = ortVal
+                End If
+            End If
+        End If
+    Next i
 End Sub
 
 Private Function BuildHeaderIndex(ByVal tbl As ListObject) As Object
