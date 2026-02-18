@@ -351,9 +351,26 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     If LeadAlreadyExists(tbl, parsed, msgDate) Then
         ProcessSingleMessage = 2
     Else
-        AddLeadRow tbl, parsed, msgDate, leadType
-        AddLeadToIndex parsed, msgDate
-        ProcessSingleMessage = 1
+        ' Namenspruefung VOR Import: Normalisierung + Duplikat-Erkennung
+        Dim existingNames As Variant
+        Dim leadCtx As String
+        Dim nameIsDup As Boolean
+        Dim rawName As String
+        Dim checkedName As String
+
+        existingNames = CollectExistingNames(tbl)
+        rawName = ResolveKontaktName(parsed)
+        leadCtx = "Leadtyp: " & leadType & ", Datum: " & Format$(msgDate, "dd.mm.yy")
+        checkedName = CheckAndNormalizeLeadName(rawName, existingNames, leadCtx, nameIsDup)
+
+        If nameIsDup Then
+            Debug.Print "[ProcessMsg] Namens-Duplikat erkannt -> uebersprungen"
+            ProcessSingleMessage = 2
+        Else
+            AddLeadRow tbl, parsed, msgDate, leadType
+            AddLeadToIndex parsed, msgDate
+            ProcessSingleMessage = 1
+        End If
     End If
 End Function
 
@@ -3253,16 +3270,18 @@ Private Function IsNameSwapped(ByVal name1 As String, ByVal name2 As String) As 
     End If
 End Function
 
-Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existingNames As Variant, ByVal leadContext As String) As String
+Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existingNames As Variant, ByVal leadContext As String, ByRef nameIsDuplicate As Boolean) As String
     ' Zweck: Name normalisieren, Komma-Format korrigieren, Vertauschung pruefen,
     '        bei Aehnlichkeit (Levenshtein) Hinweis loggen.
-    ' Rueckgabe: korrigierter Name.
+    ' Rueckgabe: korrigierter Name. nameIsDuplicate=True wenn gleiche Person erkannt.
     Dim normalized As String
     Dim hadComma As Boolean
     Dim i As Long
     Dim dist As Long
     Dim existName As String
     Dim threshold As Long
+
+    nameIsDuplicate = False
 
     ' Schritt 1: Komma-Korrektur
     hadComma = (InStr(rawName, ",") > 0)
@@ -3290,15 +3309,23 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
         Dim existNorm As String
         existNorm = NormalizeLeadName(existName)
 
-        ' Exakt gleich -> kein Hinweis noetig
-        If StrComp(normalized, existNorm, vbTextCompare) = 0 Then GoTo NextExisting
+        ' Exakt gleich (nach Normalisierung) -> Duplikat
+        If StrComp(normalized, existNorm, vbTextCompare) = 0 Then
+            LogImportError _
+                "Name-Duplikat erkannt (nach Normalisierung): '" & rawName & "' = bestehend '" & existName & "'", _
+                "Eintrag wird uebersprungen. " & leadContext, "Hinweis"
+            Debug.Print "[NameCheck] Duplikat (normalisiert): '" & normalized & "' = '" & existNorm & "'"
+            nameIsDuplicate = True
+            GoTo SkipExistingCheck
+        End If
 
         ' Vertauschungs-Check
         If IsNameSwapped(normalized, existNorm) Then
             LogImportError _
                 "Namens-Vertauschung erkannt: '" & normalized & "' vs. bestehend '" & existName & "'", _
-                "Name wird als '" & normalized & "' eingetragen. " & leadContext, "Hinweis"
+                "Gleiche Person - Eintrag wird uebersprungen. " & leadContext, "Hinweis"
             Debug.Print "[NameCheck] Vertauschung: '" & normalized & "' vs '" & existName & "'"
+            nameIsDuplicate = True
             GoTo SkipExistingCheck
         End If
 
@@ -3501,12 +3528,9 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
 
     nameVal = ResolveKontaktName(fields)
 
-    ' Namens-Normalisierung & Pruefung (Komma, Vertauschung, Levenshtein)
-    Dim existingNames As Variant
-    Dim leadCtx As String
-    existingNames = CollectExistingNames(tbl)
-    leadCtx = "Leadtyp: " & leadType & ", Datum: " & Format$(msgDate, "dd.mm.yy")
-    nameVal = CheckAndNormalizeLeadName(nameVal, existingNames, leadCtx)
+    ' Namens-Normalisierung (nur Format-Korrektur, Duplikat-Check erfolgt in ProcessSingleMessage)
+    nameVal = NormalizeLeadName(nameVal)
+    nameVal = StripNamePrefix(nameVal)
 
     phoneVal = CleanPhoneNumber(GetField(fields, "Kontakt_Mobil"))
     plzVal = CleanPostalCode(GetField(fields, "PLZ"))
