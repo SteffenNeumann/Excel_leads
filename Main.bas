@@ -3415,18 +3415,17 @@ Private Sub SetImportNote(ByVal targetCell As Range)
 End Sub
 
 Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As String, Optional ByVal logType As String = "Fehler")
-    ' Zweck: Fehler/Hinweis in ErrLog protokollieren.
+    ' Zweck: Fehler/Hinweis in ErrLog protokollieren (via ListObject).
     ' logType: "Fehler" oder "Hinweis"
     Dim ws As Worksheet
-    Dim nextRow As Long
+    Dim tbl As ListObject
+    Dim newRow As ListRow
     Dim icon As String
 
     Set ws = GetOrCreateErrorLogSheet()
     If ws Is Nothing Then Exit Sub
-
-    nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
-    If nextRow = 1 And Len(Trim$(CStr(ws.Cells(1, 1).Value))) = 0 Then nextRow = 1
-    nextRow = nextRow + 1
+    If ws.ListObjects.Count = 0 Then Exit Sub
+    Set tbl = ws.ListObjects(1)
 
     ' Icon je nach Typ
     If StrComp(logType, "Hinweis", vbTextCompare) = 0 Then
@@ -3436,21 +3435,23 @@ Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As St
         logType = "Fehler"
     End If
 
-    ws.Cells(nextRow, 1).Value = icon
-    ws.Cells(nextRow, 2).Value = logType
-    ws.Cells(nextRow, 3).Value = Format$(Now, "dd.mm.yy hh:nn")
-    ws.Cells(nextRow, 4).Value = errMessage
-    ws.Cells(nextRow, 5).Value = possibleCause
+    ' Neue Zeile in der Tabelle anlegen
+    Set newRow = tbl.ListRows.Add
+    newRow.Range(1, 1).Value = icon
+    newRow.Range(1, 2).Value = logType
+    newRow.Range(1, 3).Value = Format$(Now, "dd.mm.yy hh:nn")
+    newRow.Range(1, 4).Value = errMessage
+    newRow.Range(1, 5).Value = possibleCause
 
     ' Zeile einfaerben
     If StrComp(logType, "Hinweis", vbTextCompare) = 0 Then
-        ws.Range(ws.Cells(nextRow, 1), ws.Cells(nextRow, 5)).Interior.Color = RGB(255, 255, 220) ' hellgelb
+        newRow.Range.Interior.Color = RGB(255, 255, 220) ' hellgelb
     Else
-        ws.Range(ws.Cells(nextRow, 1), ws.Cells(nextRow, 5)).Interior.Color = RGB(255, 220, 220) ' hellrot
+        newRow.Range.Interior.Color = RGB(255, 220, 220) ' hellrot
     End If
 
     ' Zeilenhoehe automatisch anpassen
-    ws.Rows(nextRow).EntireRow.AutoFit
+    newRow.Range.EntireRow.AutoFit
 End Sub
 
 Private Function GetOrCreateErrorLogSheet() As Worksheet
@@ -3503,13 +3504,22 @@ End Function
 
 Private Sub ClearErrorLog()
     ' Zweck: ErrLog-Daten vor jedem Neuauslesen leeren, Header bleibt erhalten.
+    ' Hinweis: ErrLog ist eine intelligente Tabelle (ListObject).
     Dim ws As Worksheet
+    Dim tbl As ListObject
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(ERROR_LOG_SHEET)
     On Error GoTo 0
     If ws Is Nothing Then Exit Sub
-    If ws.Cells(ws.Rows.Count, 1).End(xlUp).Row <= 1 Then Exit Sub
-    ws.Rows("2:" & ws.Cells(ws.Rows.Count, 1).End(xlUp).Row).Delete xlShiftUp
+    
+    ' ListObject auf dem Sheet finden
+    If ws.ListObjects.Count = 0 Then Exit Sub
+    Set tbl = ws.ListObjects(1)
+    
+    ' DataBodyRange loeschen (Header bleibt automatisch erhalten)
+    If Not tbl.DataBodyRange Is Nothing Then
+        tbl.DataBodyRange.Delete xlShiftUp
+    End If
 End Sub
 
 ' =========================
