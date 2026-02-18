@@ -281,7 +281,7 @@ Public Sub ImportLeadsFromAppleMail()
     ' Zeitstempel schreiben (nur ausserhalb der Tabelle)
     On Error Resume Next
     Dim tsCell As Range
-    Set tsCell = ThisWorkbook.Worksheets(SHEET_NAME).Range("B2")
+    Set tsCell = ThisWorkbook.Worksheets(SHEET_NAME).Range("B3")
     If Not tsCell Is Nothing Then
         If tsCell.ListObject Is Nothing Then
             tsCell.Value = Format$(Now, "hh:nn dd.mm.yy")
@@ -3564,18 +3564,18 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     pgVal = NormalizePflegegrad(GetField(fields, "Senior_Pflegegrad"))
     notesVal = BuildNotes(fields)
 
-    ' Dateiname + Betreff als erste Zeilen in Notizen einfuegen (fuer Zuordnung)
+    ' Betreff ODER Dateiname als erste Zeile in Notizen einfuegen (fuer Zuordnung)
+    ' Wenn Betreff vorhanden -> nur Betreff, Datei weglassen
     Dim fileNameVal As String
     fileNameVal = GetField(fields, "MailFileName")
     Dim subjectVal As String
     subjectVal = GetField(fields, "MailSubject")
     Debug.Print "[AddLeadRow] MailSubject='" & Left$(subjectVal, 80) & "'"
     Debug.Print "[AddLeadRow] MailFileName='" & Left$(fileNameVal, 80) & "'"
-    If Len(fileNameVal) > 0 Then
-        notesVal = "Datei: " & fileNameVal & vbLf & notesVal
-    End If
     If Len(subjectVal) > 0 Then
         notesVal = "Betreff: " & subjectVal & vbLf & notesVal
+    ElseIf Len(fileNameVal) > 0 Then
+        notesVal = "Datei: " & fileNameVal & vbLf & notesVal
     End If
 
     Debug.Print "[AddLeadRow] Werte -> Name='" & nameVal & "' Tel='" & phoneVal & "' PLZ='" & plzVal & "' PG='" & pgVal & "'"
