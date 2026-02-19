@@ -1,1 +1,1 @@
-2026-02-19 17:52:47 | 28edbdd | feat: Cross-Device Mail-Kompatibilität + DiagnoseMailSetup
+2026-02-19 18:08:44 | e6ffe7f | fix: ClearErrorLog Filter entfernen vor Löschung
