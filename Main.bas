@@ -35,7 +35,7 @@ Private Const MAX_MESSAGES As Long = 50
 Private Const APPLESCRIPT_FILE As String = "MailReader.scpt"
 Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
 Private Const APPLESCRIPT_SOURCE As String = "MailReader.applescript"
-Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = False
+Private Const AUTO_INSTALL_APPLESCRIPT As Boolean = True
 
 ' Zielordner in Apple Mail / Outlook
 ' LEAD_FOLDER muss exakter Ordnername sein (z. B. "Archiv", "Leads", "Posteingang")
@@ -173,12 +173,154 @@ Private Sub GoToSettingsSheet()
     On Error GoTo 0
 End Sub
 
+Public Sub DiagnoseMailSetup()
+    ' Zweck: Diagnose-Funktion zur Pruefung der Mail-Konfiguration.
+    ' Prueft: AppleScript installiert?, Account-Name korrekt?, Ordner gefunden?, mailpath gueltig?
+    ' Ergebnis wird als MsgBox und im Debug-Fenster ausgegeben.
+    Dim report As String
+    Dim ok As Boolean
+    Dim checks As Long
+    Dim passed As Long
+    Dim targetPath As String
+    Dim sourcePath As String
+    Dim mailbox As String
+    Dim folder As String
+    Dim mailPath As String
+    Dim folderListResult As String
+
+    report = "=== Mail-Setup Diagnose ===" & vbLf & vbLf
+    ok = True
+
+    ' --- 1. AppleScript Installation ---
+    checks = checks + 1
+    targetPath = GetAppleScriptTargetPath()
+    sourcePath = ThisWorkbook.Path & "/" & APPLESCRIPT_SOURCE
+    If Len(Dir$(targetPath)) > 0 Then
+        report = report & Chr$(9989) & " AppleScript installiert: " & targetPath & vbLf
+        passed = passed + 1
+    Else
+        report = report & Chr$(10060) & " AppleScript FEHLT: " & targetPath & vbLf
+        If Len(Dir$(sourcePath)) > 0 Then
+            report = report & "   -> Quelle vorhanden: " & sourcePath & vbLf
+            report = report & "   -> Tipp: AUTO_INSTALL_APPLESCRIPT ist " & IIf(AUTO_INSTALL_APPLESCRIPT, "Ein", "Aus") & vbLf
+        Else
+            report = report & "   -> Quelle FEHLT ebenfalls: " & sourcePath & vbLf
+        End If
+        ok = False
+    End If
+
+    ' --- 2. Einstellungen pruefen ---
+    mailbox = Trim$(GetSettingValue(NAME_LEAD_MAILBOX, vbNullString))
+    folder = Trim$(GetSettingValue(NAME_LEAD_FOLDER, vbNullString))
+    mailPath = Trim$(GetMailPath())
+
+    checks = checks + 1
+    If Len(mailbox) > 0 Then
+        report = report & Chr$(9989) & " LEAD_MAILBOX: '" & mailbox & "'" & vbLf
+        passed = passed + 1
+    Else
+        report = report & Chr$(9888) & " LEAD_MAILBOX: nicht gesetzt (Default: " & LEAD_MAILBOX_DEFAULT & ")" & vbLf
+    End If
+
+    checks = checks + 1
+    If Len(folder) > 0 Then
+        report = report & Chr$(9989) & " LEAD_FOLDER: '" & folder & "'" & vbLf
+        passed = passed + 1
+    Else
+        report = report & Chr$(9888) & " LEAD_FOLDER: nicht gesetzt (Default: " & LEAD_FOLDER_DEFAULT & ")" & vbLf
+    End If
+
+    checks = checks + 1
+    If Len(mailPath) > 0 Then
+        If FolderExists(mailPath) Then
+            report = report & Chr$(9989) & " mailpath: '" & mailPath & "' (Ordner existiert)" & vbLf
+            passed = passed + 1
+        Else
+            report = report & Chr$(10060) & " mailpath: '" & mailPath & "' (Ordner NICHT gefunden!)" & vbLf
+            ok = False
+        End If
+    Else
+        report = report & Chr$(8505) & " mailpath: nicht gesetzt (nur Mail-App wird genutzt)" & vbLf
+        passed = passed + 1
+    End If
+
+    ' --- 3. Apple Mail Accounts + Ordner pruefen ---
+    If Len(Dir$(targetPath)) > 0 Then
+        checks = checks + 1
+        Dim testScript As String
+        Dim testResult As String
+        Dim q As String
+        q = Chr$(34)
+        Dim testMailbox As String
+        testMailbox = IIf(Len(mailbox) > 0, mailbox, LEAD_MAILBOX_DEFAULT)
+        Dim testFolder As String
+        testFolder = IIf(Len(folder) > 0, folder, LEAD_FOLDER_DEFAULT)
+
+        ' Script das alle Accounts + deren Mailboxen auflistet und prueft ob Zielordner existiert
+        testScript = "tell application " & q & "Mail" & q & vbLf
+        testScript = testScript & "set outText to " & q & q & vbLf
+        testScript = testScript & "set foundTarget to false" & vbLf
+        testScript = testScript & "repeat with a in accounts" & vbLf
+        testScript = testScript & "set aName to name of a" & vbLf
+        testScript = testScript & "set outText to outText & " & q & "Account: " & q & " & aName & linefeed" & vbLf
+        testScript = testScript & "try" & vbLf
+        testScript = testScript & "repeat with mb in mailboxes of a" & vbLf
+        testScript = testScript & "set mbName to name of mb" & vbLf
+        testScript = testScript & "set outText to outText & " & q & "  - " & q & " & mbName & linefeed" & vbLf
+        testScript = testScript & "if mbName is " & q & testFolder & q & " then set foundTarget to true" & vbLf
+        testScript = testScript & "end repeat" & vbLf
+        testScript = testScript & "end try" & vbLf
+        testScript = testScript & "end repeat" & vbLf
+        testScript = testScript & "if foundTarget then" & vbLf
+        testScript = testScript & "set outText to outText & linefeed & " & q & "OK: Ordner '" & testFolder & "' gefunden!" & q & vbLf
+        testScript = testScript & "else" & vbLf
+        testScript = testScript & "set outText to outText & linefeed & " & q & "FEHLER: Ordner '" & testFolder & "' in keinem Account gefunden!" & q & vbLf
+        testScript = testScript & "end if" & vbLf
+        testScript = testScript & "return outText" & vbLf
+        testScript = testScript & "end tell"
+
+        Err.Clear
+        On Error Resume Next
+        testResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, testScript)
+        If Err.Number <> 0 Then
+            report = report & Chr$(10060) & " Apple Mail Zugriff FEHLGESCHLAGEN: " & Err.Description & vbLf
+            report = report & "   -> Tipp: Automation-Rechte pruefen (Systemeinstellungen > Datenschutz > Automation)" & vbLf
+            ok = False
+            Err.Clear
+        ElseIf Left$(testResult, 6) = "ERROR:" Then
+            report = report & Chr$(10060) & " Apple Mail Fehler: " & Mid$(testResult, 7) & vbLf
+            ok = False
+        Else
+            If InStr(1, testResult, "OK:") > 0 Then
+                report = report & Chr$(9989) & " Apple Mail: Ordner '" & testFolder & "' gefunden" & vbLf
+                passed = passed + 1
+            Else
+                report = report & Chr$(10060) & " Apple Mail: Ordner '" & testFolder & "' NICHT gefunden" & vbLf
+                ok = False
+            End If
+            report = report & vbLf & "--- Apple Mail Accounts & Ordner ---" & vbLf & testResult & vbLf
+        End If
+        On Error GoTo 0
+    End If
+
+    ' --- 4. Zusammenfassung ---
+    report = report & vbLf & "=== Ergebnis: " & passed & "/" & checks & " Checks bestanden ==="
+    If ok Then
+        report = report & vbLf & Chr$(9989) & " Konfiguration sieht korrekt aus."
+    Else
+        report = report & vbLf & Chr$(10060) & " Es gibt Probleme - siehe Details oben."
+    End If
+
+    Debug.Print report
+    MsgBox report, IIf(ok, vbInformation, vbExclamation), "Mail-Setup Diagnose"
+End Sub
+
 Public Sub ImportLeadsFromAppleMail()
     ' Zweck: Apple-Mail-Leads abrufen, parsen und in die Tabelle schreiben.
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
 
-    Debug.Print "[Main] === Version: 2026-02-19-errlog-aktion-idcheck ==="
+    Debug.Print "[Main] === Version: 2026-02-20-crossdevice-diagnose ==="
 
     ' --- ErrLog leeren ---
     ClearErrorLog
@@ -2052,9 +2194,17 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
     script = script & "set targetBox to missing value" & vbLf
     If Len(mailboxName) > 0 Then
         script = script & "set targetAccountName to " & q & mailboxName & q & vbLf
+        script = script & "set lowerTarget to do shell script ""echo "" & quoted form of targetAccountName & "" | tr '[:upper:]' '[:lower:]'""" & vbLf
         script = script & "try" & vbLf
         script = script & "repeat with a in accounts" & vbLf
-        script = script & "if (name of a) contains targetAccountName then" & vbLf
+        ' Match 1: Account-Name enthaelt Suchbegriff (case-insensitive)
+        script = script & "set lowerAcctName to do shell script ""echo "" & quoted form of (name of a) & "" | tr '[:upper:]' '[:lower:]'""" & vbLf
+        script = script & "set lowerAcctAddr to """"" & vbLf
+        script = script & "try" & vbLf
+        script = script & "set acctEmail to (user name of a)" & vbLf
+        script = script & "if acctEmail is not missing value then set lowerAcctAddr to do shell script ""echo "" & quoted form of acctEmail & "" | tr '[:upper:]' '[:lower:]'""" & vbLf
+        script = script & "end try" & vbLf
+        script = script & "if lowerAcctName contains lowerTarget or lowerAcctAddr contains lowerTarget or lowerTarget contains lowerAcctName then" & vbLf
         script = script & "try" & vbLf
         script = script & "set targetBox to first mailbox of a whose name is " & q & folderName & q & vbLf
         script = script & "exit repeat" & vbLf
@@ -2063,12 +2213,24 @@ Private Function BuildAppleMailScript(ByVal mailboxName As String, ByVal folderN
         script = script & "end repeat" & vbLf
         script = script & "end try" & vbLf
     End If
+    ' Fallback 1: Ordnername global (ueber alle Accounts) suchen
     script = script & "if targetBox is missing value then" & vbLf
     script = script & "try" & vbLf
     script = script & "set targetBox to first mailbox whose name is " & q & folderName & q & vbLf
     script = script & "end try" & vbLf
     script = script & "end if" & vbLf
-    script = script & "if targetBox is missing value then error ""Mailbox nicht gefunden: " & folderName & """" & vbLf
+    ' Fallback 2: Alle Accounts nach dem Ordner durchsuchen
+    script = script & "if targetBox is missing value then" & vbLf
+    script = script & "try" & vbLf
+    script = script & "repeat with a in accounts" & vbLf
+    script = script & "try" & vbLf
+    script = script & "set targetBox to first mailbox of a whose name is " & q & folderName & q & vbLf
+    script = script & "if targetBox is not missing value then exit repeat" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "end repeat" & vbLf
+    script = script & "end try" & vbLf
+    script = script & "end if" & vbLf
+    script = script & "if targetBox is missing value then error ""Mailbox/Ordner nicht gefunden: " & folderName & " (Account: " & mailboxName & "). Bitte LEAD_MAILBOX und LEAD_FOLDER auf dem Blatt Berechnung pruefen.""" & vbLf
     script = script & "set theMessages to (every message of targetBox whose subject contains """ & keywordA & """ or subject contains """ & keywordB & """ or content contains """ & keywordA & """ or content contains """ & keywordB & """ )" & vbLf
     script = script & "if (count of theMessages) > " & MAX_MESSAGES & " then set theMessages to items 1 thru " & MAX_MESSAGES & " of theMessages" & vbLf
     ' Python MIME text/plain Extraktor (base64-kodiert)
@@ -2552,17 +2714,30 @@ End Function
 ' AppleScript Setup
 ' =========================
 Private Sub EnsureAppleScriptInstalled()
-    ' Zweck: AppleScript ins Zielverzeichnis kopieren, falls es fehlt.
+    ' Zweck: AppleScript ins Zielverzeichnis kopieren, falls es fehlt oder veraltet ist.
     ' Abhängigkeiten: GetAppleScriptTargetPath, InstallAppleScript.
     ' Rückgabe: keine (Seiteneffekt Datei-Kopie).
     Dim targetPath As String
     Dim sourcePath As String
+    Dim needsInstall As Boolean
 
     targetPath = GetAppleScriptTargetPath()
     sourcePath = ThisWorkbook.Path & "/" & APPLESCRIPT_SOURCE
 
     If Len(Dir$(targetPath)) = 0 Then
+        needsInstall = True
+    ElseIf Len(Dir$(sourcePath)) > 0 Then
+        ' Auch neu installieren wenn Quelle neuer ist als Ziel
+        On Error Resume Next
+        If FileDateTime(sourcePath) > FileDateTime(targetPath) Then needsInstall = True
+        On Error GoTo 0
+    End If
+
+    If needsInstall Then
+        Debug.Print "[AppleScript] Installiere " & sourcePath & " -> " & targetPath
         InstallAppleScript sourcePath, targetPath
+    Else
+        Debug.Print "[AppleScript] Bereits installiert: " & targetPath
     End If
 End Sub
 
