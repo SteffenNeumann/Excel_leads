@@ -194,17 +194,17 @@ Public Sub DiagnoseMailSetup()
     ' --- 1. AppleScript Installation ---
     checks = checks + 1
     targetPath = GetAppleScriptTargetPath()
-    sourcePath = ThisWorkbook.Path & "/" & APPLESCRIPT_SOURCE
+    sourcePath = FindAppleScriptSource()
     If Len(Dir$(targetPath)) > 0 Then
         report = report & Chr$(9989) & " AppleScript installiert: " & targetPath & vbLf
         passed = passed + 1
     Else
         report = report & Chr$(10060) & " AppleScript FEHLT: " & targetPath & vbLf
-        If Len(Dir$(sourcePath)) > 0 Then
+        If Len(sourcePath) > 0 Then
             report = report & "   -> Quelle vorhanden: " & sourcePath & vbLf
             report = report & "   -> Tipp: AUTO_INSTALL_APPLESCRIPT ist " & IIf(AUTO_INSTALL_APPLESCRIPT, "Ein", "Aus") & vbLf
         Else
-            report = report & "   -> Quelle FEHLT ebenfalls: " & sourcePath & vbLf
+            report = report & "   -> Quelle FEHLT ebenfalls (weder in Workbook-Ordner noch uebergeordnet)" & vbLf
         End If
         ok = False
     End If
@@ -2722,11 +2722,11 @@ Private Sub EnsureAppleScriptInstalled()
     Dim needsInstall As Boolean
 
     targetPath = GetAppleScriptTargetPath()
-    sourcePath = ThisWorkbook.Path & "/" & APPLESCRIPT_SOURCE
+    sourcePath = FindAppleScriptSource()
 
     If Len(Dir$(targetPath)) = 0 Then
         needsInstall = True
-    ElseIf Len(Dir$(sourcePath)) > 0 Then
+    ElseIf Len(sourcePath) > 0 Then
         ' Auch neu installieren wenn Quelle neuer ist als Ziel
         On Error Resume Next
         If FileDateTime(sourcePath) > FileDateTime(targetPath) Then needsInstall = True
@@ -2744,11 +2744,38 @@ End Sub
 Private Function GetAppleScriptTargetPath() As String
     ' Zweck: Zielpfad für das AppleScript ermitteln.
     ' Abhängigkeiten: Environ$ HOME.
-    ' Rückgabe: Vollständiger Pfad.
     ' Rückgabe: Vollständiger Pfad zur scpt-Datei.
     Dim homePath As String
     homePath = Environ$("HOME")
     GetAppleScriptTargetPath = homePath & "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
+End Function
+
+Private Function FindAppleScriptSource() As String
+    ' Zweck: Quelldatei MailReader.applescript suchen.
+    ' Sucht in ThisWorkbook.Path, dann im uebergeordneten Ordner.
+    ' Rückgabe: Pfad zur Datei oder leer wenn nicht gefunden.
+    Dim candidate As String
+    Dim parentPath As String
+
+    ' 1. Im selben Ordner wie die Excel-Datei
+    candidate = ThisWorkbook.Path & "/" & APPLESCRIPT_SOURCE
+    If Len(Dir$(candidate)) > 0 Then
+        FindAppleScriptSource = candidate
+        Exit Function
+    End If
+
+    ' 2. Im uebergeordneten Ordner (z.B. Excel-Datei in Excel_files/)
+    parentPath = ThisWorkbook.Path
+    If InStrRev(parentPath, "/") > 1 Then
+        parentPath = Left$(parentPath, InStrRev(parentPath, "/") - 1)
+        candidate = parentPath & "/" & APPLESCRIPT_SOURCE
+        If Len(Dir$(candidate)) > 0 Then
+            FindAppleScriptSource = candidate
+            Exit Function
+        End If
+    End If
+
+    FindAppleScriptSource = vbNullString
 End Function
 
 Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As String)
