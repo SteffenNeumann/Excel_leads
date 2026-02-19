@@ -1,1 +1,1 @@
-2026-02-19 18:08:44 | e6ffe7f | fix: ClearErrorLog Filter entfernen vor Löschung
+2026-02-19 18:16:11 | 3e9c083 | fix: AppleScript-Suche auch im übergeordneten Ordner
