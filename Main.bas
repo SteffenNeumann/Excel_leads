@@ -178,7 +178,7 @@ Public Sub ImportLeadsFromAppleMail()
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
 
-    Debug.Print "[Main] === Version: 2026-02-18-clear-errlog ==="
+    Debug.Print "[Main] === Version: 2026-02-19-errlog-aktion-idcheck ==="
 
     ' --- ErrLog leeren ---
     ClearErrorLog
@@ -254,6 +254,8 @@ Public Sub ImportLeadsFromAppleMail()
             If Err.Number <> 0 Then
                 errMsg = "Fehler #" & Err.Number & ": " & Err.Description
                 Debug.Print "[Import] " & errMsg & " bei Nachricht " & analyzedCount
+                LogImportError "Laufzeitfehler bei Nachricht " & analyzedCount & ": " & errMsg, _
+                    "Nachricht konnte nicht verarbeitet werden.", "Fehler", "ToDo"
             End If
             On Error GoTo 0
 
@@ -265,6 +267,8 @@ Public Sub ImportLeadsFromAppleMail()
                 Case Else
                     errorCount = errorCount + 1
                     Debug.Print "[Import] Nachricht " & analyzedCount & " fehlgeschlagen (processResult=" & processResult & ")"
+                    LogImportError "Nachricht " & analyzedCount & " fehlgeschlagen (Ergebnis: " & processResult & ")", _
+                        "Nachricht konnte nicht importiert werden. Pruefen ob Inhalt gueltig ist.", "Fehler", "ToDo"
             End Select
         End If
     Next msgBlock
@@ -332,6 +336,8 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     ' Leere Nachrichten ueberspringen (kein Subject UND kein Body)
     If Len(Trim$(msgSubject)) = 0 And Len(Trim$(msgBody)) < 10 Then
         Debug.Print "[ProcessMsg] SKIP: Leere Nachricht (kein Subject, Body < 10 Zeichen)"
+        LogImportError "Leere Nachricht uebersprungen (kein Betreff, Body < 10 Zeichen)", _
+            "Moegliche leere oder unvollstaendige E-Mail.", "Hinweis", "Info"
         ProcessSingleMessage = 0
         Exit Function
     End If
@@ -359,15 +365,19 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     Else
         ' Namenspruefung VOR Import: Normalisierung + Duplikat-Erkennung
         Dim existingNames As Variant
+        Dim existingIDs As Variant
         Dim leadCtx As String
         Dim nameIsDup As Boolean
         Dim rawName As String
         Dim checkedName As String
+        Dim newLeadID As String
 
         existingNames = CollectExistingNames(tbl)
+        existingIDs = CollectExistingIDs(tbl)
         rawName = ResolveKontaktName(parsed)
+        newLeadID = GetField(parsed, "Anfrage_ID")
         leadCtx = "Leadtyp: " & leadType & ", Datum: " & Format$(msgDate, "dd.mm.yy")
-        checkedName = CheckAndNormalizeLeadName(rawName, existingNames, leadCtx, nameIsDup)
+        checkedName = CheckAndNormalizeLeadName(rawName, existingNames, leadCtx, nameIsDup, newLeadID, existingIDs)
 
         If nameIsDup Then
             Debug.Print "[ProcessMsg] Namens-Duplikat erkannt -> uebersprungen"
@@ -1885,7 +1895,7 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
             End If
         Else
             MsgBox "Mailpath ungültig: " & mailPath, vbExclamation
-            LogImportError "Mailpath ungültig", mailPath
+            LogImportError "Mailpath ungültig", mailPath, "Fehler", "ToDo"
         End If
     End If
 
@@ -1921,10 +1931,10 @@ Private Function FetchAppleMailMessages(ByVal keywordA As String, ByVal keywordB
             On Error Resume Next
             mailResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
             If Err.Number <> 0 Then
-                LogImportError "AppleScriptTask-Fehler (" & appLabel & ", " & mbName & ")", Err.Description
+                LogImportError "AppleScriptTask-Fehler (" & appLabel & ", " & mbName & ")", Err.Description, "Fehler", "ToDo"
                 Err.Clear
             ElseIf Left$(mailResult, 6) = "ERROR:" Then
-                LogImportError "AppleScript-Fehler (" & appLabel & ", " & mbName & ")", Mid$(mailResult, 7)
+                LogImportError "AppleScript-Fehler (" & appLabel & ", " & mbName & ")", Mid$(mailResult, 7), "Fehler", "ToDo"
             Else
                 result = result & mailResult
                 If Len(sourceLabels) > 0 Then sourceLabels = sourceLabels & " | "
@@ -2339,7 +2349,7 @@ Private Function FetchAppleMailFolderList() As String
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
     If Err.Number <> 0 Then
         MsgBox "AppleScriptTask-Fehler. Prüfe Script-Installation und Automation-Rechte.", vbExclamation
-        LogImportError "AppleScriptTask-Fehler", Err.Description
+        LogImportError "AppleScriptTask-Fehler", Err.Description, "Fehler", "ToDo"
         Err.Clear
         On Error GoTo 0
         FetchAppleMailFolderList = vbNullString
@@ -2348,7 +2358,7 @@ Private Function FetchAppleMailFolderList() As String
     On Error GoTo 0
     If Left$(result, 6) = "ERROR:" Then
         MsgBox "AppleScript-Fehler: " & Mid$(result, 7), vbExclamation
-        LogImportError "AppleScript-Fehler", Mid$(result, 7)
+        LogImportError "AppleScript-Fehler", Mid$(result, 7), "Fehler", "ToDo"
         FetchAppleMailFolderList = vbNullString
         Exit Function
     End If
@@ -2438,7 +2448,7 @@ Private Function FetchOutlookFolderList() As String
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
     If Err.Number <> 0 Then
         MsgBox "AppleScriptTask-Fehler (Outlook). Prüfe Script-Installation und Automation-Rechte.", vbExclamation
-        LogImportError "AppleScriptTask-Fehler (Outlook)", Err.Description
+        LogImportError "AppleScriptTask-Fehler (Outlook)", Err.Description, "Fehler", "ToDo"
         Err.Clear
         On Error GoTo 0
         FetchOutlookFolderList = vbNullString
@@ -2447,7 +2457,7 @@ Private Function FetchOutlookFolderList() As String
     On Error GoTo 0
     If Left$(result, 6) = "ERROR:" Then
         MsgBox "AppleScript-Fehler (Outlook): " & Mid$(result, 7), vbExclamation
-        LogImportError "AppleScript-Fehler (Outlook)", Mid$(result, 7)
+        LogImportError "AppleScript-Fehler (Outlook)", Mid$(result, 7), "Fehler", "ToDo"
         FetchOutlookFolderList = vbNullString
         Exit Function
     End If
@@ -3276,9 +3286,10 @@ Private Function IsNameSwapped(ByVal name1 As String, ByVal name2 As String) As 
     End If
 End Function
 
-Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existingNames As Variant, ByVal leadContext As String, ByRef nameIsDuplicate As Boolean) As String
+Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existingNames As Variant, ByVal leadContext As String, ByRef nameIsDuplicate As Boolean, Optional ByVal newLeadID As String = "", Optional ByVal existingIDs As Variant) As String
     ' Zweck: Name normalisieren, Komma-Format korrigieren, Vertauschung pruefen,
     '        bei Aehnlichkeit (Levenshtein) Hinweis loggen.
+    '        Wenn newLeadID und existingIDs vorhanden: nur als Duplikat werten wenn ID identisch.
     ' Rueckgabe: korrigierter Name. nameIsDuplicate=True wenn gleiche Person erkannt.
     Dim normalized As String
     Dim hadComma As Boolean
@@ -3286,8 +3297,18 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
     Dim dist As Long
     Dim existName As String
     Dim threshold As Long
+    Dim existID As String
+    Dim hasIDCheck As Boolean
 
     nameIsDuplicate = False
+
+    ' ID-Pruefung aktivieren wenn sowohl neue ID als auch bestehende IDs vorhanden
+    hasIDCheck = (Len(Trim$(newLeadID)) > 0)
+    If hasIDCheck Then
+        On Error Resume Next
+        If Not IsArray(existingIDs) Then hasIDCheck = False
+        On Error GoTo 0
+    End If
 
     ' Schritt 1: Komma-Korrektur
     hadComma = (InStr(rawName, ",") > 0)
@@ -3297,7 +3318,7 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
     If hadComma And normalized <> rawName Then
         LogImportError _
             "Name korrigiert (Komma-Format): '" & rawName & "' -> '" & normalized & "'", _
-            leadContext, "Hinweis"
+            leadContext, "Hinweis", "Info"
         Debug.Print "[NameCheck] Komma-Korrektur: '" & rawName & "' -> '" & normalized & "'"
     End If
 
@@ -3311,15 +3332,35 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
         existName = Trim$(CStr(existingNames(i)))
         If Len(existName) = 0 Then GoTo NextExisting
 
+        ' Bestehende ID fuer diesen Eintrag ermitteln
+        existID = vbNullString
+        If hasIDCheck Then
+            On Error Resume Next
+            If i >= LBound(existingIDs) And i <= UBound(existingIDs) Then
+                existID = Trim$(CStr(existingIDs(i)))
+            End If
+            On Error GoTo 0
+        End If
+
         ' Bestehenden Namen ebenfalls normalisieren (Komma-Format umdrehen)
         Dim existNorm As String
         existNorm = NormalizeLeadName(existName)
 
-        ' Exakt gleich (nach Normalisierung) -> Duplikat
+        ' Exakt gleich (nach Normalisierung) -> pruefen ob ID unterschiedlich
         If StrComp(normalized, existNorm, vbTextCompare) = 0 Then
+            ' Wenn beide eine ID haben und diese unterschiedlich sind -> neue Anfrage, kein Duplikat
+            If hasIDCheck And Len(existID) > 0 Then
+                If StrComp(Trim$(newLeadID), existID, vbTextCompare) <> 0 Then
+                    LogImportError _
+                        "Gleicher Name aber andere ID: '" & rawName & "' (neu: " & newLeadID & ", bestehend: " & existID & ")", _
+                        "Neue Anfrage desselben Kunden - wird importiert. " & leadContext, "Hinweis", "Info"
+                    Debug.Print "[NameCheck] Gleicher Name, andere ID -> kein Duplikat: '" & normalized & "' (ID neu=" & newLeadID & ", alt=" & existID & ")"
+                    GoTo NextExisting
+                End If
+            End If
             LogImportError _
                 "Name-Duplikat erkannt (nach Normalisierung): '" & rawName & "' = bestehend '" & existName & "'", _
-                "Eintrag wird uebersprungen. " & leadContext, "Hinweis"
+                "Eintrag wird uebersprungen. " & leadContext, "Hinweis", "Info"
             Debug.Print "[NameCheck] Duplikat (normalisiert): '" & normalized & "' = '" & existNorm & "'"
             nameIsDuplicate = True
             GoTo SkipExistingCheck
@@ -3327,9 +3368,19 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
 
         ' Vertauschungs-Check
         If IsNameSwapped(normalized, existNorm) Then
+            ' Auch hier ID-Pruefung: unterschiedliche ID -> neue Anfrage
+            If hasIDCheck And Len(existID) > 0 Then
+                If StrComp(Trim$(newLeadID), existID, vbTextCompare) <> 0 Then
+                    LogImportError _
+                        "Namens-Vertauschung aber andere ID: '" & normalized & "' vs. '" & existName & "' (neu: " & newLeadID & ", bestehend: " & existID & ")", _
+                        "Neue Anfrage desselben Kunden - wird importiert. " & leadContext, "Hinweis", "Info"
+                    Debug.Print "[NameCheck] Vertauschung aber andere ID -> kein Duplikat: '" & normalized & "'"
+                    GoTo NextExisting
+                End If
+            End If
             LogImportError _
                 "Namens-Vertauschung erkannt: '" & normalized & "' vs. bestehend '" & existName & "'", _
-                "Gleiche Person - Eintrag wird uebersprungen. " & leadContext, "Hinweis"
+                "Gleiche Person - Eintrag wird uebersprungen. " & leadContext, "Hinweis", "Info"
             Debug.Print "[NameCheck] Vertauschung: '" & normalized & "' vs '" & existName & "'"
             nameIsDuplicate = True
             GoTo SkipExistingCheck
@@ -3339,9 +3390,17 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
         If Abs(Len(normalized) - Len(existNorm)) <= threshold Then
             dist = LevenshteinDistance(normalized, existNorm)
             If dist > 0 And dist <= threshold Then
+                ' Bei aehnlichem Namen + unterschiedlicher ID -> Hinweis aber kein Stopp
+                Dim levAktionType As String
+                levAktionType = "ToDo"
+                If hasIDCheck And Len(existID) > 0 Then
+                    If StrComp(Trim$(newLeadID), existID, vbTextCompare) <> 0 Then
+                        levAktionType = "Info"
+                    End If
+                End If
                 LogImportError _
                     "Aehnlicher Name gefunden: '" & normalized & "' vs. bestehend '" & existName & "' (Distanz: " & dist & ")", _
-                    "Moeglicherweise gleiche Person. " & leadContext, "Hinweis"
+                    "Moeglicherweise gleiche Person. " & leadContext, "Hinweis", levAktionType
                 Debug.Print "[NameCheck] Levenshtein=" & dist & ": '" & normalized & "' vs '" & existName & "'"
                 GoTo SkipExistingCheck
             End If
@@ -3389,6 +3448,48 @@ Private Function CollectExistingNames(ByVal tbl As ListObject) As Variant
     End If
 End Function
 
+Private Function CollectExistingIDs(ByVal tbl As ListObject) As Variant
+    ' Zweck: Alle bestehenden IDs (Auftragsnummern) aus der Tabelle sammeln.
+    ' Rueckgabe: Array von Strings (parallel zu CollectExistingNames).
+    Dim headerMap As Object
+    Dim idColIdx As Long
+    Dim nameColIdx As Long
+    Dim i As Long
+    Dim ids() As String
+    Dim cnt As Long
+
+    Set headerMap = BuildHeaderIndex(tbl)
+    idColIdx = GetHeaderIndex(headerMap, "ID")
+    nameColIdx = GetHeaderIndex(headerMap, "Name")
+
+    If nameColIdx = 0 Or tbl.ListRows.Count = 0 Then
+        CollectExistingIDs = Array()
+        Exit Function
+    End If
+
+    ReDim ids(1 To tbl.ListRows.Count)
+    cnt = 0
+    For i = 1 To tbl.ListRows.Count
+        Dim cellName As String
+        cellName = Trim$(CStr(tbl.DataBodyRange.Cells(i, nameColIdx).Value))
+        If Len(cellName) > 0 Then
+            cnt = cnt + 1
+            If idColIdx > 0 Then
+                ids(cnt) = Trim$(CStr(tbl.DataBodyRange.Cells(i, idColIdx).Value))
+            Else
+                ids(cnt) = vbNullString
+            End If
+        End If
+    Next i
+
+    If cnt = 0 Then
+        CollectExistingIDs = Array()
+    Else
+        ReDim Preserve ids(1 To cnt)
+        CollectExistingIDs = ids
+    End If
+End Function
+
 Private Function GetCellByHeaderMap(ByVal rowItem As ListRow, ByVal headerMap As Object, ByVal headerName As String) As Range
     ' Zweck: Zellobjekt anhand Header-Map holen.
     ' Abhängigkeiten: GetHeaderIndex.
@@ -3417,13 +3518,15 @@ Private Sub SetImportNote(ByVal targetCell As Range)
     On Error GoTo 0
 End Sub
 
-Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As String, Optional ByVal logType As String = "Fehler")
+Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As String, Optional ByVal logType As String = "Fehler", Optional ByVal aktion As String = "")
     ' Zweck: Fehler/Hinweis in ErrLog protokollieren (via ListObject).
     ' logType: "Fehler" oder "Hinweis"
+    ' aktion: "Info" (nur informativ) oder "ToDo" (Handlungsbedarf)
     Dim ws As Worksheet
     Dim tbl As ListObject
     Dim newRow As ListRow
     Dim icon As String
+    Dim aktionVal As String
 
     Set ws = GetOrCreateErrorLogSheet()
     If ws Is Nothing Then Exit Sub
@@ -3438,6 +3541,17 @@ Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As St
         logType = "Fehler"
     End If
 
+    ' Aktion bestimmen: explizit uebergeben oder aus logType ableiten
+    If Len(Trim$(aktion)) > 0 Then
+        aktionVal = aktion
+    Else
+        If StrComp(logType, "Hinweis", vbTextCompare) = 0 Then
+            aktionVal = "Info"
+        Else
+            aktionVal = "ToDo"
+        End If
+    End If
+
     ' Neue Zeile in der Tabelle anlegen
     Set newRow = tbl.ListRows.Add
     newRow.Range(1, 1).Value = icon
@@ -3445,6 +3559,7 @@ Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As St
     newRow.Range(1, 3).Value = Format$(Now, "dd.mm.yy hh:nn")
     newRow.Range(1, 4).Value = errMessage
     newRow.Range(1, 5).Value = possibleCause
+    newRow.Range(1, 6).Value = aktionVal
 
     ' Zeile einfaerben
     If StrComp(logType, "Hinweis", vbTextCompare) = 0 Then
@@ -3480,6 +3595,8 @@ Private Function GetOrCreateErrorLogSheet() As Worksheet
             needsHeader = True
         ElseIf ws.Cells(1, 1).Value = "Zeitstempel" And Len(Trim$(CStr(ws.Cells(1, 4).Value))) = 0 Then
             needsHeader = True
+        ElseIf Len(Trim$(CStr(ws.Cells(1, 6).Value))) = 0 Then
+            needsHeader = True
         End If
     End If
 
@@ -3489,8 +3606,9 @@ Private Function GetOrCreateErrorLogSheet() As Worksheet
         ws.Cells(1, 3).Value = "Zeitstempel"
         ws.Cells(1, 4).Value = "Meldung"
         ws.Cells(1, 5).Value = "Details / Ursache"
+        ws.Cells(1, 6).Value = "Aktion"
         ' Header formatieren
-        With ws.Range(ws.Cells(1, 1), ws.Cells(1, 5))
+        With ws.Range(ws.Cells(1, 1), ws.Cells(1, 6))
             .Font.Bold = True
             .Interior.Color = RGB(68, 114, 196)
             .Font.Color = RGB(255, 255, 255)
@@ -3500,6 +3618,7 @@ Private Function GetOrCreateErrorLogSheet() As Worksheet
         ws.Columns(3).ColumnWidth = 16
         ws.Columns(4).ColumnWidth = 50
         ws.Columns(5).ColumnWidth = 50
+        ws.Columns(6).ColumnWidth = 10
     End If
 
     Set GetOrCreateErrorLogSheet = ws
