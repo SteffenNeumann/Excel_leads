@@ -239,6 +239,7 @@ Public Sub ImportLeadsFromAppleMail()
 
     Dim processResult As Long
     Dim errMsg As String
+    Dim blockRef As String
 
     For Each msgBlock In messages
         ' Schleife: jeden Nachrichtenblock einzeln verarbeiten.
@@ -248,13 +249,16 @@ Public Sub ImportLeadsFromAppleMail()
                 Application.StatusBar = "Nachrichten analysieren... " & analyzedCount & "/" & totalBlocks
             End If
 
+            ' Referenz-Info fuer Fehlerprotokoll extrahieren
+            blockRef = ExtractRefFromBlock(CStr(msgBlock))
+
             Err.Clear
             On Error Resume Next
             processResult = ProcessSingleMessage(tbl, CStr(msgBlock))
             If Err.Number <> 0 Then
                 errMsg = "Fehler #" & Err.Number & ": " & Err.Description
                 Debug.Print "[Import] " & errMsg & " bei Nachricht " & analyzedCount
-                LogImportError "Laufzeitfehler bei Nachricht " & analyzedCount & ": " & errMsg, _
+                LogImportError "Laufzeitfehler bei Nachricht " & analyzedCount & " [" & blockRef & "]: " & errMsg, _
                     "Nachricht konnte nicht verarbeitet werden.", "Fehler", "ToDo"
             End If
             On Error GoTo 0
@@ -267,7 +271,7 @@ Public Sub ImportLeadsFromAppleMail()
                 Case Else
                     errorCount = errorCount + 1
                     Debug.Print "[Import] Nachricht " & analyzedCount & " fehlgeschlagen (processResult=" & processResult & ")"
-                    LogImportError "Nachricht " & analyzedCount & " fehlgeschlagen (Ergebnis: " & processResult & ")", _
+                    LogImportError "Nachricht " & analyzedCount & " fehlgeschlagen [" & blockRef & "] (Ergebnis: " & processResult & ")", _
                         "Nachricht konnte nicht importiert werden. Pruefen ob Inhalt gueltig ist.", "Fehler", "ToDo"
             End Select
         End If
@@ -298,6 +302,68 @@ End Sub
 ' =========================
 ' Apple Mail Read
 ' =========================
+
+Private Function ExtractRefFromBlock(ByVal blockText As String) As String
+    ' Zweck: Betreff oder Dateiname aus rohem Nachrichtenblock extrahieren (fuer Fehlerprotokoll).
+    ' Leichtgewichtig - nur fuer Referenz-Zwecke in der Import-Schleife.
+    Dim p As Long
+    Dim lineEnd As Long
+    Dim ref As String
+
+    ' SUBJECT: suchen
+    p = InStr(1, blockText, SUBJECT_TAG, vbTextCompare)
+    If p > 0 Then
+        p = p + Len(SUBJECT_TAG)
+        lineEnd = InStr(p, blockText, vbLf)
+        If lineEnd = 0 Then lineEnd = Len(blockText) + 1
+        ref = Trim$(Mid$(blockText, p, lineEnd - p))
+        ref = Replace(ref, vbCr, vbNullString)
+        If Len(ref) > 80 Then ref = Left$(ref, 77) & "..."
+        If Len(ref) > 0 Then
+            ExtractRefFromBlock = "Betreff: " & ref
+            Exit Function
+        End If
+    End If
+
+    ' FILENAME: suchen
+    p = InStr(1, blockText, FILENAME_TAG, vbTextCompare)
+    If p > 0 Then
+        p = p + Len(FILENAME_TAG)
+        lineEnd = InStr(p, blockText, vbLf)
+        If lineEnd = 0 Then lineEnd = Len(blockText) + 1
+        ref = Trim$(Mid$(blockText, p, lineEnd - p))
+        ref = Replace(ref, vbCr, vbNullString)
+        If Len(ref) > 80 Then ref = Left$(ref, 77) & "..."
+        If Len(ref) > 0 Then
+            ExtractRefFromBlock = "Datei: " & ref
+            Exit Function
+        End If
+    End If
+
+    ExtractRefFromBlock = "(keine Referenz)"
+End Function
+
+Private Function BuildMsgRef(ByVal msgSubject As String, ByVal msgFileName As String, ByVal msgFrom As String) As String
+    ' Zweck: Referenz-String aus Betreff, Dateiname und Absender zusammenbauen.
+    Dim ref As String
+
+    If Len(Trim$(msgSubject)) > 0 Then
+        ref = "Betreff: " & Left$(Trim$(msgSubject), 80)
+    End If
+
+    If Len(Trim$(msgFileName)) > 0 Then
+        If Len(ref) > 0 Then ref = ref & " | "
+        ref = ref & "Datei: " & Trim$(msgFileName)
+    End If
+
+    If Len(Trim$(msgFrom)) > 0 Then
+        If Len(ref) > 0 Then ref = ref & " | "
+        ref = ref & "Von: " & Left$(Trim$(msgFrom), 50)
+    End If
+
+    If Len(ref) = 0 Then ref = "(keine Referenz)"
+    BuildMsgRef = ref
+End Function
 
 Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText As String) As Long
     ' Zweck: Einzelne Nachricht verarbeiten (parsen, dekodieren, importieren).
@@ -336,7 +402,7 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     ' Leere Nachrichten ueberspringen (kein Subject UND kein Body)
     If Len(Trim$(msgSubject)) = 0 And Len(Trim$(msgBody)) < 10 Then
         Debug.Print "[ProcessMsg] SKIP: Leere Nachricht (kein Subject, Body < 10 Zeichen)"
-        LogImportError "Leere Nachricht uebersprungen (kein Betreff, Body < 10 Zeichen)", _
+        LogImportError "Leere Nachricht uebersprungen [" & BuildMsgRef(msgSubject, vbNullString, msgFrom) & "]", _
             "Moegliche leere oder unvollstaendige E-Mail.", "Hinweis", "Info"
         ProcessSingleMessage = 0
         Exit Function
@@ -351,11 +417,15 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
 
     ' Dateiname fuer Zuordnung durchreichen
     Dim msgFileName As String
+    Dim msgRef As String
     If TryGetKV(payload, "FileName", v) Then msgFileName = CStr(v)
     If Len(msgFileName) > 0 Then
         SetKV parsed, "MailFileName", msgFileName
         Debug.Print "[ProcessMsg] MailFileName='" & msgFileName & "'"
     End If
+
+    ' Referenz-String fuer Fehlerprotokoll
+    msgRef = BuildMsgRef(msgSubject, msgFileName, msgFrom)
 
     ' Diagnose: alle Felder ausgeben (Debug-Fenster Ctrl+G)
     DebugDumpFields parsed, msgSubject
@@ -376,7 +446,7 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
         existingIDs = CollectExistingIDs(tbl)
         rawName = ResolveKontaktName(parsed)
         newLeadID = GetField(parsed, "Anfrage_ID")
-        leadCtx = "Leadtyp: " & leadType & ", Datum: " & Format$(msgDate, "dd.mm.yy")
+        leadCtx = "Leadtyp: " & leadType & ", Datum: " & Format$(msgDate, "dd.mm.yy") & " | Ref: " & msgRef
         checkedName = CheckAndNormalizeLeadName(rawName, existingNames, leadCtx, nameIsDup, newLeadID, existingIDs)
 
         If nameIsDup Then
