@@ -345,19 +345,33 @@ End Function
 
 Private Function BuildMsgRef(ByVal msgSubject As String, ByVal msgFileName As String, ByVal msgFrom As String) As String
     ' Zweck: Referenz-String aus Betreff, Dateiname und Absender zusammenbauen.
+    '        Dateiname wird nur angezeigt wenn er vom Betreff abweicht.
     Dim ref As String
+    Dim subjectClean As String
+    Dim fileClean As String
 
     If Len(Trim$(msgSubject)) > 0 Then
         ref = "Betreff: " & Left$(Trim$(msgSubject), 80)
     End If
 
+    ' Dateiname nur anhaengen wenn er sich inhaltlich vom Betreff unterscheidet
     If Len(Trim$(msgFileName)) > 0 Then
-        If Len(ref) > 0 Then ref = ref & " | "
-        ref = ref & "Datei: " & Trim$(msgFileName)
+        subjectClean = LCase$(Trim$(msgSubject))
+        fileClean = LCase$(Trim$(msgFileName))
+        ' .eml Endung entfernen fuer Vergleich
+        If Right$(fileClean, 4) = ".eml" Then fileClean = Left$(fileClean, Len(fileClean) - 4)
+        ' Sonderzeichen normalisieren (Unterstriche, Leerzeichen)
+        fileClean = Replace(fileClean, "_", " ")
+        subjectClean = Replace(subjectClean, "_", " ")
+        ' Nur anzeigen wenn Dateiname wirklich andere Info enthaelt
+        If StrComp(subjectClean, fileClean, vbTextCompare) <> 0 Then
+            If Len(ref) > 0 Then ref = ref & vbLf
+            ref = ref & "Datei: " & Trim$(msgFileName)
+        End If
     End If
 
     If Len(Trim$(msgFrom)) > 0 Then
-        If Len(ref) > 0 Then ref = ref & " | "
+        If Len(ref) > 0 Then ref = ref & vbLf
         ref = ref & "Von: " & Left$(Trim$(msgFrom), 50)
     End If
 
@@ -3630,6 +3644,10 @@ Private Sub LogImportError(ByVal errMessage As String, ByVal possibleCause As St
     newRow.Range(1, 4).Value = errMessage
     newRow.Range(1, 5).Value = possibleCause
     newRow.Range(1, 6).Value = aktionVal
+
+    ' Textumbruch fuer Meldung und Details/Ursache
+    newRow.Range(1, 4).WrapText = True
+    newRow.Range(1, 5).WrapText = True
 
     ' Zeile einfaerben
     If StrComp(logType, "Hinweis", vbTextCompare) = 0 Then
