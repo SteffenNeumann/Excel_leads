@@ -3901,6 +3901,11 @@ Private Sub ClearErrorLog()
     If ws.ListObjects.Count = 0 Then Exit Sub
     Set tbl = ws.ListObjects(1)
     
+    ' Filter entfernen, damit alle Zeilen sichtbar und loeschbar sind
+    If tbl.AutoFilter.FilterMode Then
+        tbl.AutoFilter.ShowAllData
+    End If
+    
     ' DataBodyRange loeschen (Header bleibt automatisch erhalten)
     If Not tbl.DataBodyRange Is Nothing Then
         tbl.DataBodyRange.Delete xlShiftUp
