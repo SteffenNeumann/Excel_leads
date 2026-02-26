@@ -2813,9 +2813,15 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
 
     If Err.Number <> 0 Then
         If Err.Number = 75 Then
-            MsgBox "Zugriff verweigert. Bitte manuell kopieren nach: " & folderPath & " oder AUTO_INSTALL_APPLESCRIPT aktivieren.", vbExclamation
+            ' Zugriff verweigert, aber pruefen ob Zieldatei schon existiert
+            If Len(Dir$(targetPath)) > 0 Then
+                ' Datei ist da -> nur Debug-Hinweis, kein Popup
+                Debug.Print "[InstallAppleScript] Update fehlgeschlagen (Zugriff verweigert), vorhandene Version wird verwendet."
+            Else
+                MsgBox "Zugriff verweigert. Bitte manuell kopieren nach: " & folderPath, vbExclamation
+            End If
         Else
-            MsgBox "AppleScript konnte nicht installiert werden. Prüfe Rechte.", vbExclamation
+            MsgBox "AppleScript konnte nicht installiert werden (Err " & Err.Number & "). Prüfe Rechte.", vbExclamation
         End If
         Err.Clear
     End If
