@@ -575,16 +575,14 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     Dim origDateStr As String
     origDateStr = GetField(parsed, "OriginalDate")
     If Len(origDateStr) > 0 Then
-        On Error Resume Next
         Dim origDate As Date
-        origDate = CDate(origDateStr)
-        If Err.Number = 0 Then
+        origDate = ParseGermanDateString(origDateStr)
+        If origDate > 0 Then
             msgDate = origDate
             Debug.Print "[ProcessMsg] msgDate ueberschrieben mit OriginalDate: " & Format$(msgDate, "dd.mm.yyyy")
         Else
             Debug.Print "[ProcessMsg] OriginalDate konnte nicht geparst werden: " & origDateStr
         End If
-        On Error GoTo 0
     End If
 
     ' Dateiname fuer Zuordnung durchreichen
@@ -3223,6 +3221,77 @@ Private Function ExtractOriginalDate(ByVal bodyText As String) As String
     Next i
 
     ExtractOriginalDate = vbNullString
+End Function
+
+Private Function ParseGermanDateString(ByVal dateStr As String) As Date
+    ' Zweck: Parst deutsche Datumsstrings wie "Mittwoch, 25. Februar 2026 um 10:18".
+    ' Abhaengigkeiten: GermanMonthToNumber.
+    ' Rueckgabe: Date-Wert oder 0 bei Fehler.
+    Dim cleaned As String
+    Dim parts() As String
+    Dim dayNum As Long
+    Dim monthNum As Long
+    Dim yearNum As Long
+    Dim token As Variant
+    Dim tokens() As String
+    Dim j As Long
+
+    ' Wochentag entfernen (alles vor erstem Komma)
+    If InStr(dateStr, ",") > 0 Then
+        cleaned = Trim$(Mid$(dateStr, InStr(dateStr, ",") + 1))
+    Else
+        cleaned = Trim$(dateStr)
+    End If
+
+    ' "um HH:MM" und alles danach entfernen
+    If InStr(1, cleaned, " um ", vbTextCompare) > 0 Then
+        cleaned = Trim$(Left$(cleaned, InStr(1, cleaned, " um ", vbTextCompare) - 1))
+    End If
+
+    ' Punkte nach Zahlen entfernen ("25." -> "25")
+    cleaned = Replace(cleaned, ".", " ")
+
+    ' Mehrfache Leerzeichen reduzieren und in Tokens splitten
+    Do While InStr(cleaned, "  ") > 0
+        cleaned = Replace(cleaned, "  ", " ")
+    Loop
+    cleaned = Trim$(cleaned)
+    tokens = Split(cleaned, " ")
+
+    ' Erwarte: "25 Februar 2026" (3 Tokens)
+    dayNum = 0: monthNum = 0: yearNum = 0
+    For j = LBound(tokens) To UBound(tokens)
+        Dim tk As String
+        tk = Trim$(tokens(j))
+        If Len(tk) = 0 Then GoTo NextToken
+
+        If IsNumeric(tk) Then
+            If dayNum = 0 And CLng(tk) >= 1 And CLng(tk) <= 31 Then
+                dayNum = CLng(tk)
+            ElseIf yearNum = 0 And CLng(tk) >= 2000 Then
+                yearNum = CLng(tk)
+            End If
+        Else
+            If monthNum = 0 Then
+                monthNum = GermanMonthToNumber(tk)
+            End If
+        End If
+NextToken:
+    Next j
+
+    If dayNum > 0 And monthNum > 0 And yearNum > 0 Then
+        On Error Resume Next
+        ParseGermanDateString = DateSerial(yearNum, monthNum, dayNum)
+        If Err.Number <> 0 Then ParseGermanDateString = 0
+        On Error GoTo 0
+        Debug.Print "[ParseGermanDateString] Ergebnis: " & Format$(ParseGermanDateString, "dd.mm.yyyy")
+    Else
+        ' Fallback: CDate versuchen
+        On Error Resume Next
+        ParseGermanDateString = CDate(dateStr)
+        If Err.Number <> 0 Then ParseGermanDateString = 0
+        On Error GoTo 0
+    End If
 End Function
 
 Private Function ResolveLeadType(ByVal subjectText As String, ByVal bodyText As String) As String
