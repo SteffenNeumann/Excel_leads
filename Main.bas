@@ -580,29 +580,44 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     SetKV parsed, "MailBody", msgBody
     SetKV parsed, "MailSubject", msgSubject
 
-    ' Bei weitergeleiteten Mails: Bereinigtes Datum speichern
+    ' Bei weitergeleiteten Mails: Datum per Split extrahieren
+    ' Input z.B.: "Mittwoch, 25. Februar 2026 um 10:18"
+    ' Split -> Tokens durchlaufen -> Tag/Monat/Jahr finden -> DateSerial
     Dim origDateStr As String
     origDateStr = GetField(parsed, "OriginalDate")
     If Len(origDateStr) > 0 Then
-        Dim cleanedDate As String
-        cleanedDate = CleanDateString(origDateStr)
-        If Len(cleanedDate) > 0 Then
-            ' String in echtes Datum parsen (ParseGermanDateString oder CDate)
-            Dim parsedOrigDate As Date
-            parsedOrigDate = ParseGermanDateString(cleanedDate)
-            If parsedOrigDate > 0 Then
-                ' Nur Monat+Jahr speichern (1. des Monats) -> passt zu Spaltenzweck
-                Dim origDateValue As Date
-                origDateValue = DateSerial(Year(parsedOrigDate), Month(parsedOrigDate), 1)
-                SetKV parsed, "OriginalDateClean", CStr(origDateValue)
-                Debug.Print "[ProcessMsg] OriginalDateClean: " & Format$(origDateValue, "dd.mm.yyyy") & " (aus: '" & origDateStr & "')"
+        Debug.Print "[ProcessMsg] OriginalDate roh: '" & origDateStr & "'"
+        Dim dateParts() As String
+        Dim dp As Long
+        Dim dDay As Long, dMonth As Long, dYear As Long
+        Dim dTk As String
+        dDay = 0: dMonth = 0: dYear = 0
+        dateParts = Split(origDateStr, " ")
+        For dp = LBound(dateParts) To UBound(dateParts)
+            dTk = Trim$(dateParts(dp))
+            dTk = Replace(dTk, ".", "")
+            dTk = Replace(dTk, ",", "")
+            If Len(dTk) = 0 Then GoTo NextDP
+            If IsNumeric(dTk) Then
+                If dDay = 0 And CLng(dTk) >= 1 And CLng(dTk) <= 31 Then
+                    dDay = CLng(dTk)
+                ElseIf dYear = 0 And CLng(dTk) >= 2000 Then
+                    dYear = CLng(dTk)
+                ElseIf dMonth = 0 And CLng(dTk) >= 1 And CLng(dTk) <= 12 Then
+                    dMonth = CLng(dTk)
+                End If
             Else
-                ' Fallback: Bereinigten String direkt verwenden
-                SetKV parsed, "OriginalDateClean", cleanedDate
-                Debug.Print "[ProcessMsg] OriginalDateClean (String): '" & cleanedDate & "'"
+                If dMonth = 0 Then dMonth = GermanMonthToNumber(dTk)
             End If
+NextDP:
+        Next dp
+        If dDay > 0 And dMonth > 0 And dYear > 0 Then
+            Dim origDateValue As Date
+            origDateValue = DateSerial(dYear, dMonth, 1)
+            SetKV parsed, "OriginalDateClean", Format$(origDateValue, "dd.mm.yyyy")
+            Debug.Print "[ProcessMsg] OriginalDateClean: " & Format$(origDateValue, "dd.mm.yyyy") & " (Tag=" & dDay & " Monat=" & dMonth & " Jahr=" & dYear & ")"
         Else
-            Debug.Print "[ProcessMsg] OriginalDate konnte nicht bereinigt werden: '" & origDateStr & "'"
+            Debug.Print "[ProcessMsg] Datum nicht parsbar: '" & origDateStr & "' (Tag=" & dDay & " Monat=" & dMonth & " Jahr=" & dYear & ")"
         End If
     End If
 
@@ -4392,26 +4407,25 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
 
     Debug.Print "[AddLeadRow] Werte -> Name='" & nameVal & "' Tel='" & phoneVal & "' PLZ='" & plzVal & "' PG='" & pgVal & "'"
 
-    ' Datum: Bei weitergeleiteten Mails bereinigtes Original-Datum direkt eintragen
+    ' Datum: Bei weitergeleiteten Mails bereinigtes Original-Datum eintragen
     Dim origClean As String
     origClean = GetField(fields, "OriginalDateClean")
     If Len(origClean) > 0 Then
-        ' Versuche String als Date zu parsen fuer korrektes Excel-Format
+        ' Format ist "dd.mm.yyyy" -> direkt per CDate parsen
         Dim origAsDate As Date
         On Error Resume Next
         origAsDate = CDate(origClean)
-        If Err.Number = 0 And origAsDate > 0 Then
-            SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", origAsDate
-            Debug.Print "[AddLeadRow] Monat Lead erhalten = " & Format$(origAsDate, "dd.mm.yyyy") & " (Original-Date)"
-        Else
-            Err.Clear
-            ' Fallback: String direkt schreiben
-            SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", origClean
-            Debug.Print "[AddLeadRow] Monat Lead erhalten = '" & origClean & "' (String-Fallback)"
-        End If
         On Error GoTo 0
+        If origAsDate > 0 Then
+            SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", origAsDate
+            Debug.Print "[AddLeadRow] Monat Lead erhalten = " & origClean & " (Original)"
+        Else
+            SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
+            Debug.Print "[AddLeadRow] Monat Lead erhalten = Fallback msgDate (origClean='" & origClean & "')"
+        End If
     Else
         SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
+        Debug.Print "[AddLeadRow] Monat Lead erhalten = Fallback msgDate (kein OriginalDateClean)"
     End If
     Set monthCell = GetCellByHeaderMap(newRow, headerMap, "Monat Lead erhalten")
     SetImportNote monthCell
