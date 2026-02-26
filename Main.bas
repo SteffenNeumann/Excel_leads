@@ -834,17 +834,25 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         filePart = filePath
     End If
 
-    ' Nicht-ASCII-Zeichen im Dateinamen durch ? ersetzen
-    ' find -name interpretiert ? als Wildcard (unabhaengig von Shell-Quoting)
+    ' Nicht-ASCII-Zeichen im Dateinamen durch * ersetzen
+    ' macOS speichert Umlaute als NFD (z.B. ae = a + combining mark = 2 Zeichen)
+    ' Daher * statt ? verwenden: * matcht null oder mehr Zeichen
+    ' Aufeinanderfolgende * werden zu einem * zusammengefasst
     Dim safeFile As String
     Dim ci As Long, cc As Long
+    Dim prevWasStar As Boolean
     safeFile = vbNullString
+    prevWasStar = False
     For ci = 1 To Len(filePart)
         cc = AscW(Mid$(filePart, ci, 1))
         If cc > 127 Then
-            safeFile = safeFile & "?"
+            If Not prevWasStar Then
+                safeFile = safeFile & "*"
+                prevWasStar = True
+            End If
         Else
             safeFile = safeFile & Mid$(filePart, ci, 1)
+            prevWasStar = False
         End If
     Next ci
 
