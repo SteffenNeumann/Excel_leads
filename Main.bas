@@ -760,9 +760,28 @@ End Function
 
 Private Function ReadTextFile(ByVal filePath As String) As String
     ' Zweck: Datei als String lesen. Fallback via AppleScript bei Umlaut-Dateinamen (macOS).
+    ' macOS-Problem: Open For Binary kann bei Umlaut-Pfaden Null-Bytes liefern.
     Dim f As Integer
     Dim txt As String
     Dim bytes As Long
+    Dim hasNonAscii As Boolean
+    Dim ci As Long
+
+    ' Pruefen ob Dateiname Nicht-ASCII-Zeichen enthaelt
+    For ci = 1 To Len(filePath)
+        If AscW(Mid$(filePath, ci, 1)) > 127 Then
+            hasNonAscii = True
+            Exit For
+        End If
+    Next ci
+
+    ' Bei Umlaut-Dateinamen direkt Shell-Fallback nutzen (Open For Binary liefert Muell)
+    If hasNonAscii Then
+        Debug.Print "[ReadTextFile] Umlaut erkannt -> direkt Shell-Read fuer: " & filePath
+        txt = ReadTextFileViaShell(filePath)
+        ReadTextFile = txt
+        Exit Function
+    End If
 
     f = FreeFile
     On Error Resume Next
@@ -771,7 +790,7 @@ Private Function ReadTextFile(ByVal filePath As String) As String
         Debug.Print "[ReadTextFile] Open fehlgeschlagen: " & Err.Description & " -> Pfad: " & filePath
         Err.Clear
         On Error GoTo 0
-        ' Fallback: via AppleScript Shell kopieren
+        ' Fallback: via AppleScript Shell lesen
         txt = ReadTextFileViaShell(filePath)
         ReadTextFile = txt
         Exit Function
@@ -785,7 +804,7 @@ Private Function ReadTextFile(ByVal filePath As String) As String
     Close #f
     On Error GoTo 0
 
-    ' Fallback wenn 0 Bytes obwohl Datei existiert (Umlaut-Problem auf macOS)
+    ' Fallback wenn 0 Bytes obwohl Datei existiert
     If Len(txt) = 0 Then
         Debug.Print "[ReadTextFile] 0 Bytes via Binary -> Fallback Shell-Read fuer: " & filePath
         txt = ReadTextFileViaShell(filePath)
