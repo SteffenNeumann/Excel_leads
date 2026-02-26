@@ -760,14 +760,15 @@ End Function
 
 Private Function ReadTextFile(ByVal filePath As String) As String
     ' Zweck: Datei als String lesen. Fallback via AppleScript bei Umlaut-Dateinamen (macOS).
-    ' macOS-Problem: Open For Binary kann bei Umlaut-Pfaden Null-Bytes liefern.
+    ' macOS-Problem: Open For Binary kann bei Umlaut-Pfaden Null-Bytes oder leeren String liefern.
+    ' Zusaetzlich: NFD-Umlaute (a + combining mark) werden von VBA Dir$ manchmal verloren.
     Dim f As Integer
     Dim txt As String
     Dim bytes As Long
     Dim hasNonAscii As Boolean
     Dim ci As Long
 
-    ' Pruefen ob Dateiname Nicht-ASCII-Zeichen enthaelt
+    ' Pruefen ob Dateiname Nicht-ASCII-Zeichen enthaelt (NFC: AscW > 127)
     For ci = 1 To Len(filePath)
         If AscW(Mid$(filePath, ci, 1)) > 127 Then
             hasNonAscii = True
@@ -775,7 +776,7 @@ Private Function ReadTextFile(ByVal filePath As String) As String
         End If
     Next ci
 
-    ' Bei Umlaut-Dateinamen direkt Shell-Fallback nutzen (Open For Binary liefert Muell)
+    ' Bei Umlaut-Dateinamen direkt Shell-Fallback nutzen
     If hasNonAscii Then
         Debug.Print "[ReadTextFile] Umlaut erkannt -> direkt Shell-Read fuer: " & filePath
         txt = ReadTextFileViaShell(filePath)
@@ -790,7 +791,6 @@ Private Function ReadTextFile(ByVal filePath As String) As String
         Debug.Print "[ReadTextFile] Open fehlgeschlagen: " & Err.Description & " -> Pfad: " & filePath
         Err.Clear
         On Error GoTo 0
-        ' Fallback: via AppleScript Shell lesen
         txt = ReadTextFileViaShell(filePath)
         ReadTextFile = txt
         Exit Function
@@ -804,9 +804,27 @@ Private Function ReadTextFile(ByVal filePath As String) As String
     Close #f
     On Error GoTo 0
 
-    ' Fallback wenn 0 Bytes obwohl Datei existiert
-    If Len(txt) = 0 Then
-        Debug.Print "[ReadTextFile] 0 Bytes via Binary -> Fallback Shell-Read fuer: " & filePath
+    ' Validierung: Pruefen ob gelesener Inhalt brauchbar ist
+    ' Bei Umlaut-Pfaden liefert Open For Binary manchmal LOF > 0 aber nur Null-Bytes
+    Dim isValid As Boolean
+    isValid = False
+    If Len(txt) > 10 Then
+        ' Mindestens ein druckbares ASCII-Zeichen in den ersten 100 Bytes?
+        Dim checkLen As Long
+        checkLen = Len(txt)
+        If checkLen > 100 Then checkLen = 100
+        For ci = 1 To checkLen
+            Dim ch As Long
+            ch = AscW(Mid$(txt, ci, 1))
+            If ch >= 32 And ch < 127 Then
+                isValid = True
+                Exit For
+            End If
+        Next ci
+    End If
+
+    If Not isValid Then
+        Debug.Print "[ReadTextFile] Binary-Read ungueltig (" & bytes & " Bytes, kein druckbares ASCII) -> Shell-Fallback fuer: " & filePath
         txt = ReadTextFileViaShell(filePath)
     End If
 
@@ -815,32 +833,56 @@ End Function
 
 Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     ' Zweck: Datei via AppleScript/Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
-    ' VBA Open For Binary kann auf macOS keine Dateinamen mit oe, ae, ue etc. oeffnen.
-    ' Strategie 1: cat direkt per Shell.
-    ' Strategie 2: Glob-Pattern (Umlaute durch ?) + ls + cat.
+    ' VBA Open For Binary kann auf macOS keine Dateinamen mit Umlauten korrekt oeffnen.
+    ' Strategie 1: cp via quoted form nach /tmp/, dann Binary-Read (bewährt in e31bb09).
+    ' Strategie 2: find -name mit * fuer NFD-Umlaute, dann cat.
     Dim script As String
     Dim result As String
+    Dim tmpPath As String
+    tmpPath = "/tmp/_eml_import_temp.eml"
 
-    ' --- Strategie 1: cat direkt per Shell ausfuehren ---
-    ' Pfad als AppleScript-String setzen, dann quoted form fuer Shell nutzen
-    script = "set filePath to " & Chr(34) & filePath & Chr(34) & vbLf
-    script = script & "do shell script ""cat "" & quoted form of filePath"
+    ' --- Strategie 1: cp via AppleScript nach /tmp/ ---
+    ' quoted form of handhabt Sonderzeichen im Pfad korrekt
+    script = "do shell script ""cp "" & quoted form of " & Chr(34) & filePath & Chr(34) & " & "" "" & quoted form of " & Chr(34) & tmpPath & Chr(34)
 
-    Debug.Print "[ReadTextFile] Shell-Cat: " & filePath
+    Debug.Print "[ReadTextFile] Shell-Copy: " & filePath & " -> " & tmpPath
 
     On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
-    If Err.Number = 0 And Left$(result, 6) <> "ERROR:" And Len(result) > 10 Then
-        Debug.Print "[ReadTextFile] Shell-Cat erfolgreich: " & Len(result) & " Zeichen"
+    If Err.Number = 0 And Left$(result, 6) <> "ERROR:" Then
+        ' Temp-Datei per Binary-Read lesen (ASCII-Pfad -> kein Encoding-Problem)
+        Dim f As Integer
+        Dim tmpTxt As String
+        Dim tmpBytes As Long
+        f = FreeFile
+        Err.Clear
+        Open tmpPath For Binary Access Read As #f
+        If Err.Number = 0 Then
+            tmpBytes = LOF(f)
+            If tmpBytes > 0 Then
+                tmpTxt = String$(tmpBytes, vbNullChar)
+                Get #f, , tmpTxt
+            End If
+            Close #f
+        End If
         On Error GoTo 0
-        ReadTextFileViaShell = result
-        Exit Function
+
+        ' Temp-Datei aufraeumen
+        On Error Resume Next
+        Kill tmpPath
+        On Error GoTo 0
+
+        If Len(tmpTxt) > 10 Then
+            Debug.Print "[ReadTextFile] Shell-Copy erfolgreich: " & tmpBytes & " Bytes"
+            ReadTextFileViaShell = tmpTxt
+            Exit Function
+        End If
     End If
-    Debug.Print "[ReadTextFile] Shell-Cat fehlgeschlagen: Err=" & Err.Number & " Result='" & Left$(result, 100) & "'"
+    Debug.Print "[ReadTextFile] Shell-Copy fehlgeschlagen: Err=" & Err.Number & " Result='" & Left$(result, 100) & "'"
     Err.Clear
     On Error GoTo 0
 
-    ' --- Strategie 2: Umlaut-sicher per find -name + Glob ---
+    ' --- Strategie 2: find -name mit * fuer NFD-Umlaute ---
     ' Pfad in Verzeichnis und Dateiname aufteilen
     Dim lastSlash As Long
     lastSlash = InStrRev(filePath, "/")
@@ -855,8 +897,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
 
     ' Nicht-ASCII-Zeichen im Dateinamen durch * ersetzen
     ' macOS speichert Umlaute als NFD (z.B. ae = a + combining mark = 2 Zeichen)
-    ' Daher * statt ? verwenden: * matcht null oder mehr Zeichen
-    ' Aufeinanderfolgende * werden zu einem * zusammengefasst
+    ' * matcht null oder mehr Zeichen -> loest NFD-Problem
     Dim safeFile As String
     Dim ci As Long, cc As Long
     Dim prevWasStar As Boolean
@@ -875,15 +916,24 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         End If
     Next ci
 
-    ' AppleScript: find findet Datei via Glob-Pattern, cat liest sie
+    ' Wenn safeFile = filePart (kein Non-ASCII gefunden), Buchstaben vor bekannten
+    ' Umlaut-Positionen auch mit * ersetzen (NFD: VBA sieht 'a' statt 'ä')
+    ' Daher: falls keine * eingefuegt wurden, alle Vokale vor 'u','o','a' pruefen
+    If safeFile = filePart Then
+        ' Kein Non-ASCII erkannt -> Dir$ hat NFD-combining marks geschluckt
+        ' find mit dem unveraenderten Namen versuchen (dirPart ist ohne Umlaut)
+        Debug.Print "[ReadTextFile] Kein Non-ASCII in Dateiname erkannt (NFD verschluckt?)"
+    End If
+
+    ' AppleScript: find findet Datei, cp nach /tmp/, Binary-Read
     Dim q As String: q = Chr(34)
     script = "set theDir to " & q & dirPart & q & vbLf
     script = script & "set namePattern to " & q & safeFile & q & vbLf
     script = script & "set matchedFile to do shell script (" & q & "find " & q & " & quoted form of theDir & " & q & " -maxdepth 1 -name " & q & " & quoted form of namePattern & " & q & " -print | head -1" & q & ")" & vbLf
     script = script & "if matchedFile is " & q & q & " then error " & q & "Datei nicht gefunden: " & q & " & namePattern" & vbLf
-    script = script & "do shell script " & q & "cat " & q & " & quoted form of matchedFile"
+    script = script & "do shell script " & q & "cp " & q & " & quoted form of matchedFile & " & q & " " & q & " & quoted form of " & q & tmpPath & q
 
-    Debug.Print "[ReadTextFile] Shell-Find: dir=" & dirPart & " pattern=" & safeFile
+    Debug.Print "[ReadTextFile] Shell-Find+Copy: dir=" & dirPart & " pattern=" & safeFile
 
     On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
@@ -896,15 +946,35 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     End If
     On Error GoTo 0
 
-    ' Pruefen ob Ergebnis ein Fehler ist
     If Left$(result, 6) = "ERROR:" Then
         Debug.Print "[ReadTextFile] Shell-Find Fehler: " & result
         ReadTextFileViaShell = vbNullString
         Exit Function
     End If
 
-    Debug.Print "[ReadTextFile] Shell-Find erfolgreich: " & Len(result) & " Zeichen"
-    ReadTextFileViaShell = result
+    ' Temp-Datei lesen
+    Dim f2 As Integer
+    Dim txt2 As String
+    Dim bytes2 As Long
+    f2 = FreeFile
+    On Error Resume Next
+    Open tmpPath For Binary Access Read As #f2
+    If Err.Number = 0 Then
+        bytes2 = LOF(f2)
+        If bytes2 > 0 Then
+            txt2 = String$(bytes2, vbNullChar)
+            Get #f2, , txt2
+        End If
+        Close #f2
+    End If
+    On Error GoTo 0
+
+    On Error Resume Next
+    Kill tmpPath
+    On Error GoTo 0
+
+    Debug.Print "[ReadTextFile] Shell-Find erfolgreich: " & bytes2 & " Bytes"
+    ReadTextFileViaShell = txt2
 End Function
 
 Private Function NormalizeLineEndings(ByVal textIn As String) As String
