@@ -614,7 +614,7 @@ NextDP:
         Next dp
         If dDay > 0 And dMonth > 0 And dYear > 0 Then
             Dim origDateValue As Date
-            origDateValue = DateSerial(dYear, dMonth, 1)
+            origDateValue = DateSerial(dYear, dMonth, dDay)
             SetKV parsed, "OriginalDateClean", Format$(origDateValue, "dd.mm.yyyy")
             Debug.Print "[ProcessMsg] OriginalDateClean: " & Format$(origDateValue, "dd.mm.yyyy") & " (Tag=" & dDay & " Monat=" & dMonth & " Jahr=" & dYear & ")"
         Else
@@ -4417,11 +4417,11 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
             SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", origAsDate
             Debug.Print "[AddLeadRow] Monat Lead erhalten = " & origClean & " (Original)"
         Else
-            SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
+            SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", msgDate
             Debug.Print "[AddLeadRow] Monat Lead erhalten = Fallback msgDate (origClean='" & origClean & "')"
         End If
     Else
-        SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
+        SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", msgDate
         Debug.Print "[AddLeadRow] Monat Lead erhalten = Fallback msgDate (kein OriginalDateClean)"
     End If
     Set monthCell = GetCellByHeaderMap(newRow, headerMap, "Monat Lead erhalten")
