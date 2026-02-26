@@ -571,6 +571,22 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     SetKV parsed, "MailBody", msgBody
     SetKV parsed, "MailSubject", msgSubject
 
+    ' Bei weitergeleiteten Mails: Urspruengliches Datum verwenden
+    Dim origDateStr As String
+    origDateStr = GetField(parsed, "OriginalDate")
+    If Len(origDateStr) > 0 Then
+        On Error Resume Next
+        Dim origDate As Date
+        origDate = CDate(origDateStr)
+        If Err.Number = 0 Then
+            msgDate = origDate
+            Debug.Print "[ProcessMsg] msgDate ueberschrieben mit OriginalDate: " & Format$(msgDate, "dd.mm.yyyy")
+        Else
+            Debug.Print "[ProcessMsg] OriginalDate konnte nicht geparst werden: " & origDateStr
+        End If
+        On Error GoTo 0
+    End If
+
     ' Dateiname fuer Zuordnung durchreichen
     Dim msgFileName As String
     Dim msgRef As String
@@ -3170,6 +3186,45 @@ Private Function ExtractOriginalSender(ByVal bodyText As String) As String
     ExtractOriginalSender = vbNullString
 End Function
 
+Private Function ExtractOriginalDate(ByVal bodyText As String) As String
+    ' Zweck: Extrahiert das urspruengliche Datum aus weitergeleiteten E-Mails.
+    ' Sucht nach "Datum:", "Date:", "Gesendet:", "Sent:" im Body.
+    ' Rueckgabe: Datumsstring oder leerer String.
+    Dim lines() As String
+    Dim i As Long, lineText As String
+    Dim dateVal As String
+    Dim colonPos As Long
+
+    lines = Split(bodyText, vbLf)
+
+    For i = LBound(lines) To UBound(lines)
+        lineText = Trim$(lines(i))
+
+        ' Suche nach Datumszeilen in weitergeleiteten Mails
+        If InStr(1, lineText, "Datum:", vbTextCompare) = 1 Then
+            colonPos = InStr(lineText, ":")
+            dateVal = Trim$(Mid$(lineText, colonPos + 1))
+        ElseIf InStr(1, lineText, "Date:", vbTextCompare) = 1 Then
+            colonPos = InStr(lineText, ":")
+            dateVal = Trim$(Mid$(lineText, colonPos + 1))
+        ElseIf InStr(1, lineText, "Gesendet:", vbTextCompare) = 1 Then
+            colonPos = InStr(lineText, ":")
+            dateVal = Trim$(Mid$(lineText, colonPos + 1))
+        ElseIf InStr(1, lineText, "Sent:", vbTextCompare) = 1 Then
+            colonPos = InStr(lineText, ":")
+            dateVal = Trim$(Mid$(lineText, colonPos + 1))
+        End If
+
+        If Len(dateVal) > 0 Then
+            ExtractOriginalDate = dateVal
+            Debug.Print "[ExtractOriginalDate] Gefunden: " & dateVal
+            Exit Function
+        End If
+    Next i
+
+    ExtractOriginalDate = vbNullString
+End Function
+
 Private Function ResolveLeadType(ByVal subjectText As String, ByVal bodyText As String) As String
     ' Zweck: Lead-Typ anhand Betreff/Inhalt bestimmen.
     ' Abhängigkeiten: String-Suche InStr.
@@ -3201,6 +3256,7 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     Dim telNumInline As String
     Dim lineHandled As Boolean
     Dim originalSender As String
+    Dim originalDate As String
 
     Set result = NewKeyValueStore()
 
@@ -3209,6 +3265,13 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     If Len(originalSender) > 0 Then
         SetKV result, "OriginalFrom", originalSender
         Debug.Print "[ParseLeadContent] Urspruenglicher Absender gefunden: " & originalSender
+    End If
+
+    ' Extrahiere urspruengliches Datum bei weitergeleiteten E-Mails
+    originalDate = ExtractOriginalDate(bodyText)
+    If Len(originalDate) > 0 Then
+        SetKV result, "OriginalDate", originalDate
+        Debug.Print "[ParseLeadContent] Urspruengliches Datum gefunden: " & originalDate
     End If
 
     currentSection = "Kontakt"
@@ -4164,6 +4227,22 @@ Private Function FindTableByName(ByVal tableName As String) As ListObject
     Next ws
 End Function
 
+Private Function MapKnownLeadSource(ByVal rawFrom As String, ByVal extractedName As String) As String
+    ' Zweck: Bekannte Absender-Domains/Namen auf einheitliche Lead-Quellen mappen.
+    ' Abhaengigkeiten: Keine.
+    ' Rueckgabe: Gemappter Name oder unveraenderter extractedName.
+    Dim lowerFrom As String
+    lowerFrom = LCase$(rawFrom)
+
+    If InStr(lowerFrom, "pflege-helfer24") > 0 Or InStr(lowerFrom, "pflegehelfer24") > 0 Then
+        MapKnownLeadSource = "Pflegehelfer 24"
+    ElseIf InStr(lowerFrom, "pflegehilfe.de") > 0 Or InStr(lowerFrom, "verbund pflegehilfe") > 0 Then
+        MapKnownLeadSource = "Verbund Pflegehilfe"
+    Else
+        MapKnownLeadSource = extractedName
+    End If
+End Function
+
 Private Function ResolveLeadSource(ByVal fields As Object) As String
     ' Zweck: Lead-Quelle aus Absender nutzen, Fallback auf Default.
     ' Bei weitergeleiteten Mails wird der urspruengliche Absender (OriginalFrom) priorisiert.
@@ -4190,6 +4269,9 @@ Private Function ResolveLeadSource(ByVal fields As Object) As String
 
     ' Absendernamen extrahieren (ohne E-Mail-Adresse in spitzen Klammern)
     sourceName = ExtractSenderName(fromVal)
+
+    ' Bekannte Absender auf einheitliche Lead-Quellen mappen
+    sourceName = MapKnownLeadSource(fromVal, sourceName)
 
     ' Falls Ergebnis immer noch eine E-Mail-Adresse ist, Domain extrahieren
     If InStr(sourceName, "@") > 0 Then
