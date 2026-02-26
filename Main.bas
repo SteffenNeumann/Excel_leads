@@ -3074,6 +3074,102 @@ Private Function GermanMonthToNumber(ByVal monthText As String) As Long
     End Select
 End Function
 
+Private Function ExtractOriginalSender(ByVal bodyText As String) As String
+    ' Zweck: Extrahiert ursprünglichen Absender aus weitergeleiteten E-Mails.
+    ' Sucht nach typischen Weiterleitungs-Markierungen und extrahiert die Original-E-Mail-Adresse.
+    ' Rückgabe: E-Mail-Adresse des ursprünglichen Absenders oder leerer String.
+    Dim lines() As String
+    Dim i As Long, lineText As String
+    Dim originalFrom As String
+    Dim atPos As Long, startPos As Long, endPos As Long
+    Dim ch As String
+    
+    lines = Split(bodyText, vbLf)
+    
+    ' Durchsuche Body nach Weiterleitungs-Markierungen
+    For i = LBound(lines) To UBound(lines)
+        lineText = Trim$(lines(i))
+        
+        ' Deutsche Weiterleitungsmarkierungen: "Von:", "Gesendet von:"
+        ' Englische: "From:", "Sent by:"
+        ' Outlook: "-----Original Message-----" (nachfolgende Von:/From: Zeilen)
+        If (InStr(1, lineText, "Von:", vbTextCompare) = 1 Or _
+            InStr(1, lineText, "From:", vbTextCompare) = 1 Or _
+            InStr(1, lineText, "Gesendet von:", vbTextCompare) = 1 Or _
+            InStr(1, lineText, "Sent by:", vbTextCompare) = 1) And _
+            InStr(lineText, "@") > 0 Then
+            
+            ' Extrahiere E-Mail-Adresse aus dieser Zeile
+            ' Format: "Von: Name <email@domain.com>" oder "From: email@domain.com"
+            atPos = InStr(lineText, "@")
+            If atPos > 0 Then
+                ' Suche Start der E-Mail (Zeichen vor @)
+                startPos = atPos
+                Do While startPos > 1
+                    ch = Mid$(lineText, startPos - 1, 1)
+                    If ch Like "[A-Za-z0-9._+-]" Then
+                        startPos = startPos - 1
+                    Else
+                        Exit Do
+                    End If
+                Loop
+                
+                ' Suche Ende der E-Mail (Zeichen nach @)
+                endPos = atPos
+                Do While endPos < Len(lineText)
+                    ch = Mid$(lineText, endPos + 1, 1)
+                    If ch Like "[A-Za-z0-9._-]" Then
+                        endPos = endPos + 1
+                    Else
+                        Exit Do
+                    End If
+                Loop
+                
+                originalFrom = Mid$(lineText, startPos, endPos - startPos + 1)
+                If Len(originalFrom) > 0 And InStr(originalFrom, "@") > 0 Then
+                    ExtractOriginalSender = originalFrom
+                    Exit Function
+                End If
+            End If
+        End If
+        
+        ' Alternativ: Suche nach "Am ... schrieb" Pattern (Apple Mail)
+        ' Format: "Am 25.02.2026 um 14:30 schrieb Name <email@domain.com>:"
+        If InStr(1, lineText, "schrieb", vbTextCompare) > 0 And InStr(lineText, "@") > 0 Then
+            atPos = InStr(lineText, "@")
+            If atPos > 0 Then
+                startPos = atPos
+                Do While startPos > 1
+                    ch = Mid$(lineText, startPos - 1, 1)
+                    If ch Like "[A-Za-z0-9._+-]" Then
+                        startPos = startPos - 1
+                    Else
+                        Exit Do
+                    End If
+                Loop
+                
+                endPos = atPos
+                Do While endPos < Len(lineText)
+                    ch = Mid$(lineText, endPos + 1, 1)
+                    If ch Like "[A-Za-z0-9._-]" Then
+                        endPos = endPos + 1
+                    Else
+                        Exit Do
+                    End If
+                Loop
+                
+                originalFrom = Mid$(lineText, startPos, endPos - startPos + 1)
+                If Len(originalFrom) > 0 And InStr(originalFrom, "@") > 0 Then
+                    ExtractOriginalSender = originalFrom
+                    Exit Function
+                End If
+            End If
+        End If
+    Next i
+    
+    ExtractOriginalSender = vbNullString
+End Function
+
 Private Function ResolveLeadType(ByVal subjectText As String, ByVal bodyText As String) As String
     ' Zweck: Lead-Typ anhand Betreff/Inhalt bestimmen.
     ' Abhängigkeiten: String-Suche InStr.
@@ -3088,7 +3184,7 @@ End Function
 
 Private Function ParseLeadContent(ByVal bodyText As String) As Object
     ' Zweck: Nachrichtentext in strukturierte Felder parsen (Kontakt/Senior/Anfrage).
-    ' Abhaengigkeiten: NewKeyValueStore, MapLabelValue, MapInlinePair, SetBedarfsort.
+    ' Abhaengigkeiten: NewKeyValueStore, MapLabelValue, MapInlinePair, SetBedarfsort, ExtractOriginalSender.
     ' Rueckgabe: Key/Value-Store mit den erkannten Feldern.
     Dim result As Object
     Dim lines() As String
@@ -3104,8 +3200,16 @@ Private Function ParseLeadContent(ByVal bodyText As String) As Object
     Dim telPosInline As Long
     Dim telNumInline As String
     Dim lineHandled As Boolean
+    Dim originalSender As String
 
     Set result = NewKeyValueStore()
+
+    ' Extrahiere urspruenglichen Absender bei weitergeleiteten E-Mails
+    originalSender = ExtractOriginalSender(bodyText)
+    If Len(originalSender) > 0 Then
+        SetKV result, "OriginalFrom", originalSender
+        Debug.Print "[ParseLeadContent] Urspruenglicher Absender gefunden: " & originalSender
+    End If
 
     currentSection = "Kontakt"
     pendingKey = vbNullString
@@ -4062,12 +4166,22 @@ End Function
 
 Private Function ResolveLeadSource(ByVal fields As Object) As String
     ' Zweck: Lead-Quelle aus Absender nutzen, Fallback auf Default.
-    ' Abhängigkeiten: GetField.
+    ' Bei weitergeleiteten Mails wird der urspruengliche Absender (OriginalFrom) priorisiert.
+    ' Abhängigkeiten: GetField, ExtractSenderName.
     ' Rückgabe: Bereinigter Absendername oder LEAD_SOURCE.
     Dim fromVal As String
     Dim sourceName As String
+    Dim originalFrom As String
 
-    fromVal = GetField(fields, "From")
+    ' PRIORITAET 1: Urspruenglicher Absender bei weitergeleiteten Mails
+    originalFrom = GetField(fields, "OriginalFrom")
+    If Len(Trim$(originalFrom)) > 0 Then
+        fromVal = originalFrom
+        Debug.Print "[ResolveLeadSource] Nutze urspruenglichen Absender: " & fromVal
+    Else
+        ' PRIORITAET 2: Normaler From-Wert
+        fromVal = GetField(fields, "From")
+    End If
 
     If Len(Trim$(fromVal)) = 0 Then
         ResolveLeadSource = LEAD_SOURCE
