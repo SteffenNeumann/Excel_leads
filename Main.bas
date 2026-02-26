@@ -587,8 +587,20 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
         Dim cleanedDate As String
         cleanedDate = CleanDateString(origDateStr)
         If Len(cleanedDate) > 0 Then
-            SetKV parsed, "OriginalDateClean", cleanedDate
-            Debug.Print "[ProcessMsg] OriginalDateClean: '" & cleanedDate & "'"
+            ' String in echtes Datum parsen (ParseGermanDateString oder CDate)
+            Dim parsedOrigDate As Date
+            parsedOrigDate = ParseGermanDateString(cleanedDate)
+            If parsedOrigDate > 0 Then
+                ' Nur Monat+Jahr speichern (1. des Monats) -> passt zu Spaltenzweck
+                Dim origDateValue As Date
+                origDateValue = DateSerial(Year(parsedOrigDate), Month(parsedOrigDate), 1)
+                SetKV parsed, "OriginalDateClean", CStr(origDateValue)
+                Debug.Print "[ProcessMsg] OriginalDateClean: " & Format$(origDateValue, "dd.mm.yyyy") & " (aus: '" & origDateStr & "')"
+            Else
+                ' Fallback: Bereinigten String direkt verwenden
+                SetKV parsed, "OriginalDateClean", cleanedDate
+                Debug.Print "[ProcessMsg] OriginalDateClean (String): '" & cleanedDate & "'"
+            End If
         Else
             Debug.Print "[ProcessMsg] OriginalDate konnte nicht bereinigt werden: '" & origDateStr & "'"
         End If
@@ -2815,28 +2827,16 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
         Exit Sub
     End If
 
-    ' Pruefen ob Zieldatei schon vorhanden ist BEVOR wir kopieren
-    Dim targetExists As Boolean
-    targetExists = (Len(Dir$(targetPath)) > 0)
-
+    ' Zieldatei loeschen (falls vorhanden) und neu kopieren
     Err.Clear
     On Error Resume Next
-
-    If targetExists Then Kill targetPath
-    If Err.Number = 0 Then
-        FileCopy sourcePath, targetPath
-    End If
-
+    Kill targetPath
+    Err.Clear  ' Kill-Fehler ignorieren (Datei evtl. nicht da)
+    FileCopy sourcePath, targetPath
     If Err.Number <> 0 Then
-        If targetExists Then
-            ' Datei war da, Update fehlgeschlagen -> nur Debug, kein Popup
-            Debug.Print "[InstallAppleScript] Update fehlgeschlagen (Err " & Err.Number & "), vorhandene Version wird verwendet."
-        Else
-            MsgBox "Zugriff verweigert. Bitte manuell kopieren nach: " & folderPath, vbExclamation
-        End If
+        Debug.Print "[InstallAppleScript] FileCopy fehlgeschlagen (Err " & Err.Number & "): " & targetPath
         Err.Clear
     End If
-
     On Error GoTo 0
 End Sub
 
@@ -3088,19 +3088,19 @@ Private Function GermanMonthToNumber(ByVal monthText As String) As Long
     m = LCase$(Trim$(monthText))
 
     Select Case m
-        Case "januar": GermanMonthToNumber = 1
-        Case "februar": GermanMonthToNumber = 2
-        Case "m" & ChrW$(228) & "rz", "maerz": GermanMonthToNumber = 3
-        Case "april": GermanMonthToNumber = 4
-        Case "mai": GermanMonthToNumber = 5
-        Case "juni": GermanMonthToNumber = 6
-        Case "juli": GermanMonthToNumber = 7
-        Case "august": GermanMonthToNumber = 8
-        Case "september": GermanMonthToNumber = 9
-        Case "oktober": GermanMonthToNumber = 10
-        Case "november": GermanMonthToNumber = 11
-        Case "dezember": GermanMonthToNumber = 12
-        Case Else: GermanMonthToNumber = 1
+        Case "januar", "january", "jan": GermanMonthToNumber = 1
+        Case "februar", "february", "feb": GermanMonthToNumber = 2
+        Case "m" & ChrW$(228) & "rz", "maerz", "march", "mar": GermanMonthToNumber = 3
+        Case "april", "apr": GermanMonthToNumber = 4
+        Case "mai", "may": GermanMonthToNumber = 5
+        Case "juni", "june", "jun": GermanMonthToNumber = 6
+        Case "juli", "july", "jul": GermanMonthToNumber = 7
+        Case "august", "aug": GermanMonthToNumber = 8
+        Case "september", "sep", "sept": GermanMonthToNumber = 9
+        Case "oktober", "october", "oct", "okt": GermanMonthToNumber = 10
+        Case "november", "nov": GermanMonthToNumber = 11
+        Case "dezember", "december", "dec", "dez": GermanMonthToNumber = 12
+        Case Else: GermanMonthToNumber = 0
     End Select
 End Function
 
@@ -3293,6 +3293,9 @@ Private Function ParseGermanDateString(ByVal dateStr As String) As Date
     ' Punkte nach Zahlen entfernen ("25." -> "25")
     cleaned = Replace(cleaned, ".", " ")
 
+    ' Kommas entfernen ("January 30, 2026" -> "January 30 2026")
+    cleaned = Replace(cleaned, ",", " ")
+
     ' Mehrfache Leerzeichen reduzieren und in Tokens splitten
     Do While InStr(cleaned, "  ") > 0
         cleaned = Replace(cleaned, "  ", " ")
@@ -3351,14 +3354,20 @@ Private Function CleanDateString(ByVal rawDate As String) As String
     Dim cleaned As String
     cleaned = Trim$(rawDate)
 
-    ' Deutsche Formate: "Mittwoch, 25. Februar 2026 um 10:18"
-    ' Wochentag entfernen (vor erstem Komma), NUR wenn danach eine Zahl folgt
+    ' Wochentag vor erstem Komma entfernen (deutsch UND englisch)
+    ' Deutsch: "Mittwoch, 25. Februar 2026 um 10:18" -> "25. Februar 2026 um 10:18"
+    ' Englisch: "Friday, January 30, 2026 9:07:29 AM" -> "January 30, 2026 9:07:29 AM"
     If InStr(cleaned, ",") > 0 Then
         Dim afterComma As String
         afterComma = Trim$(Mid$(cleaned, InStr(cleaned, ",") + 1))
-        ' Pruefen ob nach dem Komma eine Ziffer kommt (Tag) -> deutscher Wochentag
-        If Len(afterComma) > 0 And Mid$(afterComma, 1, 1) Like "[0-9]" Then
-            cleaned = afterComma
+        If Len(afterComma) > 0 Then
+            Dim firstChar As String
+            firstChar = Mid$(afterComma, 1, 1)
+            ' Ziffer (deutscher Tag) ODER Buchstabe (englischer Monat) -> Wochentag entfernen
+            ' Nur NICHT entfernen wenn afterComma leer oder sonstiges Sonderzeichen
+            If firstChar Like "[0-9A-Za-z]" Then
+                cleaned = afterComma
+            End If
         End If
     End If
 
@@ -3383,7 +3392,7 @@ Private Function CleanDateString(ByVal rawDate As String) As String
         If InStr(part, ":") > 0 And Mid$(part, 1, 1) Like "[0-9]" Then GoTo NextPart
         ' AM/PM ueberspringen
         If LCase$(part) = "am" Or LCase$(part) = "pm" Then GoTo NextPart
-        resultParts = resultParts & " " & part
+        resultParts = resultParts & " " & Replace(part, ",", "")
 NextPart:
     Next t
     cleaned = Trim$(resultParts)
@@ -4339,8 +4348,20 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
     Dim origClean As String
     origClean = GetField(fields, "OriginalDateClean")
     If Len(origClean) > 0 Then
-        SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", origClean
-        Debug.Print "[AddLeadRow] Monat Lead erhalten = '" & origClean & "' (Original)"
+        ' Versuche String als Date zu parsen fuer korrektes Excel-Format
+        Dim origAsDate As Date
+        On Error Resume Next
+        origAsDate = CDate(origClean)
+        If Err.Number = 0 And origAsDate > 0 Then
+            SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", origAsDate
+            Debug.Print "[AddLeadRow] Monat Lead erhalten = " & Format$(origAsDate, "dd.mm.yyyy") & " (Original-Date)"
+        Else
+            Err.Clear
+            ' Fallback: String direkt schreiben
+            SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", origClean
+            Debug.Print "[AddLeadRow] Monat Lead erhalten = '" & origClean & "' (String-Fallback)"
+        End If
+        On Error GoTo 0
     Else
         SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
     End If
@@ -4928,12 +4949,23 @@ Private Function LeadAlreadyExists(ByVal tbl As ListObject, ByVal fields As Obje
 
         If Len(nameValue) > 0 And Len(phoneValue) > 0 And nameColIndex > 0 And phoneColIndex > 0 And dateColIndex > 0 Then
             If StrComp(CStr(tbl.DataBodyRange.Cells(i, nameColIndex).Value), nameValue, vbTextCompare) = 0 And _
-               StrComp(CStr(tbl.DataBodyRange.Cells(i, phoneColIndex).Value), phoneValue, vbTextCompare) = 0 And _
-               DateSerial(Year(CDate(tbl.DataBodyRange.Cells(i, dateColIndex).Value)), Month(CDate(tbl.DataBodyRange.Cells(i, dateColIndex).Value)), 1) = DateSerial(Year(msgDate), Month(msgDate), 1) Then
-                LeadAlreadyExists = True
-                Exit Function
+               StrComp(CStr(tbl.DataBodyRange.Cells(i, phoneColIndex).Value), phoneValue, vbTextCompare) = 0 Then
+                Dim cellDate As Date
+                On Error Resume Next
+                cellDate = CDate(tbl.DataBodyRange.Cells(i, dateColIndex).Value)
+                If Err.Number <> 0 Then
+                    Err.Clear
+                    On Error GoTo 0
+                    GoTo NextRowLAE
+                End If
+                On Error GoTo 0
+                If DateSerial(Year(cellDate), Month(cellDate), 1) = DateSerial(Year(msgDate), Month(msgDate), 1) Then
+                    LeadAlreadyExists = True
+                    Exit Function
+                End If
             End If
         End If
+NextRowLAE:
     Next i
 End Function
 
