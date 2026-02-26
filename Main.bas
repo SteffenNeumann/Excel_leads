@@ -545,7 +545,16 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     msgSubject = vbNullString
     msgBody = vbNullString
     msgFrom = vbNullString
-    If TryGetKV(payload, "Date", v) Then msgDate = CDate(v)
+    If TryGetKV(payload, "Date", v) Then
+        On Error Resume Next
+        msgDate = CDate(v)
+        If Err.Number <> 0 Then
+            Debug.Print "[ProcessMsg] Date-String nicht parsbar: '" & CStr(v) & "' -> verwende Today"
+            msgDate = Date
+            Err.Clear
+        End If
+        On Error GoTo 0
+    End If
     If TryGetKV(payload, "Subject", v) Then msgSubject = CStr(v)
     If TryGetKV(payload, "Body", v) Then msgBody = CStr(v)
     msgBody = DecodeBodyIfNeeded(msgBody)
@@ -575,13 +584,14 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     Dim origDateStr As String
     origDateStr = GetField(parsed, "OriginalDate")
     If Len(origDateStr) > 0 Then
-        ' "Mittwoch, 25. Februar 2026 um 10:18" -> "25. Februar 2026"
         Dim cleanedDate As String
-        cleanedDate = origDateStr
-        If InStr(cleanedDate, ",") > 0 Then cleanedDate = Trim$(Mid$(cleanedDate, InStr(cleanedDate, ",") + 1))
-        If InStr(1, cleanedDate, " um ", vbTextCompare) > 0 Then cleanedDate = Trim$(Left$(cleanedDate, InStr(1, cleanedDate, " um ", vbTextCompare) - 1))
-        SetKV parsed, "OriginalDateClean", cleanedDate
-        Debug.Print "[ProcessMsg] OriginalDateClean: '" & cleanedDate & "'"
+        cleanedDate = CleanDateString(origDateStr)
+        If Len(cleanedDate) > 0 Then
+            SetKV parsed, "OriginalDateClean", cleanedDate
+            Debug.Print "[ProcessMsg] OriginalDateClean: '" & cleanedDate & "'"
+        Else
+            Debug.Print "[ProcessMsg] OriginalDate konnte nicht bereinigt werden: '" & origDateStr & "'"
+        End If
     End If
 
     ' Dateiname fuer Zuordnung durchreichen
@@ -2805,23 +2815,24 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
         Exit Sub
     End If
 
+    ' Pruefen ob Zieldatei schon vorhanden ist BEVOR wir kopieren
+    Dim targetExists As Boolean
+    targetExists = (Len(Dir$(targetPath)) > 0)
+
     Err.Clear
     On Error Resume Next
 
-    If Len(Dir$(targetPath)) > 0 Then Kill targetPath
-    FileCopy sourcePath, targetPath
+    If targetExists Then Kill targetPath
+    If Err.Number = 0 Then
+        FileCopy sourcePath, targetPath
+    End If
 
     If Err.Number <> 0 Then
-        If Err.Number = 75 Then
-            ' Zugriff verweigert, aber pruefen ob Zieldatei schon existiert
-            If Len(Dir$(targetPath)) > 0 Then
-                ' Datei ist da -> nur Debug-Hinweis, kein Popup
-                Debug.Print "[InstallAppleScript] Update fehlgeschlagen (Zugriff verweigert), vorhandene Version wird verwendet."
-            Else
-                MsgBox "Zugriff verweigert. Bitte manuell kopieren nach: " & folderPath, vbExclamation
-            End If
+        If targetExists Then
+            ' Datei war da, Update fehlgeschlagen -> nur Debug, kein Popup
+            Debug.Print "[InstallAppleScript] Update fehlgeschlagen (Err " & Err.Number & "), vorhandene Version wird verwendet."
         Else
-            MsgBox "AppleScript konnte nicht installiert werden (Err " & Err.Number & "). Prüfe Rechte.", vbExclamation
+            MsgBox "Zugriff verweigert. Bitte manuell kopieren nach: " & folderPath, vbExclamation
         End If
         Err.Clear
     End If
@@ -3329,6 +3340,62 @@ NextToken:
         If Err.Number <> 0 Then ParseGermanDateString = 0
         On Error GoTo 0
         Debug.Print "[ParseGermanDateString] Fallback CDate: " & dateStr
+    End If
+End Function
+
+Private Function CleanDateString(ByVal rawDate As String) As String
+    ' Zweck: Datumsstring bereinigen fuer Excel-Zelle.
+    ' Verarbeitet sowohl deutsche ("Mittwoch, 25. Februar 2026 um 10:18")
+    ' als auch englische ("January 30, 2026 9:07:29 AM") Formate.
+    ' Rueckgabe: Bereinigter Datumsstring (z.B. "25. Februar 2026") oder leer.
+    Dim cleaned As String
+    cleaned = Trim$(rawDate)
+
+    ' Deutsche Formate: "Mittwoch, 25. Februar 2026 um 10:18"
+    ' Wochentag entfernen (vor erstem Komma), NUR wenn danach eine Zahl folgt
+    If InStr(cleaned, ",") > 0 Then
+        Dim afterComma As String
+        afterComma = Trim$(Mid$(cleaned, InStr(cleaned, ",") + 1))
+        ' Pruefen ob nach dem Komma eine Ziffer kommt (Tag) -> deutscher Wochentag
+        If Len(afterComma) > 0 And Mid$(afterComma, 1, 1) Like "[0-9]" Then
+            cleaned = afterComma
+        End If
+    End If
+
+    ' "um HH:MM" entfernen (deutsch)
+    If InStr(1, cleaned, " um ", vbTextCompare) > 0 Then
+        cleaned = Trim$(Left$(cleaned, InStr(1, cleaned, " um ", vbTextCompare) - 1))
+    End If
+
+    ' Englische Formate: "January 30, 2026 9:07:29 AM"
+    ' Uhrzeit (Ziffern:Ziffern) und AM/PM entfernen
+    Dim spacePos As Long
+    Dim part As String
+    Dim resultParts As String
+    Dim tokens() As String
+    Dim t As Long
+    tokens = Split(cleaned, " ")
+    resultParts = vbNullString
+    For t = LBound(tokens) To UBound(tokens)
+        part = Trim$(tokens(t))
+        If Len(part) = 0 Then GoTo NextPart
+        ' Uhrzeit-Pattern (enthält Doppelpunkt mit Ziffern) ueberspringen
+        If InStr(part, ":") > 0 And Mid$(part, 1, 1) Like "[0-9]" Then GoTo NextPart
+        ' AM/PM ueberspringen
+        If LCase$(part) = "am" Or LCase$(part) = "pm" Then GoTo NextPart
+        resultParts = resultParts & " " & part
+NextPart:
+    Next t
+    cleaned = Trim$(resultParts)
+
+    ' Trailing Komma entfernen (z.B. "January 30," -> "January 30")
+    If Right$(cleaned, 1) = "," Then cleaned = Left$(cleaned, Len(cleaned) - 1)
+
+    If Len(cleaned) > 0 Then
+        CleanDateString = cleaned
+        Debug.Print "[CleanDateString] '" & rawDate & "' -> '" & cleaned & "'"
+    Else
+        CleanDateString = vbNullString
     End If
 End Function
 
