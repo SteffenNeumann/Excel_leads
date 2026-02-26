@@ -3206,12 +3206,15 @@ End Function
 
 Private Function ExtractOriginalDate(ByVal bodyText As String) As String
     ' Zweck: Extrahiert das urspruengliche Datum aus weitergeleiteten E-Mails.
-    ' Sucht nach "Datum:", "Date:", "Gesendet:", "Sent:" im Body.
+    ' Sucht nach "Datum:", "Date:", "Gesendet:", "Sent:", "Am...schrieb", "On...wrote" im Body.
     ' Rueckgabe: Datumsstring oder leerer String.
     Dim lines() As String
     Dim i As Long, lineText As String
     Dim dateVal As String
     Dim colonPos As Long
+    Dim amPos As Long
+    Dim umPos As Long
+    Dim schriebPos As Long
 
     lines = Split(bodyText, vbLf)
 
@@ -3239,6 +3242,27 @@ Private Function ExtractOriginalDate(ByVal bodyText As String) As String
         End If
     Next i
 
+    ' PASS 1b: "Am ... schrieb"/"Am ... um ... schrieb" Pattern (Apple Mail deutsch)
+    ' Format: "Am 17.02.2026 um 14:30 schrieb Name <email@domain.com>:"
+    ' Format: "Am 25. Februar 2026 um 10:18 schrieb ..."
+    For i = LBound(lines) To UBound(lines)
+        lineText = Trim$(lines(i))
+        Do While Left$(lineText, 1) = ">"
+            lineText = Trim$(Mid$(lineText, 2))
+        Loop
+        amPos = InStr(1, lineText, "Am ", vbTextCompare)
+        schriebPos = InStr(1, lineText, " schrieb", vbTextCompare)
+        If amPos > 0 And schriebPos > amPos Then
+            ' Extrahiere alles zwischen "Am " und " schrieb"
+            dateVal = Trim$(Mid$(lineText, amPos + 3, schriebPos - amPos - 3))
+            If Len(dateVal) > 3 Then
+                ExtractOriginalDate = dateVal
+                Debug.Print "[ExtractOriginalDate] Am-schrieb gefunden: '" & dateVal & "'"
+                Exit Function
+            End If
+        End If
+    Next i
+
     ' PASS 2: Englische Tags als Fallback
     For i = LBound(lines) To UBound(lines)
         lineText = Trim$(lines(i))
@@ -3257,6 +3281,27 @@ Private Function ExtractOriginalDate(ByVal bodyText As String) As String
             If Len(dateVal) > 0 Then
                 ExtractOriginalDate = dateVal
                 Debug.Print "[ExtractOriginalDate] EN-Tag gefunden: '" & dateVal & "'"
+                Exit Function
+            End If
+        End If
+    Next i
+
+    ' PASS 2b: "On ... wrote" Pattern (Apple Mail english)
+    ' Format: "On Feb 17, 2026, at 2:30 PM, name@domain.de wrote:"
+    For i = LBound(lines) To UBound(lines)
+        lineText = Trim$(lines(i))
+        Do While Left$(lineText, 1) = ">"
+            lineText = Trim$(Mid$(lineText, 2))
+        Loop
+        Dim onPos As Long
+        Dim wrotePos As Long
+        onPos = InStr(1, lineText, "On ", vbTextCompare)
+        wrotePos = InStr(1, lineText, " wrote", vbTextCompare)
+        If onPos > 0 And wrotePos > onPos Then
+            dateVal = Trim$(Mid$(lineText, onPos + 3, wrotePos - onPos - 3))
+            If Len(dateVal) > 3 Then
+                ExtractOriginalDate = dateVal
+                Debug.Print "[ExtractOriginalDate] On-wrote gefunden: '" & dateVal & "'"
                 Exit Function
             End If
         End If
@@ -3315,6 +3360,9 @@ Private Function ParseGermanDateString(ByVal dateStr As String) As Date
                 dayNum = CLng(tk)
             ElseIf yearNum = 0 And CLng(tk) >= 2000 Then
                 yearNum = CLng(tk)
+            ElseIf monthNum = 0 And CLng(tk) >= 1 And CLng(tk) <= 12 Then
+                ' Numerischer Monat (z.B. "17.02.2026" -> Tokens "17","02","2026")
+                monthNum = CLng(tk)
             End If
         Else
             If monthNum = 0 Then
