@@ -841,12 +841,12 @@ End Function
 Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     ' Zweck: Datei via AppleScript/Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
     ' VBA Open For Binary kann auf macOS keine Dateinamen mit Umlauten korrekt oeffnen.
-    ' Strategie 1: cp via quoted form nach /tmp/, dann Binary-Read (bewährt in e31bb09).
-    ' Strategie 2: find -name mit * fuer NFD-Umlaute, dann cat.
+    ' Strategie 1: cp via quoted form nach Workbook-Verzeichnis, dann Binary-Read.
+    ' Strategie 2: find -name mit * fuer NFD-Umlaute, dann cp + Binary-Read.
     Dim script As String
     Dim result As String
     Dim tmpPath As String
-    tmpPath = "/tmp/_eml_import_temp.eml"
+    tmpPath = ThisWorkbook.Path & "/_eml_import_temp.eml"
 
     ' --- Strategie 1: cp via AppleScript nach /tmp/ ---
     ' quoted form of handhabt Sonderzeichen im Pfad korrekt
@@ -934,7 +934,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         Debug.Print "[ReadTextFile] NFD-Workaround: safeFile=" & safeFile
     End If
 
-    ' AppleScript: find findet Datei, cp nach /tmp/, Binary-Read
+    ' AppleScript: find findet Datei, cp nach Workbook-Verzeichnis, Binary-Read
     Dim q As String: q = Chr(34)
     script = "set theDir to " & q & dirPart & q & vbLf
     script = script & "set namePattern to " & q & safeFile & q & vbLf
@@ -990,7 +990,7 @@ Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As 
     ' Zweck: EML-Datei per Shell lesen wenn VBA-ReadTextFile versagt (Umlaut-Dateinamen).
     ' Neuer Ansatz: find + cat direkt via AppleScript, Content als Text zurueck.
     ' Kein cp, kein Binary-Read -> weniger Fehlerquellen.
-    ' Debug-Output nach /tmp/_vba_eml_debug.log (Immediate Window ist zu kurz).
+    ' Debug-Output nach _vba_eml_debug.log im Workbook-Verzeichnis.
     Dim script As String
     Dim result As String
     Dim q As String
@@ -1086,11 +1086,11 @@ End Function
 
 Private Sub LogToFile(ByVal msg As String)
     ' Zweck: Debug-Log in Datei schreiben (umgeht Immediate Window 200-Zeilen-Limit).
-    ' Logdatei: /tmp/_vba_eml_debug.log
+    ' Logdatei: im Workbook-Verzeichnis (Sandbox-kompatibel)
     Dim f As Integer
     On Error Resume Next
     f = FreeFile
-    Open "/tmp/_vba_eml_debug.log" For Append As #f
+    Open ThisWorkbook.Path & "/_vba_eml_debug.log" For Append As #f
     If Err.Number = 0 Then
         Print #f, Format$(Now, "hh:nn:ss") & " " & msg
         Close #f
