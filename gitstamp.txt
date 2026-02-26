@@ -1,1 +1,1 @@
-2026-02-19 18:16:11 | 3e9c083 | fix: AppleScript-Suche auch im übergeordneten Ordner
+2026-02-26 11:21:59 | 15d4b1d
