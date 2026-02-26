@@ -571,18 +571,17 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     SetKV parsed, "MailBody", msgBody
     SetKV parsed, "MailSubject", msgSubject
 
-    ' Bei weitergeleiteten Mails: Urspruengliches Datum verwenden
+    ' Bei weitergeleiteten Mails: Bereinigtes Datum speichern
     Dim origDateStr As String
     origDateStr = GetField(parsed, "OriginalDate")
     If Len(origDateStr) > 0 Then
-        Dim origDate As Date
-        origDate = ParseGermanDateString(origDateStr)
-        If origDate > 0 Then
-            msgDate = origDate
-            Debug.Print "[ProcessMsg] msgDate ueberschrieben mit OriginalDate: " & Format$(msgDate, "dd.mm.yyyy")
-        Else
-            Debug.Print "[ProcessMsg] OriginalDate konnte nicht geparst werden: " & origDateStr
-        End If
+        ' "Mittwoch, 25. Februar 2026 um 10:18" -> "25. Februar 2026"
+        Dim cleanedDate As String
+        cleanedDate = origDateStr
+        If InStr(cleanedDate, ",") > 0 Then cleanedDate = Trim$(Mid$(cleanedDate, InStr(cleanedDate, ",") + 1))
+        If InStr(1, cleanedDate, " um ", vbTextCompare) > 0 Then cleanedDate = Trim$(Left$(cleanedDate, InStr(1, cleanedDate, " um ", vbTextCompare) - 1))
+        SetKV parsed, "OriginalDateClean", cleanedDate
+        Debug.Print "[ProcessMsg] OriginalDateClean: '" & cleanedDate & "'"
     End If
 
     ' Dateiname fuer Zuordnung durchreichen
@@ -4249,7 +4248,15 @@ Private Sub AddLeadRow(ByVal tbl As ListObject, ByVal fields As Object, ByVal ms
 
     Debug.Print "[AddLeadRow] Werte -> Name='" & nameVal & "' Tel='" & phoneVal & "' PLZ='" & plzVal & "' PG='" & pgVal & "'"
 
-    SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
+    ' Datum: Bei weitergeleiteten Mails bereinigtes Original-Datum direkt eintragen
+    Dim origClean As String
+    origClean = GetField(fields, "OriginalDateClean")
+    If Len(origClean) > 0 Then
+        SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", origClean
+        Debug.Print "[AddLeadRow] Monat Lead erhalten = '" & origClean & "' (Original)"
+    Else
+        SetCellByHeaderMap newRow, headerMap, "Monat Lead erhalten", DateSerial(Year(msgDate), Month(msgDate), 1)
+    End If
     Set monthCell = GetCellByHeaderMap(newRow, headerMap, "Monat Lead erhalten")
     SetImportNote monthCell
     SetCellByHeaderMap newRow, headerMap, "Lead-Quelle", ResolveLeadSource(fields)
