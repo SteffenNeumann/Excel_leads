@@ -821,32 +821,47 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     Err.Clear
     On Error GoTo 0
 
-    ' --- Strategie 2: Umlaut-sicher per ls + Glob-Pattern ---
-    ' Nicht-ASCII-Zeichen durch ? ersetzen, damit Shell den echten Dateinamen findet
-    Dim safeName As String
-    Dim ci As Long
-    Dim cc As Long
-    safeName = vbNullString
-    For ci = 1 To Len(filePath)
-        cc = AscW(Mid$(filePath, ci, 1))
+    ' --- Strategie 2: Umlaut-sicher per find -name + Glob ---
+    ' Pfad in Verzeichnis und Dateiname aufteilen
+    Dim lastSlash As Long
+    lastSlash = InStrRev(filePath, "/")
+    Dim dirPart As String, filePart As String
+    If lastSlash > 0 Then
+        dirPart = Left$(filePath, lastSlash - 1)
+        filePart = Mid$(filePath, lastSlash + 1)
+    Else
+        dirPart = "."
+        filePart = filePath
+    End If
+
+    ' Nicht-ASCII-Zeichen im Dateinamen durch ? ersetzen
+    ' find -name interpretiert ? als Wildcard (unabhaengig von Shell-Quoting)
+    Dim safeFile As String
+    Dim ci As Long, cc As Long
+    safeFile = vbNullString
+    For ci = 1 To Len(filePart)
+        cc = AscW(Mid$(filePart, ci, 1))
         If cc > 127 Then
-            safeName = safeName & "?"
+            safeFile = safeFile & "?"
         Else
-            safeName = safeName & Mid$(filePath, ci, 1)
+            safeFile = safeFile & Mid$(filePart, ci, 1)
         End If
     Next ci
 
-    ' ls -1 findet via Glob den echten Dateinamen, cat liest ihn
-    script = "set matchedFile to do shell script ""ls -1 " & Chr(34) & safeName & Chr(34) & " 2>/dev/null | head -1""" & vbLf
-    script = script & "if matchedFile is """" then error ""Datei nicht gefunden: " & safeName & """" & vbLf
-    script = script & "do shell script ""cat "" & quoted form of matchedFile"
+    ' AppleScript: find findet Datei via Glob-Pattern, cat liest sie
+    Dim q As String: q = Chr(34)
+    script = "set theDir to " & q & dirPart & q & vbLf
+    script = script & "set namePattern to " & q & safeFile & q & vbLf
+    script = script & "set matchedFile to do shell script (" & q & "find " & q & " & quoted form of theDir & " & q & " -maxdepth 1 -name " & q & " & quoted form of namePattern & " & q & " -print | head -1" & q & ")" & vbLf
+    script = script & "if matchedFile is " & q & q & " then error " & q & "Datei nicht gefunden: " & q & " & namePattern" & vbLf
+    script = script & "do shell script " & q & "cat " & q & " & quoted form of matchedFile"
 
-    Debug.Print "[ReadTextFile] Shell-Glob: " & safeName
+    Debug.Print "[ReadTextFile] Shell-Find: dir=" & dirPart & " pattern=" & safeFile
 
     On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
     If Err.Number <> 0 Then
-        Debug.Print "[ReadTextFile] Shell-Glob fehlgeschlagen: " & Err.Description
+        Debug.Print "[ReadTextFile] Shell-Find fehlgeschlagen: " & Err.Description
         Err.Clear
         On Error GoTo 0
         ReadTextFileViaShell = vbNullString
@@ -856,12 +871,12 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
 
     ' Pruefen ob Ergebnis ein Fehler ist
     If Left$(result, 6) = "ERROR:" Then
-        Debug.Print "[ReadTextFile] Shell-Glob Fehler: " & result
+        Debug.Print "[ReadTextFile] Shell-Find Fehler: " & result
         ReadTextFileViaShell = vbNullString
         Exit Function
     End If
 
-    Debug.Print "[ReadTextFile] Shell-Glob erfolgreich: " & Len(result) & " Zeichen"
+    Debug.Print "[ReadTextFile] Shell-Find erfolgreich: " & Len(result) & " Zeichen"
     ReadTextFileViaShell = result
 End Function
 
