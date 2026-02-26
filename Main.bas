@@ -797,35 +797,56 @@ End Function
 Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     ' Zweck: Datei via AppleScript/Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
     ' VBA Open For Binary kann auf macOS keine Dateinamen mit oe, ae, ue etc. oeffnen.
-    ' Strategie: cp via Shell in gleichen Ordner mit ASCII-Name, dann Binary-Read.
-    ' Temp-Datei im gleichen Ordner ablegen (VBA hat dort bereits Sandbox-Zugriff).
-    Dim tmpPath As String
-    Dim folderPart As String
+    ' Strategie 1: cat direkt per Shell.
+    ' Strategie 2: Glob-Pattern (Umlaute durch ?) + ls + cat.
     Dim script As String
     Dim result As String
-    Dim f As Integer
-    Dim txt As String
-    Dim bytes As Long
-    Dim slashPos As Long
 
-    ' Ordner aus Dateipfad extrahieren
-    slashPos = InStrRev(filePath, "/")
-    If slashPos > 0 Then
-        folderPart = Left$(filePath, slashPos)
-    Else
-        folderPart = ""
+    ' --- Strategie 1: cat direkt per Shell ausfuehren ---
+    ' Pfad als AppleScript-String setzen, dann quoted form fuer Shell nutzen
+    script = "set filePath to " & Chr(34) & filePath & Chr(34) & vbLf
+    script = script & "do shell script ""cat "" & quoted form of filePath"
+
+    Debug.Print "[ReadTextFile] Shell-Cat: " & filePath
+
+    On Error Resume Next
+    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    If Err.Number = 0 And Left$(result, 6) <> "ERROR:" And Len(result) > 10 Then
+        Debug.Print "[ReadTextFile] Shell-Cat erfolgreich: " & Len(result) & " Zeichen"
+        On Error GoTo 0
+        ReadTextFileViaShell = result
+        Exit Function
     End If
-    tmpPath = folderPart & "_tmp_eml_import.eml"
+    Debug.Print "[ReadTextFile] Shell-Cat fehlgeschlagen: Err=" & Err.Number & " Result='" & Left$(result, 100) & "'"
+    Err.Clear
+    On Error GoTo 0
 
-    ' AppleScript: Datei per Shell-Copy in Temp-Pfad ohne Sonderzeichen kopieren
-    script = "do shell script ""cp "" & quoted form of " & Chr(34) & filePath & Chr(34) & " & "" "" & quoted form of " & Chr(34) & tmpPath & Chr(34)
+    ' --- Strategie 2: Umlaut-sicher per ls + Glob-Pattern ---
+    ' Nicht-ASCII-Zeichen durch ? ersetzen, damit Shell den echten Dateinamen findet
+    Dim safeName As String
+    Dim ci As Long
+    Dim cc As Long
+    safeName = vbNullString
+    For ci = 1 To Len(filePath)
+        cc = AscW(Mid$(filePath, ci, 1))
+        If cc > 127 Then
+            safeName = safeName & "?"
+        Else
+            safeName = safeName & Mid$(filePath, ci, 1)
+        End If
+    Next ci
 
-    Debug.Print "[ReadTextFile] Shell-Copy: " & filePath & " -> " & tmpPath
+    ' ls -1 findet via Glob den echten Dateinamen, cat liest ihn
+    script = "set matchedFile to do shell script ""ls -1 " & Chr(34) & safeName & Chr(34) & " 2>/dev/null | head -1""" & vbLf
+    script = script & "if matchedFile is """" then error ""Datei nicht gefunden: " & safeName & """" & vbLf
+    script = script & "do shell script ""cat "" & quoted form of matchedFile"
+
+    Debug.Print "[ReadTextFile] Shell-Glob: " & safeName
 
     On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
     If Err.Number <> 0 Then
-        Debug.Print "[ReadTextFile] AppleScriptTask fehlgeschlagen: " & Err.Description
+        Debug.Print "[ReadTextFile] Shell-Glob fehlgeschlagen: " & Err.Description
         Err.Clear
         On Error GoTo 0
         ReadTextFileViaShell = vbNullString
@@ -835,38 +856,13 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
 
     ' Pruefen ob Ergebnis ein Fehler ist
     If Left$(result, 6) = "ERROR:" Then
-        Debug.Print "[ReadTextFile] Shell-Copy Fehler: " & result
+        Debug.Print "[ReadTextFile] Shell-Glob Fehler: " & result
         ReadTextFileViaShell = vbNullString
         Exit Function
     End If
 
-    ' Temp-Datei normal lesen (Pfad ohne Sonderzeichen -> kein Sandbox-Dialog)
-    f = FreeFile
-    On Error Resume Next
-    Open tmpPath For Binary Access Read As #f
-    If Err.Number <> 0 Then
-        Debug.Print "[ReadTextFile] Temp-Datei Open fehlgeschlagen: " & Err.Description
-        Err.Clear
-        On Error GoTo 0
-        ReadTextFileViaShell = vbNullString
-        Exit Function
-    End If
-    bytes = LOF(f)
-    If bytes > 0 Then
-        txt = String$(bytes, vbNullChar)
-        Get #f, , txt
-    End If
-    Close #f
-    On Error GoTo 0
-
-    Debug.Print "[ReadTextFile] Shell-Read erfolgreich: " & bytes & " Bytes"
-
-    ' Temp-Datei aufraeumen
-    On Error Resume Next
-    Kill tmpPath
-    On Error GoTo 0
-
-    ReadTextFileViaShell = txt
+    Debug.Print "[ReadTextFile] Shell-Glob erfolgreich: " & Len(result) & " Zeichen"
+    ReadTextFileViaShell = result
 End Function
 
 Private Function NormalizeLineEndings(ByVal textIn As String) As String
