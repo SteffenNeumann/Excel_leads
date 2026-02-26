@@ -3104,13 +3104,17 @@ Private Function ExtractOriginalSender(ByVal bodyText As String) As String
     For i = LBound(lines) To UBound(lines)
         lineText = Trim$(lines(i))
         
+        ' Zitat-Marker entfernen (">", ">>", etc.)
+        Do While Left$(lineText, 1) = ">"
+            lineText = Trim$(Mid$(lineText, 2))
+        Loop
+        
         ' Deutsche Weiterleitungsmarkierungen: "Von:", "Gesendet von:"
         ' Englische: "From:", "Sent by:"
-        ' Outlook: "-----Original Message-----" (nachfolgende Von:/From: Zeilen)
-        If (InStr(1, lineText, "Von:", vbTextCompare) = 1 Or _
-            InStr(1, lineText, "From:", vbTextCompare) = 1 Or _
-            InStr(1, lineText, "Gesendet von:", vbTextCompare) = 1 Or _
-            InStr(1, lineText, "Sent by:", vbTextCompare) = 1) And _
+        If (InStr(1, lineText, "Von:", vbTextCompare) > 0 Or _
+            InStr(1, lineText, "From:", vbTextCompare) > 0 Or _
+            InStr(1, lineText, "Gesendet von:", vbTextCompare) > 0 Or _
+            InStr(1, lineText, "Sent by:", vbTextCompare) > 0) And _
             InStr(lineText, "@") > 0 Then
             
             ' Extrahiere E-Mail-Adresse aus dieser Zeile
@@ -3198,25 +3202,33 @@ Private Function ExtractOriginalDate(ByVal bodyText As String) As String
     For i = LBound(lines) To UBound(lines)
         lineText = Trim$(lines(i))
 
+        ' Zitat-Marker entfernen (">", ">>", etc.)
+        Do While Left$(lineText, 1) = ">"
+            lineText = Trim$(Mid$(lineText, 2))
+        Loop
+
         ' Suche nach Datumszeilen in weitergeleiteten Mails
-        If InStr(1, lineText, "Datum:", vbTextCompare) = 1 Then
-            colonPos = InStr(lineText, ":")
-            dateVal = Trim$(Mid$(lineText, colonPos + 1))
-        ElseIf InStr(1, lineText, "Date:", vbTextCompare) = 1 Then
-            colonPos = InStr(lineText, ":")
-            dateVal = Trim$(Mid$(lineText, colonPos + 1))
-        ElseIf InStr(1, lineText, "Gesendet:", vbTextCompare) = 1 Then
-            colonPos = InStr(lineText, ":")
-            dateVal = Trim$(Mid$(lineText, colonPos + 1))
-        ElseIf InStr(1, lineText, "Sent:", vbTextCompare) = 1 Then
-            colonPos = InStr(lineText, ":")
-            dateVal = Trim$(Mid$(lineText, colonPos + 1))
+        ' Nutze InStr > 0 statt = 1 fuer robustere Erkennung
+        Dim matchTag As String
+        matchTag = vbNullString
+        If InStr(1, lineText, "Datum:", vbTextCompare) > 0 Then
+            matchTag = "Datum:"
+        ElseIf InStr(1, lineText, "Date:", vbTextCompare) > 0 And InStr(1, lineText, "Update", vbTextCompare) = 0 Then
+            matchTag = "Date:"
+        ElseIf InStr(1, lineText, "Gesendet:", vbTextCompare) > 0 Then
+            matchTag = "Gesendet:"
+        ElseIf InStr(1, lineText, "Sent:", vbTextCompare) > 0 And InStr(1, lineText, "Sent by", vbTextCompare) = 0 Then
+            matchTag = "Sent:"
         End If
 
-        If Len(dateVal) > 0 Then
-            ExtractOriginalDate = dateVal
-            Debug.Print "[ExtractOriginalDate] Gefunden: " & dateVal
-            Exit Function
+        If Len(matchTag) > 0 Then
+            colonPos = InStr(1, lineText, matchTag, vbTextCompare)
+            dateVal = Trim$(Mid$(lineText, colonPos + Len(matchTag)))
+            If Len(dateVal) > 0 Then
+                ExtractOriginalDate = dateVal
+                Debug.Print "[ExtractOriginalDate] Gefunden: '" & dateVal & "'"
+                Exit Function
+            End If
         End If
     Next i
 
@@ -3280,17 +3292,24 @@ NextToken:
     Next j
 
     If dayNum > 0 And monthNum > 0 And yearNum > 0 Then
+        ' Evaluate(DATEVALUE) fuer robuste Konvertierung
+        Dim dateExpr As String
+        dateExpr = dayNum & "." & monthNum & "." & yearNum
         On Error Resume Next
-        ParseGermanDateString = DateSerial(yearNum, monthNum, dayNum)
-        If Err.Number <> 0 Then ParseGermanDateString = 0
+        ParseGermanDateString = Application.Evaluate("DATEVALUE(""" & dateExpr & """)")
+        If Err.Number <> 0 Then
+            ' Fallback auf DateSerial
+            ParseGermanDateString = DateSerial(yearNum, monthNum, dayNum)
+        End If
         On Error GoTo 0
-        Debug.Print "[ParseGermanDateString] Ergebnis: " & Format$(ParseGermanDateString, "dd.mm.yyyy")
+        Debug.Print "[ParseGermanDateString] Ergebnis: " & Format$(ParseGermanDateString, "dd.mm.yyyy") & " (aus '" & dateStr & "')"
     Else
         ' Fallback: CDate versuchen
         On Error Resume Next
         ParseGermanDateString = CDate(dateStr)
         If Err.Number <> 0 Then ParseGermanDateString = 0
         On Error GoTo 0
+        Debug.Print "[ParseGermanDateString] Fallback CDate: " & dateStr
     End If
 End Function
 
