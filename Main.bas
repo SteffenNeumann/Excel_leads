@@ -585,6 +585,7 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     ' Split -> Tokens durchlaufen -> Tag/Monat/Jahr finden -> DateSerial
     Dim origDateStr As String
     origDateStr = GetField(parsed, "OriginalDate")
+    Debug.Print "[ProcessMsg] OriginalDate Key vorhanden: " & (Len(origDateStr) > 0) & " Wert='" & Left$(origDateStr, 80) & "'"
     If Len(origDateStr) > 0 Then
         Debug.Print "[ProcessMsg] OriginalDate roh: '" & origDateStr & "'"
         Dim dateParts() As String
