@@ -778,11 +778,14 @@ Private Function ReadTextFile(ByVal filePath As String) As String
 
     ' Bei Umlaut-Dateinamen direkt Shell-Fallback nutzen
     If hasNonAscii Then
+        LogToFile "[ReadTextFile] hasNonAscii=True -> Shell-Read: " & filePath
         Debug.Print "[ReadTextFile] Umlaut erkannt -> direkt Shell-Read fuer: " & filePath
         txt = ReadTextFileViaShell(filePath)
+        LogToFile "[ReadTextFile] Shell-Read Ergebnis: " & Len(txt) & " Zeichen"
         ReadTextFile = txt
         Exit Function
     End If
+    LogToFile "[ReadTextFile] hasNonAscii=False, Binary-Read: " & filePath
 
     f = FreeFile
     On Error Resume Next
@@ -824,8 +827,12 @@ Private Function ReadTextFile(ByVal filePath As String) As String
     End If
 
     If Not isValid Then
+        LogToFile "[ReadTextFile] Binary-Read ungueltig: " & bytes & " Bytes, kein ASCII -> Shell-Fallback"
         Debug.Print "[ReadTextFile] Binary-Read ungueltig (" & bytes & " Bytes, kein druckbares ASCII) -> Shell-Fallback fuer: " & filePath
         txt = ReadTextFileViaShell(filePath)
+        LogToFile "[ReadTextFile] Shell-Fallback: " & Len(txt) & " Zeichen"
+    Else
+        LogToFile "[ReadTextFile] Binary-Read OK: " & Len(txt) & " Zeichen"
     End If
 
     ReadTextFile = txt
@@ -916,13 +923,15 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         End If
     Next ci
 
-    ' Wenn safeFile = filePart (kein Non-ASCII gefunden), Buchstaben vor bekannten
-    ' Umlaut-Positionen auch mit * ersetzen (NFD: VBA sieht 'a' statt 'ä')
-    ' Daher: falls keine * eingefuegt wurden, alle Vokale vor 'u','o','a' pruefen
+    ' Wenn safeFile = filePart (kein Non-ASCII gefunden), hat Dir$ die NFD-combining
+    ' marks verschluckt. Breiteres Pattern: alles nach letztem Leerzeichen -> *.eml
     If safeFile = filePart Then
-        ' Kein Non-ASCII erkannt -> Dir$ hat NFD-combining marks geschluckt
-        ' find mit dem unveraenderten Namen versuchen (dirPart ist ohne Umlaut)
-        Debug.Print "[ReadTextFile] Kein Non-ASCII in Dateiname erkannt (NFD verschluckt?)"
+        Dim spPos As Long
+        spPos = InStrRev(filePart, " ")
+        If spPos > 5 Then
+            safeFile = Left$(filePart, spPos) & "*.eml"
+        End If
+        Debug.Print "[ReadTextFile] NFD-Workaround: safeFile=" & safeFile
     End If
 
     ' AppleScript: find findet Datei, cp nach /tmp/, Binary-Read
@@ -979,24 +988,18 @@ End Function
 
 Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As String) As String
     ' Zweck: EML-Datei per Shell lesen wenn VBA-ReadTextFile versagt (Umlaut-Dateinamen).
-    ' Strategie: Aus dem Dateinamen einen sicheren Suchbegriff extrahieren,
-    ' per find die echte Datei finden, per cp nach /tmp/ kopieren, dann Binary-Read.
-    ' Umgeht komplett den VBA-Dateipfad mit Encoding-Problemen.
-    Dim tmpPath As String
+    ' Neuer Ansatz: find + cat direkt via AppleScript, Content als Text zurueck.
+    ' Kein cp, kein Binary-Read -> weniger Fehlerquellen.
+    ' Debug-Output nach /tmp/_vba_eml_debug.log (Immediate Window ist zu kurz).
     Dim script As String
     Dim result As String
     Dim q As String
-    Dim f As Integer
-    Dim txt As String
-    Dim bytes As Long
+    Dim esc As String
 
-    tmpPath = "/tmp/_eml_import_temp.eml"
     q = Chr(34)
+    esc = Chr(92) & Chr(34)  ' \" fuer escaped quotes in AppleScript-Strings
 
-    ' Suchbegriff: Nur ASCII-Teile des Dateinamens behalten, Rest wird zu *
-    ' Beispiel: "WG_ Neue Anfrage_ Sabine Bäuml.eml" -> "WG_ Neue Anfrage_ Sabine B*uml.eml"
-    ' Auch NFD-sichere Variante: VBA Dir$ kann combining marks verschlucken
-    ' "Bauml.eml" (ohne Umlaut) -> wir brauchen ein breiteres Pattern
+    ' --- Pattern bauen: Non-ASCII durch * ersetzen ---
     Dim safePattern As String
     Dim ci As Long, cc As Long
     Dim prevWasStar As Boolean
@@ -1005,7 +1008,6 @@ Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As 
     For ci = 1 To Len(fileName)
         cc = AscW(Mid$(fileName, ci, 1))
         If cc > 127 Then
-            ' Non-ASCII -> * Wildcard
             If Not prevWasStar Then
                 safePattern = safePattern & "*"
                 prevWasStar = True
@@ -1016,71 +1018,86 @@ Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As 
         End If
     Next ci
 
-    ' Wenn kein * eingefuegt wurde, koennte Dir$ den NFD-combining mark verschluckt haben
-    ' Dann den Dateinamen breiter matchen: Vor jedem Vokal+Konsonant-Paar ein * einfuegen
-    ' ist zu komplex -> stattdessen einfach mit *Dateiendung* matchen
+    ' NFD-Workaround: Wenn kein * eingefuegt (Dir$ hat combining marks verschluckt),
+    ' dann breiteres Pattern: alles nach letztem Leerzeichen durch *.eml ersetzen
     If safePattern = fileName Then
-        ' Kein Non-ASCII erkannt -> probiere mit Teilnamen
-        ' Nehme alles bis zum letzten Leerzeichen vor dem .eml und haenge *.eml an
         Dim spacePos As Long
         spacePos = InStrRev(fileName, " ")
         If spacePos > 5 Then
             safePattern = Left$(fileName, spacePos) & "*.eml"
         End If
-        Debug.Print "[ShellReadEml] NFD-Workaround: Pattern=" & safePattern
     End If
 
-    ' AppleScript: find sucht Datei, cp kopiert nach /tmp/
-    script = "set theDir to " & q & folderPath & q & vbLf
-    script = script & "set namePattern to " & q & safePattern & q & vbLf
-    script = script & "set matchedFile to do shell script (" & q & "find " & q & " & quoted form of theDir & " & q & " -maxdepth 1 -name " & q & " & quoted form of namePattern & " & q & " -print | head -1" & q & ")" & vbLf
-    script = script & "if matchedFile is " & q & q & " then error " & q & "Datei nicht gefunden: " & q & " & namePattern" & vbLf
-    script = script & "do shell script " & q & "cp " & q & " & quoted form of matchedFile & " & q & " " & q & " & quoted form of " & q & tmpPath & q
+    ' --- Debug-Log in Datei schreiben (umgeht Immediate Window Limit) ---
+    LogToFile "[ShellReadEml] START fileName=" & fileName
+    LogToFile "[ShellReadEml] safePattern=" & safePattern
+    LogToFile "[ShellReadEml] folderPath=" & folderPath
 
-    Debug.Print "[ShellReadEml] Pattern=" & safePattern & " Dir=" & folderPath
+    ' --- AscW-Dump des Dateinamens fuer Encoding-Diagnose ---
+    Dim ascDump As String
+    ascDump = vbNullString
+    For ci = 1 To Len(fileName)
+        If ci > 1 Then ascDump = ascDump & ","
+        ascDump = ascDump & AscW(Mid$(fileName, ci, 1))
+    Next ci
+    LogToFile "[ShellReadEml] AscW-Dump: " & ascDump
+
+    Debug.Print "[ShellReadEml] Pattern=" & safePattern
+
+    ' --- AppleScript: find + cat (Content direkt als Text zurueck) ---
+    ' Baut Shell-Befehl: f=$(find DIR -maxdepth 1 -name 'PATTERN' -print | head -1) && cat "$f"
+    ' quoted form of schuetzt Leerzeichen in Pfad und Pattern
+    ' \"$f\" referenziert die Shell-Variable (escaped quotes in AppleScript-String)
+    script = "set theDir to " & q & folderPath & q & vbLf
+    script = script & "set p to " & q & safePattern & q & vbLf
+    script = script & "set cmd to " & q & "f=$(find " & q & " & quoted form of theDir & " & q & " -maxdepth 1 -name " & q & " & quoted form of p & " & q & " -print | head -1) && [ -n " & esc & "$f" & esc & " ] && cat " & esc & "$f" & esc & q & vbLf
+    script = script & "return do shell script cmd"
+
+    LogToFile "[ShellReadEml] Script=" & Left$(script, 500)
 
     On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
-    If Err.Number <> 0 Then
-        Debug.Print "[ShellReadEml] AppleScript fehlgeschlagen: " & Err.Description
-        Err.Clear
-        On Error GoTo 0
+    Dim errNum As Long: errNum = Err.Number
+    Dim errDesc As String: errDesc = Err.Description
+    Err.Clear
+    On Error GoTo 0
+
+    If errNum <> 0 Then
+        LogToFile "[ShellReadEml] FEHLER AppleScriptTask: Err=" & errNum & " Desc=" & errDesc
+        Debug.Print "[ShellReadEml] FEHLER: " & errDesc
         ShellReadEmlFile = vbNullString
         Exit Function
     End If
-    On Error GoTo 0
 
     If Left$(result, 6) = "ERROR:" Then
-        Debug.Print "[ShellReadEml] Fehler: " & result
+        LogToFile "[ShellReadEml] FEHLER Result: " & Left$(result, 200)
+        Debug.Print "[ShellReadEml] FEHLER: " & Left$(result, 100)
         ShellReadEmlFile = vbNullString
         Exit Function
     End If
 
-    ' Temp-Datei lesen (ASCII-Pfad -> kein Encoding-Problem)
-    f = FreeFile
-    On Error Resume Next
-    Open tmpPath For Binary Access Read As #f
-    If Err.Number = 0 Then
-        bytes = LOF(f)
-        If bytes > 0 Then
-            txt = String$(bytes, vbNullChar)
-            Get #f, , txt
-        End If
-        Close #f
-    Else
-        Debug.Print "[ShellReadEml] Temp-Datei Open fehlgeschlagen: " & Err.Description
-        Err.Clear
-    End If
-    On Error GoTo 0
+    ' Ergebnis ist der Dateiinhalt direkt (kein Binary-Read noetig)
+    LogToFile "[ShellReadEml] ERFOLG: " & Len(result) & " Zeichen gelesen"
+    LogToFile "[ShellReadEml] Erste 200 Zeichen: " & Left$(Replace(Replace(result, vbCr, "<CR>"), vbLf, "<LF>"), 200)
+    Debug.Print "[ShellReadEml] Erfolgreich: " & Len(result) & " Zeichen"
 
-    ' Aufraeumen
-    On Error Resume Next
-    Kill tmpPath
-    On Error GoTo 0
-
-    Debug.Print "[ShellReadEml] Erfolgreich: " & bytes & " Bytes gelesen"
-    ShellReadEmlFile = txt
+    ShellReadEmlFile = result
 End Function
+
+Private Sub LogToFile(ByVal msg As String)
+    ' Zweck: Debug-Log in Datei schreiben (umgeht Immediate Window 200-Zeilen-Limit).
+    ' Logdatei: /tmp/_vba_eml_debug.log
+    Dim f As Integer
+    On Error Resume Next
+    f = FreeFile
+    Open "/tmp/_vba_eml_debug.log" For Append As #f
+    If Err.Number = 0 Then
+        Print #f, Format$(Now, "hh:nn:ss") & " " & msg
+        Close #f
+    End If
+    Err.Clear
+    On Error GoTo 0
+End Sub
 
 Private Function NormalizeLineEndings(ByVal textIn As String) As String
     ' Zweck: Zeilenenden vereinheitlichen (CRLF/CR -> LF).
@@ -2185,20 +2202,25 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
     If Not FolderExists(folderPath) Then Exit Function
 
     Debug.Print "[EML-Import] Ordner: " & folderPath
+    LogToFile "===== EML-Import Start: " & folderPath & " ====="
 
     fileName = Dir$(folderPath & "/" & "*.eml")
     Do While Len(fileName) > 0
         filePath = folderPath & "/" & fileName
         Debug.Print "[EML-Import] Datei: " & fileName
+        LogToFile "[EML] Datei: " & fileName
 
         rawText = ReadTextFile(filePath)
+        LogToFile "[EML] ReadTextFile: " & Len(rawText) & " Zeichen"
         Debug.Print "[EML-Import] Dateigroesse: " & Len(rawText) & " Zeichen"
 
-        ' Fallback: Wenn ReadTextFile fehlschlaegt, Datei per find + cp via Shell lesen
+        ' Fallback: Wenn ReadTextFile fehlschlaegt, Datei per find + cat via Shell lesen
         ' Noetig fuer Umlaut-Dateinamen (macOS NFD-Encoding vs. VBA MacRoman)
         If Len(rawText) < 20 Then
+            LogToFile "[EML] ReadTextFile zu kurz -> Shell-Fallback"
             Debug.Print "[EML-Import] ReadTextFile zu kurz -> Shell-Fallback fuer: " & fileName
             rawText = ShellReadEmlFile(folderPath, fileName)
+            LogToFile "[EML] Shell-Fallback: " & Len(rawText) & " Zeichen"
             Debug.Print "[EML-Import] Shell-Fallback Ergebnis: " & Len(rawText) & " Zeichen"
         End If
 
