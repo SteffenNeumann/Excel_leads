@@ -3198,34 +3198,48 @@ Private Function ExtractOriginalDate(ByVal bodyText As String) As String
 
     lines = Split(bodyText, vbLf)
 
+    ' PASS 1: Nur deutsche Tags suchen (Prioritaet)
     For i = LBound(lines) To UBound(lines)
         lineText = Trim$(lines(i))
-
-        ' Zitat-Marker entfernen (">", ">>", etc.)
         Do While Left$(lineText, 1) = ">"
             lineText = Trim$(Mid$(lineText, 2))
         Loop
-
-        ' Suche nach Datumszeilen in weitergeleiteten Mails
-        ' Nutze InStr > 0 statt = 1 fuer robustere Erkennung
         Dim matchTag As String
         matchTag = vbNullString
         If InStr(1, lineText, "Datum:", vbTextCompare) > 0 Then
             matchTag = "Datum:"
-        ElseIf InStr(1, lineText, "Date:", vbTextCompare) > 0 And InStr(1, lineText, "Update", vbTextCompare) = 0 Then
-            matchTag = "Date:"
         ElseIf InStr(1, lineText, "Gesendet:", vbTextCompare) > 0 Then
             matchTag = "Gesendet:"
-        ElseIf InStr(1, lineText, "Sent:", vbTextCompare) > 0 And InStr(1, lineText, "Sent by", vbTextCompare) = 0 Then
-            matchTag = "Sent:"
         End If
-
         If Len(matchTag) > 0 Then
             colonPos = InStr(1, lineText, matchTag, vbTextCompare)
             dateVal = Trim$(Mid$(lineText, colonPos + Len(matchTag)))
             If Len(dateVal) > 0 Then
                 ExtractOriginalDate = dateVal
-                Debug.Print "[ExtractOriginalDate] Gefunden: '" & dateVal & "'"
+                Debug.Print "[ExtractOriginalDate] DE-Tag gefunden: '" & dateVal & "'"
+                Exit Function
+            End If
+        End If
+    Next i
+
+    ' PASS 2: Englische Tags als Fallback
+    For i = LBound(lines) To UBound(lines)
+        lineText = Trim$(lines(i))
+        Do While Left$(lineText, 1) = ">"
+            lineText = Trim$(Mid$(lineText, 2))
+        Loop
+        matchTag = vbNullString
+        If InStr(1, lineText, "Date:", vbTextCompare) > 0 And InStr(1, lineText, "Update", vbTextCompare) = 0 Then
+            matchTag = "Date:"
+        ElseIf InStr(1, lineText, "Sent:", vbTextCompare) > 0 And InStr(1, lineText, "Sent by", vbTextCompare) = 0 Then
+            matchTag = "Sent:"
+        End If
+        If Len(matchTag) > 0 Then
+            colonPos = InStr(1, lineText, matchTag, vbTextCompare)
+            dateVal = Trim$(Mid$(lineText, colonPos + Len(matchTag)))
+            If Len(dateVal) > 0 Then
+                ExtractOriginalDate = dateVal
+                Debug.Print "[ExtractOriginalDate] EN-Tag gefunden: '" & dateVal & "'"
                 Exit Function
             End If
         End If
