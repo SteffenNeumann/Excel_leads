@@ -841,12 +841,13 @@ End Function
 Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     ' Zweck: Datei via AppleScript/Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
     ' VBA Open For Binary kann auf macOS keine Dateinamen mit Umlauten korrekt oeffnen.
-    ' Strategie 1: cp via quoted form nach Workbook-Verzeichnis, dann Binary-Read.
-    ' Strategie 2: find -name mit * fuer NFD-Umlaute, dann cp + Binary-Read.
+    ' Strategie 1: cp via quoted form nach /tmp/, dann Binary-Read (bewaehrt in e31bb09/c968027).
+    ' Strategie 2: find -name mit * fuer NFD-Umlaute, dann cp nach /tmp/ + Binary-Read.
+    ' /tmp/-Pfad hat keine Sonderzeichen/Leerzeichen -> Open For Binary funktioniert sicher.
     Dim script As String
     Dim result As String
     Dim tmpPath As String
-    tmpPath = ThisWorkbook.Path & "/_eml_import_temp.eml"
+    tmpPath = "/tmp/_eml_import_temp.eml"
 
     ' --- Strategie 1: cp via AppleScript nach /tmp/ ---
     ' quoted form of handhabt Sonderzeichen im Pfad korrekt
@@ -934,7 +935,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         Debug.Print "[ReadTextFile] NFD-Workaround: safeFile=" & safeFile
     End If
 
-    ' AppleScript: find findet Datei, cp nach Workbook-Verzeichnis, Binary-Read
+    ' AppleScript: find findet Datei, cp nach /tmp/, Binary-Read
     Dim q As String: q = Chr(34)
     script = "set theDir to " & q & dirPart & q & vbLf
     script = script & "set namePattern to " & q & safeFile & q & vbLf
