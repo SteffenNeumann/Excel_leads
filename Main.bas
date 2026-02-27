@@ -992,15 +992,14 @@ Private Function ReadTmpFile(ByVal tmpPath As String) As String
 End Function
 
 Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As String) As String
-    ' Zweck: EML-Datei per Shell lesen wenn VBA-ReadTextFile versagt (Umlaut-Dateinamen).
-    ' Ansatz: find + cp in EML-Ordner + Binary-Read (kein cat, da AppleScriptTask grosse Strings abschneidet).
+    ' Zweck: EML-Datei per Python MIME-Parser lesen wenn VBA-ReadTextFile versagt (Umlaut-Dateinamen).
+    ' Ansatz: find (handhabt NFD/NFC) + python3 email-Modul (extrahiert Subject/From/Date + text/plain Body).
+    ' Ergebnis ~16KB -> passt unter AppleScriptTask String-Limit (~32KB). Kein VBA-Datei-IO noetig.
     Dim script As String
     Dim result As String
     Dim q As String
-    Dim tmpPath As String
 
     q = Chr(34)
-    tmpPath = folderPath & "/_tmp_import.eml"
 
     ' --- Pattern bauen: Non-ASCII durch * ersetzen ---
     Dim safePattern As String
@@ -1033,25 +1032,40 @@ Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As 
 
     LogToFile "[ShellReadEml] START fileName=" & fileName
     LogToFile "[ShellReadEml] safePattern=" & safePattern
-    LogToFile "[ShellReadEml] folderPath=" & folderPath
-
-    ' --- AscW-Dump des Dateinamens fuer Encoding-Diagnose ---
-    Dim ascDump As String
-    ascDump = vbNullString
-    For ci = 1 To Len(fileName)
-        If ci > 1 Then ascDump = ascDump & ","
-        ascDump = ascDump & AscW(Mid$(fileName, ci, 1))
-    Next ci
-    LogToFile "[ShellReadEml] AscW-Dump: " & ascDump
 
     Debug.Print "[ShellReadEml] Pattern=" & safePattern
 
-    ' --- AppleScript: find + cp in EML-Ordner (NICHT cat, da String-Limit!) ---
-    script = "set theDir to " & q & folderPath & q & vbLf
+    ' --- Python MIME-Extraktor (base64-kodiert) ---
+    ' Extrahiert Subject, From, Date Header (MIME-dekodiert) + text/plain Body.
+    ' Verwendet Python email-Modul fuer robustes MIME-Parsing und Charset-Konvertierung.
+    Dim b64Py As String
+    b64Py = "aW1wb3J0IGVtYWlsLCBzeXMsIGVtYWlsLmhlYWRlcgp3aXRoIG9wZW4oc3lzLmFy" & _
+            "Z3ZbMV0sICdyYicpIGFzIGY6CiAgICBtc2cgPSBlbWFpbC5tZXNzYWdlX2Zyb21f" & _
+            "YmluYXJ5X2ZpbGUoZikKc3ViaiA9IG1zZy5nZXQoJ1N1YmplY3QnLCAnJykKZnJt" & _
+            "ID0gbXNnLmdldCgnRnJvbScsICcnKQpkYXQgPSBtc2cuZ2V0KCdEYXRlJywgJycp" & _
+            "CiMgRGVjb2RlIE1JTUUtZW5jb2RlZCBoZWFkZXJzCnRyeToKICAgIHN1YmogPSBz" & _
+            "dHIoZW1haWwuaGVhZGVyLm1ha2VfaGVhZGVyKGVtYWlsLmhlYWRlci5kZWNvZGVf" & _
+            "aGVhZGVyKHN1YmopKSkKZXhjZXB0OgogICAgcGFzcwp0cnk6CiAgICBmcm0gPSBz" & _
+            "dHIoZW1haWwuaGVhZGVyLm1ha2VfaGVhZGVyKGVtYWlsLmhlYWRlci5kZWNvZGVf" & _
+            "aGVhZGVyKGZybSkpKQpleGNlcHQ6CiAgICBwYXNzCnByaW50KCdTdWJqZWN0OiAn" & _
+            "ICsgc3ViaikKcHJpbnQoJ0Zyb206ICcgKyBmcm0pCnByaW50KCdEYXRlOiAnICsg" & _
+            "ZGF0KQpwcmludCgnJykKZm9yIHAgaW4gbXNnLndhbGsoKToKICAgIGlmIHAuZ2V0" & _
+            "X2NvbnRlbnRfdHlwZSgpID09ICd0ZXh0L3BsYWluJzoKICAgICAgICBwYXlsb2Fk" & _
+            "ID0gcC5nZXRfcGF5bG9hZChkZWNvZGU9VHJ1ZSkKICAgICAgICBpZiBwYXlsb2Fk" & _
+            "OgogICAgICAgICAgICBjaGFyc2V0ID0gcC5nZXRfY29udGVudF9jaGFyc2V0KCkg" & _
+            "b3IgJ3V0Zi04JwogICAgICAgICAgICBzeXMuc3Rkb3V0LndyaXRlKHBheWxvYWQu" & _
+            "ZGVjb2RlKGNoYXJzZXQsICdyZXBsYWNlJykpCiAgICAgICAgICAgIGJyZWFrCg=="
+
+    ' --- AppleScript: Python deployen + find + ausfuehren ---
+    ' Schritt 1: Python-Script nach /tmp schreiben (Shell-IO, kein VBA-Sandbox-Problem)
+    script = "do shell script " & q & "echo '" & b64Py & "' | base64 -D > /tmp/_emlread.py" & q & vbLf
+    ' Schritt 2: EML-Datei per find lokalisieren (find handhabt NFD/NFC nativ)
+    script = script & "set theDir to " & q & folderPath & q & vbLf
     script = script & "set p to " & q & safePattern & q & vbLf
     script = script & "set matchedFile to do shell script (" & q & "find " & q & " & quoted form of theDir & " & q & " -maxdepth 1 -name " & q & " & quoted form of p & " & q & " -print | head -1" & q & ")" & vbLf
     script = script & "if matchedFile is " & q & q & " then error " & q & "Datei nicht gefunden: " & q & " & p" & vbLf
-    script = script & "do shell script " & q & "cp " & q & " & quoted form of matchedFile & " & q & " " & q & " & quoted form of " & q & tmpPath & q
+    ' Schritt 3: Python ausfuehren - gibt Subject/From/Date + text/plain Body zurueck
+    script = script & "return do shell script " & q & "python3 /tmp/_emlread.py " & q & " & quoted form of matchedFile"
 
     LogToFile "[ShellReadEml] Script=" & Left$(script, 500)
 
@@ -1076,12 +1090,9 @@ Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As 
         Exit Function
     End If
 
-    ' Temp-Datei lesen (Binary-Read, kein String-Limit)
-    Dim txt As String
-    txt = ReadTmpFile(tmpPath)
-    LogToFile "[ShellReadEml] ERFOLG: " & Len(txt) & " Bytes gelesen"
-    Debug.Print "[ShellReadEml] Erfolgreich: " & Len(txt) & " Bytes"
-    ShellReadEmlFile = txt
+    LogToFile "[ShellReadEml] ERFOLG Python: " & Len(result) & " Zeichen"
+    Debug.Print "[ShellReadEml] Python-Ergebnis: " & Len(result) & " Zeichen"
+    ShellReadEmlFile = result
 End Function
 
 Private Sub LogToFile(ByVal msg As String)
