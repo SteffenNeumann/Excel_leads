@@ -4305,9 +4305,9 @@ Private Function CheckAndNormalizeLeadName(ByVal rawName As String, ByVal existi
             On Error GoTo 0
         End If
 
-        ' Bestehenden Namen ebenfalls normalisieren (Komma-Format umdrehen)
+        ' Bestehenden Namen ebenfalls normalisieren (Komma-Format umdrehen + Praefix entfernen)
         Dim existNorm As String
-        existNorm = NormalizeLeadName(existName)
+        existNorm = StripNamePrefix(NormalizeLeadName(existName))
 
         ' Exakt gleich (nach Normalisierung) -> pruefen ob ID unterschiedlich
         If StrComp(normalized, existNorm, vbTextCompare) = 0 Then
