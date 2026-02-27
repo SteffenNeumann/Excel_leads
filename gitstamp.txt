@@ -1,1 +1,1 @@
-2026-02-27 07:24:07 | 7f87815 | Python MIME-Fallback in FetchMailMessagesFromPath
+2026-02-27 17:19:57 | 18ee2dd | MailReader.scpt installiert + Version-Marker
