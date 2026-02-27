@@ -2199,6 +2199,7 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
 
     If Not FolderExists(folderPath) Then Exit Function
 
+    Debug.Print "[EML-Import] === Version 2026-02-27 (Python-Fallback) ==="
     Debug.Print "[EML-Import] Ordner: " & folderPath
     LogToFile "===== EML-Import Start: " & folderPath & " ====="
 
