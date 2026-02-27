@@ -1,1 +1,1 @@
-2026-02-27 17:19:57 | 18ee2dd | MailReader.scpt installiert + Version-Marker
+2026-02-27 17:28:36 | 98afb92 | StripNamePrefix fuer bestehende Namen + Duplikat-Fix
