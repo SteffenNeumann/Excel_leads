@@ -1,1 +1,1 @@
-2026-02-27 17:28:36 | 98afb92 | StripNamePrefix fuer bestehende Namen + Duplikat-Fix
+2026-02-27 17:41:34 | 3ac3b4a | SOLUTION: Umlaut-EML-Fix (Tag: solution-umlaut-eml-fix)
