@@ -992,16 +992,22 @@ Private Function ReadTmpFile(ByVal tmpPath As String) As String
 End Function
 
 Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As String) As String
-    ' Zweck: EML-Datei per Python MIME-Parser lesen wenn VBA-ReadTextFile versagt (Umlaut-Dateinamen).
-    ' Ansatz: find (handhabt NFD/NFC) + python3 email-Modul (extrahiert Subject/From/Date + text/plain Body).
-    ' Ergebnis ~16KB -> passt unter AppleScriptTask String-Limit (~32KB). Kein VBA-Datei-IO noetig.
+    ' Zweck: EML-Datei per Python MIME-Parser lesen wenn VBA-ReadTextFile versagt.
+    ' Delegiert an PythonReadEmlFile (zentrale Implementierung).
+    LogToFile "[ShellReadEml] -> PythonReadEmlFile: " & fileName
+    ShellReadEmlFile = PythonReadEmlFile(folderPath, fileName)
+End Function
+
+Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As String) As String
+    ' Zweck: EML-Datei per Python email-Modul lesen (MIME-Parsing, NFD-sicher).
+    ' Gibt Subject/From/Date Header + text/plain Body zurueck (~16KB, unter AppleScriptTask Limit).
+    ' Komplett ohne VBA-Datei-IO: find (NFD-sicher) + python3 (liest Datei nativ).
     Dim script As String
     Dim result As String
     Dim q As String
-
     q = Chr(34)
 
-    ' --- Pattern bauen: Non-ASCII durch * ersetzen ---
+    ' --- Glob-Pattern: Non-ASCII -> *, NFD-Workaround ---
     Dim safePattern As String
     Dim ci As Long, cc As Long
     Dim prevWasStar As Boolean
@@ -1010,34 +1016,18 @@ Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As 
     For ci = 1 To Len(fileName)
         cc = AscW(Mid$(fileName, ci, 1))
         If cc > 127 Then
-            If Not prevWasStar Then
-                safePattern = safePattern & "*"
-                prevWasStar = True
-            End If
+            If Not prevWasStar Then safePattern = safePattern & "*": prevWasStar = True
         Else
-            safePattern = safePattern & Mid$(fileName, ci, 1)
-            prevWasStar = False
+            safePattern = safePattern & Mid$(fileName, ci, 1): prevWasStar = False
         End If
     Next ci
-
-    ' NFD-Workaround: Wenn kein * eingefuegt (Dir$ hat combining marks verschluckt),
-    ' dann breiteres Pattern: alles nach letztem Leerzeichen durch *.eml ersetzen
     If safePattern = fileName Then
         Dim spacePos As Long
         spacePos = InStrRev(fileName, " ")
-        If spacePos > 5 Then
-            safePattern = Left$(fileName, spacePos) & "*.eml"
-        End If
+        If spacePos > 5 Then safePattern = Left$(fileName, spacePos) & "*.eml"
     End If
 
-    LogToFile "[ShellReadEml] START fileName=" & fileName
-    LogToFile "[ShellReadEml] safePattern=" & safePattern
-
-    Debug.Print "[ShellReadEml] Pattern=" & safePattern
-
-    ' --- Python MIME-Extraktor (base64-kodiert) ---
-    ' Extrahiert Subject, From, Date Header (MIME-dekodiert) + text/plain Body.
-    ' Verwendet Python email-Modul fuer robustes MIME-Parsing und Charset-Konvertierung.
+    ' Python MIME-Extraktor base64-kodiert (extrahiert Subject/From/Date + text/plain Body)
     Dim b64Py As String
     b64Py = "aW1wb3J0IGVtYWlsLCBzeXMsIGVtYWlsLmhlYWRlcgp3aXRoIG9wZW4oc3lzLmFy" & _
             "Z3ZbMV0sICdyYicpIGFzIGY6CiAgICBtc2cgPSBlbWFpbC5tZXNzYWdlX2Zyb21f" & _
@@ -1056,18 +1046,15 @@ Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As 
             "b3IgJ3V0Zi04JwogICAgICAgICAgICBzeXMuc3Rkb3V0LndyaXRlKHBheWxvYWQu" & _
             "ZGVjb2RlKGNoYXJzZXQsICdyZXBsYWNlJykpCiAgICAgICAgICAgIGJyZWFrCg=="
 
-    ' --- AppleScript: Python deployen + find + ausfuehren ---
-    ' Schritt 1: Python-Script nach /tmp schreiben (Shell-IO, kein VBA-Sandbox-Problem)
+    ' AppleScript: Python deployen + find + ausfuehren
     script = "do shell script " & q & "echo '" & b64Py & "' | base64 -D > /tmp/_emlread.py" & q & vbLf
-    ' Schritt 2: EML-Datei per find lokalisieren (find handhabt NFD/NFC nativ)
     script = script & "set theDir to " & q & folderPath & q & vbLf
     script = script & "set p to " & q & safePattern & q & vbLf
     script = script & "set matchedFile to do shell script (" & q & "find " & q & " & quoted form of theDir & " & q & " -maxdepth 1 -name " & q & " & quoted form of p & " & q & " -print | head -1" & q & ")" & vbLf
     script = script & "if matchedFile is " & q & q & " then error " & q & "Datei nicht gefunden: " & q & " & p" & vbLf
-    ' Schritt 3: Python ausfuehren - gibt Subject/From/Date + text/plain Body zurueck
     script = script & "return do shell script " & q & "python3 /tmp/_emlread.py " & q & " & quoted form of matchedFile"
 
-    LogToFile "[ShellReadEml] Script=" & Left$(script, 500)
+    LogToFile "[PythonRead] Pattern=" & safePattern & " Ordner=" & folderPath
 
     On Error Resume Next
     result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
@@ -1077,22 +1064,21 @@ Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As 
     On Error GoTo 0
 
     If errNum <> 0 Then
-        LogToFile "[ShellReadEml] FEHLER AppleScriptTask: Err=" & errNum & " Desc=" & errDesc
-        Debug.Print "[ShellReadEml] FEHLER: " & errDesc
-        ShellReadEmlFile = vbNullString
+        LogToFile "[PythonRead] FEHLER: Err=" & errNum & " Desc=" & errDesc
+        Debug.Print "[PythonRead] FEHLER: " & errDesc
+        PythonReadEmlFile = vbNullString
         Exit Function
     End If
 
     If Left$(result, 6) = "ERROR:" Then
-        LogToFile "[ShellReadEml] FEHLER Result: " & Left$(result, 200)
-        Debug.Print "[ShellReadEml] FEHLER: " & Left$(result, 100)
-        ShellReadEmlFile = vbNullString
+        LogToFile "[PythonRead] FEHLER: " & Left$(result, 200)
+        PythonReadEmlFile = vbNullString
         Exit Function
     End If
 
-    LogToFile "[ShellReadEml] ERFOLG Python: " & Len(result) & " Zeichen"
-    Debug.Print "[ShellReadEml] Python-Ergebnis: " & Len(result) & " Zeichen"
-    ShellReadEmlFile = result
+    LogToFile "[PythonRead] ERFOLG: " & Len(result) & " Zeichen, Subject-Start: " & Left$(result, 80)
+    Debug.Print "[PythonRead] Erfolg: " & Len(result) & " Zeichen"
+    PythonReadEmlFile = result
 End Function
 
 Private Sub LogToFile(ByVal msg As String)
@@ -2208,6 +2194,7 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
     Dim sender As String
     Dim dateText As String
     Dim bodyText As String
+    Dim pyText As String
     Dim count As Long
 
     If Not FolderExists(folderPath) Then Exit Function
@@ -2259,6 +2246,27 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
 
         If Len(dateText) = 0 Then dateText = CStr(FileDateTime(filePath))
         bodyText = ExtractBodyFromEmail(rawText)
+
+        ' AUTO-FIX: Wenn Subject leer UND Body zu kurz -> Python MIME-Parser als Fallback
+        ' Faengt ALLE Fehlerfaelle ab: ReadTextFile liefert raw MIME aber Parsing scheitert,
+        ' oder ReadTextFileViaShell liefert Muell, oder ShellReadEmlFile war nie aufgerufen.
+        If Len(subj) = 0 And Len(bodyText) < 10 Then
+            LogToFile "[EML] Parsing gescheitert (subj leer, body<10) -> Python MIME-Fallback"
+            Debug.Print "[EML-Import] PYTHON-FALLBACK fuer: " & fileName
+            pyText = PythonReadEmlFile(folderPath, fileName)
+            If Len(pyText) > 50 Then
+                rawText = pyText
+                subj = ExtractHeaderValue(rawText, "Subject:")
+                sender = ExtractHeaderValue(rawText, "From:")
+                dateText = ExtractHeaderValue(rawText, "Date:")
+                bodyText = ExtractBodyFromEmail(rawText)
+                LogToFile "[EML] Python-Fallback OK: Subject=" & Left$(subj, 60) & " Body=" & Len(bodyText)
+                Debug.Print "[EML-Import] Python-Ergebnis: Subject='" & Left$(subj, 60) & "' Body=" & Len(bodyText)
+            Else
+                LogToFile "[EML] Python-Fallback gescheitert: " & Len(pyText) & " Zeichen"
+                Debug.Print "[EML-Import] Python-Fallback gescheitert: " & Len(pyText) & " Zeichen"
+            End If
+        End If
 
         Debug.Print "[EML-Import] Body-Laenge: " & Len(bodyText)
 
