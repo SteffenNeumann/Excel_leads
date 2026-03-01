@@ -848,14 +848,17 @@ Private Function ReadTextFile(ByVal filePath As String) As String
 End Function
 
 Private Function ReadTextFileViaShell(ByVal filePath As String) As String
-    ' Zweck: Datei via AppleScript/Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
+Private Function ReadTextFileViaShell(ByVal filePath As String) As String
+    ' Zweck: Datei via Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
     ' VBA Open For Binary kann auf macOS keine Dateinamen mit Umlauten korrekt oeffnen.
     ' Temp-Datei wird im SELBEN Ordner wie die Quelldatei abgelegt (Sandbox-kompatibel).
-    ' Strategie 1: cp via quoted form, dann Binary-Read der Temp-Datei.
+    ' KEIN AppleScriptTask noetig: MacScript("do shell script ...") direkt.
+    ' Strategie 1: cp via MacScript, dann Binary-Read der Temp-Datei.
     ' Strategie 2: find -name mit * fuer NFD-Umlaute, dann cp + Binary-Read.
-    Dim script As String
     Dim result As String
     Dim tmpPath As String
+    Dim q As String
+    q = Chr(34)
 
     ' Pfad in Verzeichnis und Dateiname aufteilen (fuer beide Strategien benoetigt)
     Dim lastSlash As Long
@@ -873,16 +876,16 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     tmpPath = dirPart & "/_tmp_import.eml"
     LogToFile "[ReadTextFileViaShell] tmpPath=" & tmpPath
 
-    ' --- Strategie 1: cp via AppleScript, dann Binary-Read ---
-    ' quoted form of handhabt Sonderzeichen im Pfad korrekt
-    script = "do shell script ""cp "" & quoted form of " & Chr(34) & filePath & Chr(34) & " & "" "" & quoted form of " & Chr(34) & tmpPath & Chr(34)
+    ' --- Strategie 1: cp direkt via MacScript ---
+    Dim shellCmd As String
+    shellCmd = "cp " & q & filePath & q & " " & q & tmpPath & q
 
     Debug.Print "[ReadTextFile] Shell-Copy: " & filePath & " -> " & tmpPath
     LogToFile "[ReadTextFileViaShell] Strategie1 cp: " & filePath
 
     On Error Resume Next
-    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
-    If Err.Number = 0 And Left$(result, 6) <> "ERROR:" Then
+    result = MacScript("do shell script " & q & shellCmd & q)
+    If Err.Number = 0 Then
         Dim tmpTxt As String
         tmpTxt = ReadTmpFile(tmpPath)
         If Len(tmpTxt) > 10 Then
@@ -892,7 +895,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
             Exit Function
         End If
     End If
-    Debug.Print "[ReadTextFile] Shell-Copy fehlgeschlagen: Err=" & Err.Number & " Result='" & Left$(result, 100) & "'"
+    Debug.Print "[ReadTextFile] Shell-Copy fehlgeschlagen: Err=" & Err.Number
     LogToFile "[ReadTextFileViaShell] Strategie1 FEHL: Err=" & Err.Number
     Err.Clear
     On Error GoTo 0
@@ -931,18 +934,15 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     End If
     LogToFile "[ReadTextFileViaShell] Strategie2 pattern=" & safeFile
 
-    ' AppleScript: find findet Datei, cp in EML-Ordner, Binary-Read
-    Dim q As String: q = Chr(34)
-    script = "set theDir to " & q & dirPart & q & vbLf
-    script = script & "set namePattern to " & q & safeFile & q & vbLf
-    script = script & "set matchedFile to do shell script (" & q & "find " & q & " & quoted form of theDir & " & q & " -maxdepth 1 -name " & q & " & quoted form of namePattern & " & q & " -print | head -1" & q & ")" & vbLf
-    script = script & "if matchedFile is " & q & q & " then error " & q & "Datei nicht gefunden: " & q & " & namePattern" & vbLf
-    script = script & "do shell script " & q & "cp " & q & " & quoted form of matchedFile & " & q & " " & q & " & quoted form of " & q & tmpPath & q
+    ' find + cp in einem Shell-Befehl (kein AppleScriptTask noetig)
+    shellCmd = "F=$(find " & q & dirPart & q & " -maxdepth 1 -name " & q & safeFile & q & " -print | head -1) && " & _
+               "test -n " & q & "$F" & q & " && " & _
+               "cp " & q & "$F" & q & " " & q & tmpPath & q
 
     Debug.Print "[ReadTextFile] Shell-Find+Copy: dir=" & dirPart & " pattern=" & safeFile
 
     On Error Resume Next
-    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    result = MacScript("do shell script " & q & shellCmd & q)
     If Err.Number <> 0 Then
         Debug.Print "[ReadTextFile] Shell-Find fehlgeschlagen: " & Err.Description
         LogToFile "[ReadTextFileViaShell] Strategie2 FEHL: " & Err.Description
@@ -952,13 +952,6 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         Exit Function
     End If
     On Error GoTo 0
-
-    If Left$(result, 6) = "ERROR:" Then
-        Debug.Print "[ReadTextFile] Shell-Find Fehler: " & result
-        LogToFile "[ReadTextFileViaShell] Strategie2 ERROR: " & result
-        ReadTextFileViaShell = vbNullString
-        Exit Function
-    End If
 
     ' Temp-Datei lesen
     Dim txt2 As String
@@ -1009,9 +1002,9 @@ End Function
 
 Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As String) As String
     ' Zweck: EML-Datei per Python email-Modul lesen (MIME-Parsing, NFD-sicher).
-    ' Gibt Subject/From/Date Header + text/plain Body zurueck (~16KB, unter AppleScriptTask Limit).
+    ' Gibt Subject/From/Date Header + text/plain Body zurueck.
+    ' Komplett ohne AppleScriptTask: MacScript("do shell script ...") direkt.
     ' Komplett ohne VBA-Datei-IO: find (NFD-sicher) + python3 (liest Datei nativ).
-    Dim script As String
     Dim result As String
     Dim q As String
     q = Chr(34)
@@ -1055,18 +1048,19 @@ Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As
             "b3IgJ3V0Zi04JwogICAgICAgICAgICBzeXMuc3Rkb3V0LndyaXRlKHBheWxvYWQu" & _
             "ZGVjb2RlKGNoYXJzZXQsICdyZXBsYWNlJykpCiAgICAgICAgICAgIGJyZWFrCg=="
 
-    ' AppleScript: Python deployen + find + ausfuehren
-    script = "do shell script " & q & "echo '" & b64Py & "' | base64 -D > /tmp/_emlread.py" & q & vbLf
-    script = script & "set theDir to " & q & folderPath & q & vbLf
-    script = script & "set p to " & q & safePattern & q & vbLf
-    script = script & "set matchedFile to do shell script (" & q & "find " & q & " & quoted form of theDir & " & q & " -maxdepth 1 -name " & q & " & quoted form of p & " & q & " -print | head -1" & q & ")" & vbLf
-    script = script & "if matchedFile is " & q & q & " then error " & q & "Datei nicht gefunden: " & q & " & p" & vbLf
-    script = script & "return do shell script " & q & "python3 /tmp/_emlread.py " & q & " & quoted form of matchedFile"
+    ' Einen Shell-Befehl bauen: Python deployen + find + ausfuehren
+    ' Alles in einem einzigen "do shell script" (kein AppleScriptTask noetig)
+    Dim shellCmd As String
+    shellCmd = "echo '" & b64Py & "' | base64 -D > /tmp/_emlread.py && " & _
+               "F=$(find " & q & folderPath & q & " -maxdepth 1 -name " & q & safePattern & q & " -print | head -1) && " & _
+               "test -n " & q & "$F" & q & " && " & _
+               "python3 /tmp/_emlread.py " & q & "$F" & q
 
     LogToFile "[PythonRead] Pattern=" & safePattern & " Ordner=" & folderPath
+    Debug.Print "[PythonRead] Shell: " & Left$(shellCmd, 120) & "..."
 
     On Error Resume Next
-    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    result = MacScript("do shell script " & q & shellCmd & q)
     Dim errNum As Long: errNum = Err.Number
     Dim errDesc As String: errDesc = Err.Description
     Err.Clear
@@ -1075,12 +1069,6 @@ Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As
     If errNum <> 0 Then
         LogToFile "[PythonRead] FEHLER: Err=" & errNum & " Desc=" & errDesc
         Debug.Print "[PythonRead] FEHLER: " & errDesc
-        PythonReadEmlFile = vbNullString
-        Exit Function
-    End If
-
-    If Left$(result, 6) = "ERROR:" Then
-        LogToFile "[PythonRead] FEHLER: " & Left$(result, 200)
         PythonReadEmlFile = vbNullString
         Exit Function
     End If
