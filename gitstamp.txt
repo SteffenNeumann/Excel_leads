@@ -1,1 +1,1 @@
-2026-03-01 11:18:48 | 7a14f71 | AppleScript Auto-Install mit osacompile + Inline-Fallback
+2026-03-01 11:34:35 | 4965788
