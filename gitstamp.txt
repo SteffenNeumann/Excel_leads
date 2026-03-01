@@ -1,1 +1,1 @@
-2026-03-01 18:18:55 | SHA: a375de7 | Embedded MailReader.scpt as Base64, pure-VBA decoder
+2026-03-01 18:36:57 | SHA: bfebe45 | fix(sandbox): Shell-basierte .scpt Installation
