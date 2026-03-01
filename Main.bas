@@ -963,7 +963,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         If spPos > 5 Then
             safeFile = Left$(filePart, spPos) & "*.eml"
         End If
-        Debug.Print "[ReadTextFile] NFD-Workaround: safeFile=" & safeFile
+        Log LOG_DEBUG, "ShellRead", "NFD-Workaround: safeFile=" & safeFile
     End If
     Log LOG_DEBUG, "ShellRead", "Strategie2 pattern=" & safeFile
 
@@ -1478,28 +1478,28 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
 
     trimmed = Trim$(bodyText)
     If Len(trimmed) = 0 Then
-        Debug.Print "[DecodeBody] Body ist leer -> übersprungen"
+        Log LOG_DEBUG, "Decode", "Body ist leer -> uebersprungen"
         DecodeBodyIfNeeded = bodyText
         Exit Function
     End If
 
-    Debug.Print "[DecodeBody] Body-Länge: " & Len(trimmed) & ", erste 80 Zeichen: " & Left$(trimmed, 80)
+    Log LOG_DEBUG, "Decode", "Body-Laenge: " & Len(trimmed) & ", erste 80 Zeichen: " & Left$(trimmed, 80)
 
     ' .emlx-Datei: Erste Zeile ist Byte-Zahl -> entfernen
     If IsNumeric(Left$(trimmed, InStr(trimmed, vbLf) - 1)) Then
         Dim emlxStart As Long
         emlxStart = InStr(trimmed, vbLf) + 1
         If emlxStart > 1 And emlxStart < Len(trimmed) Then
-            Debug.Print "[DecodeBody] .emlx Byte-Header erkannt -> Strip"
+            Log LOG_DEBUG, "Decode", ".emlx Byte-Header erkannt -> Strip"
             trimmed = Mid$(trimmed, emlxStart)
         End If
     End If
 
     ' Fall 1: Volle MIME-Struktur erkannt (Content-Type Header)
     If InStr(1, trimmed, "Content-Type:", vbTextCompare) > 0 Then
-        Debug.Print "[DecodeBody] MIME-Struktur erkannt -> ExtractBodyFromEmail"
+        Log LOG_DEBUG, "Decode", "MIME-Struktur erkannt -> ExtractBodyFromEmail"
         decoded = ExtractBodyFromEmail(trimmed)
-        Debug.Print "[DecodeBody] MIME-Ergebnis Länge: " & Len(decoded)
+        Log LOG_DEBUG, "Decode", "MIME-Ergebnis Laenge: " & Len(decoded)
         If Len(Trim$(decoded)) > 0 Then
             DecodeBodyIfNeeded = ConvertHtmlIfNeeded(decoded)
         Else
@@ -1510,22 +1510,22 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
 
     ' Fall 2: MIME-Header ohne Content-Type (z.B. nur Content-Transfer-Encoding: base64)
     If InStr(1, trimmed, "Content-Transfer-Encoding:", vbTextCompare) > 0 Then
-        Debug.Print "[DecodeBody] Content-Transfer-Encoding Header gefunden -> Header strippen"
+        Log LOG_DEBUG, "Decode", "Content-Transfer-Encoding Header gefunden -> Header strippen"
         strippedBody = StripMimeHeaders(trimmed)
-        Debug.Print "[DecodeBody] Nach Header-Strip Länge: " & Len(strippedBody) & ", erste 80 Zeichen: " & Left$(strippedBody, 80)
+        Log LOG_DEBUG, "Decode", "Nach Header-Strip Laenge: " & Len(strippedBody) & ", erste 80 Zeichen: " & Left$(strippedBody, 80)
         If IsLikelyBase64(strippedBody) Then
-            Debug.Print "[DecodeBody] Gestripter Body ist Base64 -> dekodieren"
+            Log LOG_DEBUG, "Decode", "Gestripter Body ist Base64 -> dekodieren"
             decoded = DecodeBase64ToString(strippedBody, "utf-8")
-            Debug.Print "[DecodeBody] Base64-Ergebnis Länge: " & Len(decoded)
+            Log LOG_DEBUG, "Decode", "Base64-Ergebnis Laenge: " & Len(decoded)
             If Len(Trim$(decoded)) > 0 Then
-                Debug.Print "[DecodeBody] Dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
+                Log LOG_DEBUG, "Decode", "Dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
                 DecodeBodyIfNeeded = ConvertHtmlIfNeeded(decoded)
             Else
-                Debug.Print "[DecodeBody] WARNUNG: Base64-Dekodierung nach Strip lieferte leeren String!"
+                Log LOG_WARN, "Decode", "Base64-Dekodierung nach Strip lieferte leeren String!"
                 DecodeBodyIfNeeded = bodyText
             End If
         Else
-            Debug.Print "[DecodeBody] Gestripter Body ist kein Base64 -> Original beibehalten"
+            Log LOG_DEBUG, "Decode", "Gestripter Body ist kein Base64 -> Original beibehalten"
             DecodeBodyIfNeeded = strippedBody
         End If
         Exit Function
@@ -1533,14 +1533,14 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
 
     ' Fall 3: Reines Base64 (ohne jegliche Header)
     If IsLikelyBase64(trimmed) Then
-        Debug.Print "[DecodeBody] Base64 erkannt -> DecodeBase64ToString"
+        Log LOG_DEBUG, "Decode", "Base64 erkannt -> DecodeBase64ToString"
         decoded = DecodeBase64ToString(trimmed, "utf-8")
-        Debug.Print "[DecodeBody] Base64-Ergebnis Länge: " & Len(decoded)
+        Log LOG_DEBUG, "Decode", "Base64-Ergebnis Laenge: " & Len(decoded)
         If Len(Trim$(decoded)) > 0 Then
-            Debug.Print "[DecodeBody] Dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
+            Log LOG_DEBUG, "Decode", "Dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
             DecodeBodyIfNeeded = ConvertHtmlIfNeeded(decoded)
         Else
-            Debug.Print "[DecodeBody] WARNUNG: Base64-Dekodierung lieferte leeren String!"
+            Log LOG_WARN, "Decode", "Base64-Dekodierung lieferte leeren String!"
             DecodeBodyIfNeeded = bodyText
         End If
         Exit Function
@@ -1548,11 +1548,11 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
 
     ' Fall 4: Rohes Quoted-Printable (ohne MIME-Header, aber =XX Sequenzen im Text)
     If IsLikelyQuotedPrintable(trimmed) Then
-        Debug.Print "[DecodeBody] Quoted-Printable erkannt -> DecodeQuotedPrintable"
+        Log LOG_DEBUG, "Decode", "Quoted-Printable erkannt -> DecodeQuotedPrintable"
         decoded = DecodeQuotedPrintable(trimmed, "utf-8")
-        Debug.Print "[DecodeBody] QP-Ergebnis Länge: " & Len(decoded)
+        Log LOG_DEBUG, "Decode", "QP-Ergebnis Laenge: " & Len(decoded)
         If Len(Trim$(decoded)) > 0 Then
-            Debug.Print "[DecodeBody] QP dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
+            Log LOG_DEBUG, "Decode", "QP dekodiert OK, erste 120 Zeichen: " & Left$(decoded, 120)
             DecodeBodyIfNeeded = ConvertHtmlIfNeeded(decoded)
         Else
             DecodeBodyIfNeeded = bodyText
@@ -1560,7 +1560,7 @@ Private Function DecodeBodyIfNeeded(ByVal bodyText As String) As String
         Exit Function
     End If
 
-    Debug.Print "[DecodeBody] Kein Encoding erkannt -> ConvertHtmlIfNeeded prüfen"
+    Log LOG_DEBUG, "Decode", "Kein Encoding erkannt -> ConvertHtmlIfNeeded pruefen"
     ' Fall 5: Kein Encoding erkannt -> trotzdem auf HTML prüfen
     DecodeBodyIfNeeded = ConvertHtmlIfNeeded(bodyText)
 End Function
@@ -2371,15 +2371,41 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
         count = count + 1
         Log LOG_INFO, "EML", "--- Datei " & count & ": " & fileName & " ---"
 
-        rawText = ReadTextFile(filePath)
-        Log LOG_DEBUG, "EML", "ReadTextFile: " & Len(rawText) & " Zeichen"
+        ' Pruefen ob Dateiname Nicht-ASCII-Zeichen enthaelt (Umlaute/NFD)
+        Dim fileHasUmlaut As Boolean
+        Dim ci2 As Long
+        fileHasUmlaut = False
+        For ci2 = 1 To Len(fileName)
+            If AscW(Mid$(fileName, ci2, 1)) > 127 Then
+                fileHasUmlaut = True
+                Exit For
+            End If
+        Next ci2
 
-        ' Fallback: Wenn ReadTextFile fehlschlaegt, Datei per find + cat via Shell lesen
-        ' Noetig fuer Umlaut-Dateinamen (macOS NFD-Encoding vs. VBA MacRoman)
-        If Len(rawText) < 20 Then
-            Log LOG_WARN, "EML", "ReadTextFile zu kurz (" & Len(rawText) & ") -> Shell-Fallback"
-            rawText = ShellReadEmlFile(folderPath, fileName)
-            Log LOG_INFO, "EML", "Shell-Fallback Ergebnis: " & Len(rawText) & " Zeichen"
+        If fileHasUmlaut Then
+            ' UMLAUT-DATEI: Python MIME-Parser als primaerer Leser (NFD-sicher)
+            Log LOG_INFO, "EML", "Umlaut erkannt -> Python primaer fuer: " & fileName
+            pyText = PythonReadEmlFile(folderPath, fileName)
+            If Len(pyText) > 50 Then
+                rawText = pyText
+                Log LOG_INFO, "EML", "Python primaer OK: " & Len(rawText) & " Zeichen"
+            Else
+                ' Python fehlgeschlagen -> ReadTextFile als Fallback versuchen
+                Log LOG_WARN, "EML", "Python primaer FEHL (" & Len(pyText) & " Zeichen) -> ReadTextFile Fallback"
+                rawText = ReadTextFile(filePath)
+                If Len(rawText) < 20 Then
+                    rawText = ShellReadEmlFile(folderPath, fileName)
+                End If
+            End If
+        Else
+            ' ASCII-DATEI: ReadTextFile als primaerer Leser (schneller)
+            rawText = ReadTextFile(filePath)
+            Log LOG_DEBUG, "EML", "ReadTextFile: " & Len(rawText) & " Zeichen"
+            If Len(rawText) < 20 Then
+                Log LOG_WARN, "EML", "ReadTextFile zu kurz (" & Len(rawText) & ") -> Shell-Fallback"
+                rawText = ShellReadEmlFile(folderPath, fileName)
+                Log LOG_INFO, "EML", "Shell-Fallback Ergebnis: " & Len(rawText) & " Zeichen"
+            End If
         End If
 
         subj = ExtractHeaderValue(rawText, "Subject:")
@@ -2402,11 +2428,11 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
         If Len(dateText) = 0 Then dateText = CStr(FileDateTime(filePath))
         bodyText = ExtractBodyFromEmail(rawText)
 
-        ' AUTO-FIX: Wenn Subject leer UND Body zu kurz -> Python MIME-Parser als Fallback
-        ' Faengt ALLE Fehlerfaelle ab: ReadTextFile liefert raw MIME aber Parsing scheitert,
-        ' oder ReadTextFileViaShell liefert Muell, oder ShellReadEmlFile war nie aufgerufen.
-        If Len(subj) = 0 And Len(bodyText) < 10 Then
-            Log LOG_WARN, "EML", "Parsing gescheitert (subj leer, body<10) -> Python MIME-Fallback"
+        ' AUTO-FIX: Wenn Subject leer ODER Body zu kurz -> Python MIME-Parser als Fallback
+        ' Geaendert von AND zu OR: triggert bei JEDEM Parsing-Problem, nicht nur bei totalem
+        ' Ausfall. Verhindert dass Umlaut-Dateien mit halbem Parsing durchrutschen.
+        If Len(subj) = 0 Or Len(bodyText) < 10 Then
+            Log LOG_WARN, "EML", "Parsing unvollstaendig (subj=" & Len(subj) & " body=" & Len(bodyText) & ") -> Python MIME-Fallback"
             pyText = PythonReadEmlFile(folderPath, fileName)
             If Len(pyText) > 50 Then
                 rawText = pyText
@@ -3505,7 +3531,7 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
     bodyAccum = vbNullString
 
     lines = Split(blockText, vbLf)
-    Debug.Print "[ParseMsg] Zeilen im Block: " & (UBound(lines) - LBound(lines) + 1)
+    Log LOG_DEBUG, "ParseMsg", "Zeilen im Block: " & (UBound(lines) - LBound(lines) + 1)
     For i = LBound(lines) To UBound(lines)
         ' Schleife: jede Zeile des Message-Blocks auswerten.
         If inBody Then
@@ -3516,25 +3542,25 @@ Private Function ParseMessageBlock(ByVal blockText As String) As Object
             lineText = Trim$(lines(i))
             ' Debug: erste 10 Header-Zeilen ausgeben
             If i <= LBound(lines) + 9 Then
-                Debug.Print "[ParseMsg] Header Z" & i & ": '" & Left$(lineText, 100) & "'"
+                Log LOG_DEBUG, "ParseMsg", "Header Z" & i & ": '" & Left$(lineText, 100) & "'"
             End If
             If Len(lineText) > 0 Then
                 If Left$(lineText, Len(DATE_TAG)) = DATE_TAG Then
-                    Debug.Print "[ParseMsg] DATE gefunden: '" & Left$(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)), 60) & "'"
+                    Log LOG_DEBUG, "ParseMsg", "DATE gefunden: '" & Left$(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)), 60) & "'"
                     SetKV payload, "Date", ParseAppleMailDate(Trim$(Mid$(lineText, Len(DATE_TAG) + 1)))
                 ElseIf Left$(lineText, Len(SUBJECT_TAG)) = SUBJECT_TAG Then
-                    Debug.Print "[ParseMsg] SUBJECT gefunden: '" & Left$(Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1)), 80) & "'"
+                    Log LOG_DEBUG, "ParseMsg", "SUBJECT gefunden: '" & Left$(Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1)), 80) & "'"
                     SetKV payload, "Subject", Trim$(Mid$(lineText, Len(SUBJECT_TAG) + 1))
                 ElseIf Left$(lineText, Len(FROM_TAG)) = FROM_TAG Then
-                    Debug.Print "[ParseMsg] FROM gefunden: '" & Left$(Trim$(Mid$(lineText, Len(FROM_TAG) + 1)), 80) & "'"
+                    Log LOG_DEBUG, "ParseMsg", "FROM gefunden: '" & Left$(Trim$(Mid$(lineText, Len(FROM_TAG) + 1)), 80) & "'"
                     SetKV payload, "From", Trim$(Mid$(lineText, Len(FROM_TAG) + 1))
                 ElseIf Left$(lineText, Len(FILENAME_TAG)) = FILENAME_TAG Then
-                    Debug.Print "[ParseMsg] FILENAME gefunden: '" & Left$(Trim$(Mid$(lineText, Len(FILENAME_TAG) + 1)), 80) & "'"
+                    Log LOG_DEBUG, "ParseMsg", "FILENAME gefunden: '" & Left$(Trim$(Mid$(lineText, Len(FILENAME_TAG) + 1)), 80) & "'"
                     SetKV payload, "FileName", Trim$(Mid$(lineText, Len(FILENAME_TAG) + 1))
                 ElseIf Left$(lineText, 9) = "SRCSTRAT:" Then
                     Debug.Print "[AppleScript] " & lineText
                 ElseIf Left$(lineText, Len(BODY_TAG)) = BODY_TAG Then
-                    Debug.Print "[ParseMsg] BODY Tag gefunden, Body-Start"
+                    Log LOG_DEBUG, "ParseMsg", "BODY Tag gefunden, Body-Start"
                     bodyAccum = Trim$(Mid$(lineText, Len(BODY_TAG) + 1)) & vbLf
                     inBody = True
                 End If
@@ -5600,17 +5626,16 @@ Public Sub DebugDumpFields(ByVal fields As Object, Optional ByVal subject As Str
                         "Absender (From)", "Mail-Body")
 
     missingCount = 0
-    Debug.Print ""
-    Debug.Print "=============================="
-    Debug.Print "FELD-DIAGNOSE"
-    If Len(subject) > 0 Then Debug.Print "Betreff: " & subject
-    Debug.Print "=============================="
+    Log LOG_DEBUG, "Diagnose", String$(30, "=")
+    Log LOG_DEBUG, "Diagnose", "FELD-DIAGNOSE"
+    If Len(subject) > 0 Then Log LOG_DEBUG, "Diagnose", "Betreff: " & subject
+    Log LOG_DEBUG, "Diagnose", String$(30, "=")
     For i = LBound(fieldNames) To UBound(fieldNames)
         v = GetField(fields, CStr(fieldNames(i)))
         If Len(Trim$(v)) > 0 Then
             ' OK-Felder nicht ausgeben - nur fehlende zeigen
         Else
-            Debug.Print "  LEER : " & CStr(fieldLabels(i)) & " (" & CStr(fieldNames(i)) & ")"
+            Log LOG_DEBUG, "Diagnose", "  LEER : " & CStr(fieldLabels(i)) & " (" & CStr(fieldNames(i)) & ")"
             ' Nur Kernfelder als fehlend zaehlen (Name, Telefon, E-Mail)
             ' Vorname/Nachname nur zaehlen wenn Kontakt_Name auch leer ist
             Select Case CStr(fieldNames(i))
@@ -5623,15 +5648,13 @@ Public Sub DebugDumpFields(ByVal fields As Object, Optional ByVal subject As Str
             End Select
         End If
     Next i
-    Debug.Print "------------------------------"
+    Log LOG_DEBUG, "Diagnose", String$(30, "-")
     If missingCount > 0 Then
-        Debug.Print "WARNUNG: " & missingCount & " Kern-Kontaktfelder fehlen!"
-        Debug.Print "Tipp: Body-Text im Direktfenster pruefen (MailBody-Feld oben)"
+        Log LOG_WARN, "Diagnose", "WARNUNG: " & missingCount & " Kern-Kontaktfelder fehlen!"
     Else
-        Debug.Print "Alle Kern-Kontaktfelder vorhanden."
+        Log LOG_DEBUG, "Diagnose", "Alle Kern-Kontaktfelder vorhanden."
     End If
-    Debug.Print "=============================="
-    Debug.Print ""
+    Log LOG_DEBUG, "Diagnose", String$(30, "=")
 End Sub
 
 ' =========================
