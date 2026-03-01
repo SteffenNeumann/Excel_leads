@@ -1,1 +1,1 @@
-2026-03-01 12:54:01 | d580893
+2026-03-01 12:59:47 | f9c1701 | fix: AppleScript-Installation nur bei LEAD_MAILBOX
