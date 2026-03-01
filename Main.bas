@@ -358,16 +358,11 @@ Public Sub ImportLeadsFromAppleMail()
     ' --- Eingabeprüfung ---
     If Not ValidateMailSettings() Then Exit Sub
 
-    ' AppleScript nur installieren wenn Live-Mail-Abruf konfiguriert ist.
-    ' EML-Ordner-Import (mailpath) braucht kein AppleScript.
+    ' AppleScript IMMER installieren:
+    ' - Live-Mail braucht es fuer AppleScriptTask
+    ' - EML-Import braucht es als Fallback in RunShellCommand (wenn MacScript fehlt)
     If AUTO_INSTALL_APPLESCRIPT Then
-        Dim mbCheck As String
-        mbCheck = Trim$(GetLeadMailbox())
-        If Len(mbCheck) > 0 Then
-            EnsureAppleScriptInstalled
-        Else
-            Log LOG_INFO, "Init", "Kein LEAD_MAILBOX -> AppleScript-Installation uebersprungen (nur EML-Ordner)"
-        End If
+        EnsureAppleScriptInstalled
     End If
 
     ' --- Variablen (Objekte) ---
@@ -3385,82 +3380,204 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     ' WICHTIG: AppleScriptTask braucht eine KOMPILIERTE .scpt-Datei.
     '
     ' Strategien (in Reihenfolge):
-    '   1. FileCopy der vorkompilierten .scpt aus dem Repo (sandbox-sicher)
-    '   2. osacompile via Temp-Script (nur auf nicht-sandboxed Excel)
-    '   3. MsgBox mit Terminal-Befehl (manueller Fallback)
+    '   1. Eingebettete .scpt aus Base64 direkt per VBA Binary-Write (KEINE externe Datei!)
+    '   2. FileCopy der vorkompilierten .scpt (falls vorhanden)
+    '   3. osacompile via MacScript (falls MacScript verfuegbar)
+    '   4. MsgBox mit Terminal-Befehl (manueller Fallback)
     '
     ' Abhängigkeiten: EnsureFolderExists, APPLESCRIPT_FILE Konstante.
     ' Rückgabe: keine.
     Dim folderPath As String
     Dim installed As Boolean
-    Dim precompiled As String
 
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
     EnsureFolderExists folderPath
 
-    ' --- Strategie 1: FileCopy der vorkompilierten .scpt ---
-    ' Suche MailReader.scpt im selben Ordner wie sourcePath (Repo-Root).
-    ' FileCopy kopiert Bytes 1:1 -> bei einer echten .scpt perfekt.
-    Dim sourceDir As String
-    sourceDir = Left$(sourcePath, InStrRev(sourcePath, "/"))
-    precompiled = sourceDir & APPLESCRIPT_FILE  ' z.B. .../Excel_leads/MailReader.scpt
+    ' --- Strategie 1: Eingebettete .scpt aus Base64 ---
+    ' MailReader.scpt (1138 Bytes) als Base64 im VBA-Code eingebettet.
+    ' Komplett unabhaengig von externen Dateien.
+    ' Inhalt: on FetchMessages(scriptText) -> try -> return run script scriptText
+    Dim b64Scpt As String
+    b64Scpt = "RmFzZFVBUyAxLjEwMS4xMA4AAAAED///AAEAAgADAf//AAANAAEAAWsAAAAAAAAA" & _
+              "BAIABAACAAUABg0ABQACaQAAAAAAAwAHAAgNAAcAA0kAAAAAAAD//gAJ//0L//4A" & _
+              "HjAADWZldGNobWVzc2FnZXMADUZldGNoTWVzc2FnZXMCAAkAAgAK//wNAAoAAW8A" & _
+              "AAAAAAD/+wv/+wAYMAAKc2NyaXB0dGV4dAAKc2NyaXB0VGV4dAL//AAAAv/9AAAN" & _
+              "AAgAA1EAAAAAABkACwAMAA0NAAsAAUwAAAADAAkADg0ADgADSQACAAMACP/6AA//" & _
+              "+Qr/+gAYLnN5c29kc2N0KioqKgAAAAAAAAAAc2NwdA0ADwABbwAAAAMABP/4C//4" & _
+              "ABgwAApzY3JpcHR0ZXh0AApzY3JpcHRUZXh0Av/5AAANAAwAA1IAAAAAAAD/9wAQ" & _
+              "ABEK//cAGC5hc2NyZXJyICoqKioAAAAAAACQACoqKioNABAAAW8AAAAAAAD/9gv/" & _
+              "9gAQMAAGZXJybXNnAAZlcnJNc2cGABEAA//1ABL/9Ar/9QAECmVycm4NABIAAW8A" & _
+              "AAAAAAD/8wv/8wAQMAAGZXJybnVtAAZlcnJOdW0G//QAAA0ADQABTAAAABEAGQATDQATAAJi" & _
+              "AAAAEQAYABQAFQ0AFAACYgAAABEAFgAWABcNABYAAmIAAAARABQAGAAZDQAYAAFt" & _
+              "AAAAEQASABoOABoAAbEAGxEAGwAMAEUAUgBSAE8AUgA6DQAZAAFvAAAAEgAT//IL" & _
+              "//IAEDAABmVycm51bQAGZXJyTnVtDQAXAAFtAAAAFAAVABwOABwAAbEAHREAHQAC" & _
+              "ADoNABUAAW8AAAAWABf/8Qv/8QAQMAAGZXJybXNnAAZlcnJNc2cCAAYAAgAe//AN" & _
+              "AB4AA2wAAgAAAAD/7//u/+0B/+8AAAH/7gAAAf/tAAAC//AAAA4AAgAADxAAAwAD" & _
+              "/+wAHwAgAf/sAAAQAB8AAf/rC//rAB4wAA1mZXRjaG1lc3NhZ2VzAA1GZXRjaE1l" & _
+              "c3NhZ2VzDgAgAAcQ/+oACP/p/+gAIQAi/+cL/+oAHjAADWZldGNobWVzc2FnZXMA" & _
+              "DUZldGNoTWVzc2FnZXMO/+kAAgT/5gAjA//mAAEOACMAAQD/5Qv/5QAYMAAKc2Ny" & _
+              "aXB0dGV4dAAKc2NyaXB0VGV4dAL/6AAAEAAhAAP/5P/j/+IL/+QAGDAACnNjcmlw" & _
+              "dHRleHQACnNjcmlwdFRleHQL/+MAEDAABmVycm1zZwAGZXJyTXNnC//iABAwAAZl" & _
+              "cnJudW0ABmVyck51bRAAIgAF/+H/4AAkABoAHAr/4QAYLnN5c29kc2N0KioqKgAA" & _
+              "AAAAAAAAc2NwdAv/4AAQMAAGZXJybXNnAAZlcnJNc2cGACQAA//f/97/3Qr/3wAE" & _
+              "CmVycm4L/94AEDAABmVycm51bQAGZXJyTnVtBv/dAAAR/+cAGhQAC6BqDAAAD1cA" & _
+              "D1gAAQAC46Il5CWhJQ8PAGFzY3IAAQAN+t7erQ=="
 
-    If Len(Dir$(precompiled)) > 0 Then
-        Debug.Print "[InstallAppleScript] FileCopy: " & precompiled & " -> " & targetPath
-        On Error Resume Next
-        FileCopy precompiled, targetPath
-        If Err.Number = 0 Then
-            installed = (Len(Dir$(targetPath)) > 0)
-        Else
-            Debug.Print "[InstallAppleScript] FileCopy Err " & Err.Number & ": " & Err.Description
+    installed = WriteBase64ToFile(b64Scpt, targetPath)
+    If installed Then
+        Log LOG_INFO, "Install", "OK (eingebettete Base64 .scpt): " & targetPath
+        Exit Sub
+    End If
+    Log LOG_WARN, "Install", "Base64-Write fehlgeschlagen, versuche FileCopy"
+
+    ' --- Strategie 2: FileCopy der vorkompilierten .scpt ---
+    Dim precompiled As String
+    If Len(sourcePath) > 0 Then
+        Dim sourceDir As String
+        sourceDir = Left$(sourcePath, InStrRev(sourcePath, "/"))
+        precompiled = sourceDir & APPLESCRIPT_FILE
+        If Len(Dir$(precompiled)) > 0 Then
+            On Error Resume Next
+            FileCopy precompiled, targetPath
+            If Err.Number = 0 Then installed = (Len(Dir$(targetPath)) > 0)
+            Err.Clear
+            On Error GoTo 0
         End If
+    End If
+    If installed Then
+        Log LOG_INFO, "Install", "OK (FileCopy): " & targetPath
+        Exit Sub
+    End If
+
+    ' --- Strategie 3: osacompile via MacScript ---
+    Dim q As String: q = Chr(34)
+    Dim sq As String: sq = "'"
+    Dim shellCmd As String
+    If Len(sourcePath) > 0 Then
+        shellCmd = "/usr/bin/osacompile -o " & sq & targetPath & sq & " " & sq & sourcePath & sq
+        On Error Resume Next
+        MacScript "do shell script " & q & shellCmd & q
+        If Err.Number = 0 Then installed = (Len(Dir$(targetPath)) > 0)
         Err.Clear
         On Error GoTo 0
-    Else
-        Debug.Print "[InstallAppleScript] Vorkompilierte .scpt nicht gefunden: " & precompiled
     End If
-
     If installed Then
-        Debug.Print "[InstallAppleScript] OK (FileCopy): " & targetPath
+        Log LOG_INFO, "Install", "OK (osacompile): " & targetPath
         Exit Sub
     End If
 
-    ' --- Strategie 2: osacompile via MacScript ---
-    ' MacScript("do shell script ...") umgeht die Sandbox-Beschraenkung,
-    ' die VBA Shell blockiert. osacompile kompiliert .applescript -> .scpt.
-    Dim q As String
-    Dim sq As String
-    Dim shellCmd As String
+    ' --- Strategie 4: Manuelle Anweisung ---
+    Log LOG_ERROR, "Install", "FEHLER: Alle Strategien gescheitert"
+    MsgBox "AppleScript konnte nicht automatisch installiert werden." & vbLf & _
+           "Ziel: " & targetPath & vbLf & vbLf & _
+           "Bitte kontaktieren Sie den Support.", vbExclamation
+End Sub
 
-    q = Chr(34)
-    sq = "'"
-    shellCmd = "/usr/bin/osacompile -o " & sq & targetPath & sq & " " & sq & sourcePath & sq
-    Debug.Print "[InstallAppleScript] osacompile via MacScript: " & shellCmd
+Private Function WriteBase64ToFile(ByVal b64 As String, ByVal filePath As String) As Boolean
+    ' Zweck: Base64-String dekodieren und als Binaerdatei schreiben.
+    ' Nutzt reinen VBA Base64-Decoder (plattformunabhaengig, kein MSXML).
+    ' Rueckgabe: True bei Erfolg.
+    Dim bytes() As Byte
+    Dim f As Integer
 
     On Error Resume Next
-    MacScript "do shell script " & q & shellCmd & q
-    If Err.Number = 0 Then
-        installed = (Len(Dir$(targetPath)) > 0)
-    Else
-        Debug.Print "[InstallAppleScript] MacScript osacompile Err " & Err.Number & ": " & Err.Description
+    bytes = DecodeBase64(b64)
+
+    If Err.Number <> 0 Then
+        Log LOG_WARN, "Install", "Base64-Dekodierung fehlgeschlagen: " & Err.Description
+        Err.Clear
+        On Error GoTo 0
+        WriteBase64ToFile = False
+        Exit Function
     End If
-    Err.Clear
+
+    ' Leeres Array pruefen
+    On Error GoTo 0
+    If Not CBool(UBound(bytes) >= 0) Then
+        Log LOG_WARN, "Install", "Base64-Dekodierung ergab leeres Array"
+        WriteBase64ToFile = False
+        Exit Function
+    End If
+
+    ' Bytes schreiben
+    On Error Resume Next
+    f = FreeFile
+    Open filePath For Binary Access Write As #f
+    Put #f, , bytes
+    Close #f
+
+    If Err.Number <> 0 Then
+        Log LOG_WARN, "Install", "Binary-Write fehlgeschlagen: " & Err.Description
+        Err.Clear
+        On Error GoTo 0
+        WriteBase64ToFile = False
+        Exit Function
+    End If
     On Error GoTo 0
 
-    If installed Then
-        Debug.Print "[InstallAppleScript] OK (osacompile via MacScript): " & targetPath
-        Exit Sub
-    End If
+    WriteBase64ToFile = (Len(Dir$(filePath)) > 0)
+    Log LOG_DEBUG, "Install", "WriteBase64ToFile -> " & WriteBase64ToFile & " (" & (UBound(bytes) + 1) & " Bytes)"
+End Function
 
-ShowManual:
-    ' --- Strategie 3: Manuelle Anweisung ---
-    Debug.Print "[InstallAppleScript] FEHLER: Alle Strategien gescheitert"
-    MsgBox "AppleScript konnte nicht installiert werden." & vbLf & _
-           "Quelle: " & sourcePath & vbLf & _
-           "Ziel: " & targetPath & vbLf & vbLf & _
-           "Bitte Terminal oeffnen und ausfuehren:" & vbLf & _
-           shellCmd, vbExclamation
-End Sub
+Private Function DecodeBase64(ByVal b64 As String) As Byte()
+    ' Zweck: Reiner VBA Base64-Decoder ohne externe Abhaengigkeiten.
+    ' Funktioniert auf Mac und Windows gleichermassen.
+    ' Rueckgabe: Byte-Array mit dekodierten Daten.
+    Dim lookup(0 To 255) As Byte
+    Dim i As Long, j As Long
+    Dim pad As Long, outLen As Long
+    Dim result() As Byte
+    Dim c1 As Byte, c2 As Byte, c3 As Byte, c4 As Byte
+    Dim clean As String
+    Dim ch As String
+
+    ' Lookup-Tabelle: Base64-Zeichen -> 6-Bit-Wert
+    For i = 0 To 255: lookup(i) = 255: Next i
+    For i = 0 To 25: lookup(Asc("A") + i) = CByte(i): Next i
+    For i = 0 To 25: lookup(Asc("a") + i) = CByte(26 + i): Next i
+    For i = 0 To 9: lookup(Asc("0") + i) = CByte(52 + i): Next i
+    lookup(Asc("+")) = 62
+    lookup(Asc("/")) = 63
+
+    ' Whitespace entfernen (VBA-Zeilenumbrueche durch & _ erzeugen keine,
+    ' aber sicherheitshalber bereinigen)
+    clean = vbNullString
+    For i = 1 To Len(b64)
+        ch = Mid$(b64, i, 1)
+        If ch <> " " And ch <> vbLf And ch <> vbCr And ch <> vbTab Then
+            clean = clean & ch
+        End If
+    Next i
+
+    ' Padding zaehlen
+    pad = 0
+    If Len(clean) >= 1 And Right$(clean, 1) = "=" Then pad = 1
+    If Len(clean) >= 2 And Right$(clean, 2) = "==" Then pad = 2
+
+    ' Ausgabelaenge berechnen
+    outLen = (Len(clean) \ 4) * 3 - pad
+    If outLen <= 0 Then
+        ReDim result(0 To 0)
+        DecodeBase64 = result
+        Exit Function
+    End If
+    ReDim result(0 To outLen - 1)
+
+    ' Dekodierung: je 4 Base64-Zeichen -> 3 Bytes
+    j = 0
+    For i = 1 To Len(clean) Step 4
+        c1 = lookup(Asc(Mid$(clean, i, 1)))
+        c2 = lookup(Asc(Mid$(clean, i + 1, 1)))
+        If Mid$(clean, i + 2, 1) = "=" Then c3 = 0 Else c3 = lookup(Asc(Mid$(clean, i + 2, 1)))
+        If Mid$(clean, i + 3, 1) = "=" Then c4 = 0 Else c4 = lookup(Asc(Mid$(clean, i + 3, 1)))
+
+        If j <= UBound(result) Then result(j) = CByte((c1 * 4) Or (c2 \ 16)): j = j + 1
+        If j <= UBound(result) Then result(j) = CByte(((c2 And 15) * 16) Or (c3 \ 4)): j = j + 1
+        If j <= UBound(result) Then result(j) = CByte(((c3 And 3) * 64) Or c4): j = j + 1
+    Next i
+
+    DecodeBase64 = result
+End Function
 
 Private Sub EnsureFolderExists(ByVal folderPath As String)
     ' Zweck: Zielordner rekursiv anlegen, falls nicht vorhanden.
