@@ -856,7 +856,6 @@ Private Function ReadTextFile(ByVal filePath As String) As String
 End Function
 
 Private Function ReadTextFileViaShell(ByVal filePath As String) As String
-Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     ' Zweck: Datei via Shell lesen (Workaround fuer Umlaut-Dateinamen auf macOS).
     ' VBA Open For Binary kann auf macOS keine Dateinamen mit Umlauten korrekt oeffnen.
     ' Temp-Datei wird im SELBEN Ordner wie die Quelldatei abgelegt (Sandbox-kompatibel).
@@ -866,7 +865,11 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     Dim result As String
     Dim tmpPath As String
     Dim q As String
-    q = Chr(34)
+    Dim sq As String
+    Dim eq As String
+    q = Chr(34)              ' Aeussere AppleScript-String-Begrenzung
+    sq = "'"                  ' Einfache Anfuehrungszeichen fuer Shell-Pfade (kein Konflikt mit AppleScript)
+    eq = Chr(92) & Chr(34)   ' Escaped Doppelquote \" (fuer $F Variable im AppleScript-String)
 
     ' Pfad in Verzeichnis und Dateiname aufteilen (fuer beide Strategien benoetigt)
     Dim lastSlash As Long
@@ -886,7 +889,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
 
     ' --- Strategie 1: cp direkt via MacScript ---
     Dim shellCmd As String
-    shellCmd = "cp " & q & filePath & q & " " & q & tmpPath & q
+    shellCmd = "cp " & sq & filePath & sq & " " & sq & tmpPath & sq
 
     Debug.Print "[ReadTextFile] Shell-Copy: " & filePath & " -> " & tmpPath
     LogToFile "[ReadTextFileViaShell] Strategie1 cp: " & filePath
@@ -943,9 +946,10 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     LogToFile "[ReadTextFileViaShell] Strategie2 pattern=" & safeFile
 
     ' find + cp in einem Shell-Befehl (kein AppleScriptTask noetig)
-    shellCmd = "F=$(find " & q & dirPart & q & " -maxdepth 1 -name " & q & safeFile & q & " -print | head -1) && " & _
-               "test -n " & q & "$F" & q & " && " & _
-               "cp " & q & "$F" & q & " " & q & tmpPath & q
+    ' sq fuer literale Pfade (kein AppleScript-Konflikt), eq fuer $F (braucht Shell-Expansion)
+    shellCmd = "F=$(find " & sq & dirPart & sq & " -maxdepth 1 -name " & sq & safeFile & sq & " -print | head -1) && " & _
+               "test -n " & eq & "$F" & eq & " && " & _
+               "cp " & eq & "$F" & eq & " " & sq & tmpPath & sq
 
     Debug.Print "[ReadTextFile] Shell-Find+Copy: dir=" & dirPart & " pattern=" & safeFile
 
@@ -1015,7 +1019,11 @@ Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As
     ' Komplett ohne VBA-Datei-IO: find (NFD-sicher) + python3 (liest Datei nativ).
     Dim result As String
     Dim q As String
-    q = Chr(34)
+    Dim sq As String
+    Dim eq As String
+    q = Chr(34)              ' Aeussere AppleScript-String-Begrenzung
+    sq = "'"                  ' Einfache Anfuehrungszeichen fuer Shell-Pfade
+    eq = Chr(92) & Chr(34)   ' Escaped Doppelquote \" (fuer $F im AppleScript-String)
 
     ' --- Glob-Pattern: Non-ASCII -> *, NFD-Workaround ---
     Dim safePattern As String
@@ -1059,10 +1067,11 @@ Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As
     ' Einen Shell-Befehl bauen: Python deployen + find + ausfuehren
     ' Alles in einem einzigen "do shell script" (kein AppleScriptTask noetig)
     Dim shellCmd As String
+    ' sq fuer literale Pfade (kein AppleScript-Konflikt), eq fuer $F (braucht Shell-Expansion)
     shellCmd = "echo '" & b64Py & "' | base64 -D > /tmp/_emlread.py && " & _
-               "F=$(find " & q & folderPath & q & " -maxdepth 1 -name " & q & safePattern & q & " -print | head -1) && " & _
-               "test -n " & q & "$F" & q & " && " & _
-               "python3 /tmp/_emlread.py " & q & "$F" & q
+               "F=$(find " & sq & folderPath & sq & " -maxdepth 1 -name " & sq & safePattern & sq & " -print | head -1) && " & _
+               "test -n " & eq & "$F" & eq & " && " & _
+               "python3 /tmp/_emlread.py " & eq & "$F" & eq
 
     LogToFile "[PythonRead] Pattern=" & safePattern & " Ordner=" & folderPath
     Debug.Print "[PythonRead] Shell: " & Left$(shellCmd, 120) & "..."
