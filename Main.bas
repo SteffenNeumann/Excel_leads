@@ -3133,66 +3133,88 @@ Private Function FindAppleScriptSource() As String
 End Function
 
 Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As String)
-    ' Zweck: AppleScript kompilieren und ins Zielverzeichnis installieren.
+    ' Zweck: AppleScript ins Zielverzeichnis installieren.
     ' WICHTIG: AppleScriptTask braucht eine KOMPILIERTE .scpt-Datei.
-    '          FileCopy kopiert nur Bytes -> AppleScriptTask scheitert.
-    '          osacompile erzeugt das korrekte kompilierte Format.
-    ' Strategie: Shell-Befehl in Temp-Script schreiben -> /bin/sh ausfuehren.
-    '            Vermeidet alle VBA-Quoting-Probleme bei langen Pfaden mit Leerzeichen.
-    ' Abhängigkeiten: EnsureFolderExists.
-    ' Rückgabe: keine (kompiliert Datei oder zeigt MsgBox).
+    '
+    ' Strategien (in Reihenfolge):
+    '   1. FileCopy der vorkompilierten .scpt aus dem Repo (sandbox-sicher)
+    '   2. osacompile via Temp-Script (nur auf nicht-sandboxed Excel)
+    '   3. MsgBox mit Terminal-Befehl (manueller Fallback)
+    '
+    ' Abhängigkeiten: EnsureFolderExists, APPLESCRIPT_FILE Konstante.
+    ' Rückgabe: keine.
     Dim folderPath As String
-    Dim shellCmd As String
-    Dim q As String
     Dim installed As Boolean
-    Dim scriptFile As String
-    Dim f As Integer
-    Dim startTime As Double
+    Dim precompiled As String
 
-    q = Chr(34)
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
     EnsureFolderExists folderPath
 
-    If Len(Dir$(sourcePath)) = 0 Then
-        MsgBox "AppleScript-Quelle fehlt: " & sourcePath, vbExclamation
+    ' --- Strategie 1: FileCopy der vorkompilierten .scpt ---
+    ' Suche MailReader.scpt im selben Ordner wie sourcePath (Repo-Root).
+    ' FileCopy kopiert Bytes 1:1 -> bei einer echten .scpt perfekt.
+    Dim sourceDir As String
+    sourceDir = Left$(sourcePath, InStrRev(sourcePath, "/"))
+    precompiled = sourceDir & APPLESCRIPT_FILE  ' z.B. .../Excel_leads/MailReader.scpt
+
+    If Len(Dir$(precompiled)) > 0 Then
+        Debug.Print "[InstallAppleScript] FileCopy: " & precompiled & " -> " & targetPath
+        On Error Resume Next
+        FileCopy precompiled, targetPath
+        If Err.Number = 0 Then
+            installed = (Len(Dir$(targetPath)) > 0)
+        Else
+            Debug.Print "[InstallAppleScript] FileCopy Err " & Err.Number & ": " & Err.Description
+        End If
+        Err.Clear
+        On Error GoTo 0
+    Else
+        Debug.Print "[InstallAppleScript] Vorkompilierte .scpt nicht gefunden: " & precompiled
+    End If
+
+    If installed Then
+        Debug.Print "[InstallAppleScript] OK (FileCopy): " & targetPath
         Exit Sub
     End If
 
-    ' osacompile-Befehl mit Double-Quotes (Leerzeichen-sicher)
-    shellCmd = "/usr/bin/osacompile -o " & q & targetPath & q & " " & q & sourcePath & q
-    Debug.Print "[InstallAppleScript] Befehl: " & shellCmd
-
-    ' --- Strategie 1: Temp-Script (vermeidet VBA Shell-Quoting komplett) ---
-    ' TMPDIR statt /tmp/ -> sandboxed Excel hat darauf bereits Schreibzugriff.
+    ' --- Strategie 2: osacompile via Temp-Script ---
+    ' Funktioniert nur auf nicht-sandboxed Excel (Shell wird von Sandbox blockiert).
+    Dim q As String
+    Dim shellCmd As String
+    Dim scriptFile As String
+    Dim f As Integer
+    Dim startTime As Double
     Dim tmpDir2 As String
+
+    q = Chr(34)
+    shellCmd = "/usr/bin/osacompile -o " & q & targetPath & q & " " & q & sourcePath & q
+    Debug.Print "[InstallAppleScript] osacompile: " & shellCmd
+
     tmpDir2 = Environ$("TMPDIR")
     If Len(tmpDir2) = 0 Then tmpDir2 = "/tmp/"
     If Right$(tmpDir2, 1) <> "/" Then tmpDir2 = tmpDir2 & "/"
     scriptFile = tmpDir2 & "_install_applescript.sh"
+
     On Error Resume Next
     f = FreeFile
     Open scriptFile For Output As #f
     Print #f, "#!/bin/sh"
     Print #f, shellCmd
     Close #f
-
     If Err.Number <> 0 Then
-        Debug.Print "[InstallAppleScript] Temp-Script schreiben fehlgeschlagen: " & Err.Description
+        Debug.Print "[InstallAppleScript] Temp-Script fehlgeschlagen: " & Err.Description
         Err.Clear
         On Error GoTo 0
-        GoTo FallbackDirect
+        GoTo ShowManual
     End If
     Err.Clear
     On Error GoTo 0
 
-    ' Temp-Script ausfuehren
-    Debug.Print "[InstallAppleScript] Starte: /bin/sh " & scriptFile
     On Error Resume Next
     Shell "/bin/sh " & scriptFile
     Err.Clear
     On Error GoTo 0
 
-    ' Warten bis osacompile fertig (asynchron, max 8 Sek.)
     startTime = Timer
     Do While Len(Dir$(targetPath)) = 0
         If Timer - startTime > 8 Then Exit Do
@@ -3200,43 +3222,24 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     Loop
     installed = (Len(Dir$(targetPath)) > 0)
 
-    ' Temp-Script aufraeumen
     On Error Resume Next
     Kill scriptFile
     Err.Clear
     On Error GoTo 0
 
     If installed Then
-        Debug.Print "[InstallAppleScript] OK: " & targetPath & " installiert"
+        Debug.Print "[InstallAppleScript] OK (osacompile): " & targetPath
         Exit Sub
     End If
 
-FallbackDirect:
-    ' --- Strategie 2: Direkter Shell-Aufruf (Fallback) ---
-    Debug.Print "[InstallAppleScript] Fallback: direkter Shell-Aufruf"
-    On Error Resume Next
-    Shell "/bin/sh -c " & q & shellCmd & q
-    Err.Clear
-    On Error GoTo 0
-
-    startTime = Timer
-    Do While Len(Dir$(targetPath)) = 0
-        If Timer - startTime > 8 Then Exit Do
-        DoEvents
-    Loop
-    installed = (Len(Dir$(targetPath)) > 0)
-
-    ' --- Ergebnis ---
-    If installed Then
-        Debug.Print "[InstallAppleScript] OK (Fallback): " & targetPath & " installiert"
-    Else
-        Debug.Print "[InstallAppleScript] FEHLER: " & targetPath & " nicht erstellt"
-        MsgBox "AppleScript konnte nicht kompiliert werden." & vbLf & _
-               "Quelle: " & sourcePath & vbLf & _
-               "Ziel: " & targetPath & vbLf & vbLf & _
-               "Bitte Terminal oeffnen und ausfuehren:" & vbLf & _
-               shellCmd, vbExclamation
-    End If
+ShowManual:
+    ' --- Strategie 3: Manuelle Anweisung ---
+    Debug.Print "[InstallAppleScript] FEHLER: Alle Strategien gescheitert"
+    MsgBox "AppleScript konnte nicht installiert werden." & vbLf & _
+           "Quelle: " & sourcePath & vbLf & _
+           "Ziel: " & targetPath & vbLf & vbLf & _
+           "Bitte Terminal oeffnen und ausfuehren:" & vbLf & _
+           shellCmd, vbExclamation
 End Sub
 
 Private Sub EnsureFolderExists(ByVal folderPath As String)
