@@ -52,6 +52,26 @@ Private Const LEAD_FOLDER_DEFAULT As String = "Leads"
 ' Error Log
 Private Const ERROR_LOG_SHEET As String = "ErrLog"
 
+' =========================
+' Strukturiertes Debug-Logging
+' =========================
+' Log-Level Konstanten (hoeher = wichtiger)
+Private Const LOG_DEBUG As Long = 0
+Private Const LOG_INFO As Long = 1
+Private Const LOG_WARN As Long = 2
+Private Const LOG_ERROR As Long = 3
+' Aktuelles Minimum-Level (alles >= dieses Level wird geloggt)
+Private Const LOG_MIN_LEVEL As Long = 0  ' 0=alles, 1=INFO+, 2=WARN+, 3=nur ERROR
+' Log-Dateiname (im Workbook-Verzeichnis)
+Private Const LOG_FILE_NAME As String = "_import_debug.log"
+' Log-Zaehler fuer Summary
+Private gLogMsgCount As Long       ' Gesamtzahl verarbeiteter Nachrichten
+Private gLogMsgOK As Long          ' Erfolgreich importiert
+Private gLogMsgDup As Long         ' Duplikate
+Private gLogMsgFail As Long        ' Fehlgeschlagen
+Private gLogFileErrors As String   ' Dateinamen fehlgeschlagener EML-Dateien (LF-getrennt)
+Private gLogStartTime As Date      ' Import-Startzeit
+
 ' Index für Dublettenprüfung während eines Imports
 Private gLeadIndex As Object
 Private gLeadIndexInitialized As Boolean
@@ -329,7 +349,8 @@ Public Sub ImportLeadsFromAppleMail()
     ' Abhängigkeiten: EnsureAppleScriptInstalled (optional), FetchAppleMailMessages, ParseMessageBlock, ResolveLeadType, ParseLeadContent, LeadAlreadyExists, AddLeadRow.
     ' Rückgabe: keine (fügt Zeilen in Tabelle ein).
 
-    Debug.Print "[Main] === Version: 2026-02-20-crossdevice-diagnose ==="
+    ' --- Strukturiertes Log initialisieren ---
+    LogInitImport
 
     ' --- ErrLog leeren ---
     ClearErrorLog
@@ -345,7 +366,7 @@ Public Sub ImportLeadsFromAppleMail()
         If Len(mbCheck) > 0 Then
             EnsureAppleScriptInstalled
         Else
-            Debug.Print "[Main] Kein LEAD_MAILBOX -> AppleScript-Installation uebersprungen (nur EML-Ordner)"
+            Log LOG_INFO, "Init", "Kein LEAD_MAILBOX -> AppleScript-Installation uebersprungen (nur EML-Ordner)"
         End If
     End If
 
@@ -411,16 +432,22 @@ Public Sub ImportLeadsFromAppleMail()
             ' Referenz-Info fuer Fehlerprotokoll extrahieren
             blockRef = ExtractRefFromBlock(CStr(msgBlock))
 
+            ' Nachrichtenstart loggen
+            LogMsgStart analyzedCount, blockRef, Left$(CStr(msgBlock), 80)
+
             Err.Clear
             On Error Resume Next
             processResult = ProcessSingleMessage(tbl, CStr(msgBlock))
             If Err.Number <> 0 Then
                 errMsg = "Fehler #" & Err.Number & ": " & Err.Description
-                Debug.Print "[Import] " & errMsg & " bei Nachricht " & analyzedCount
+                Log LOG_ERROR, "Msg" & analyzedCount, "LAUFZEITFEHLER: " & errMsg
                 LogImportError "Laufzeitfehler bei Nachricht " & analyzedCount & " [" & blockRef & "]: " & errMsg, _
                     "Nachricht konnte nicht verarbeitet werden.", "Fehler", "ToDo"
             End If
             On Error GoTo 0
+
+            ' Ergebnis loggen
+            LogMsgResult analyzedCount, blockRef, processResult, Left$(CStr(msgBlock), 80)
 
             Select Case processResult
                 Case 1
@@ -429,7 +456,6 @@ Public Sub ImportLeadsFromAppleMail()
                     duplicateCount = duplicateCount + 1
                 Case Else
                     errorCount = errorCount + 1
-                    Debug.Print "[Import] Nachricht " & analyzedCount & " fehlgeschlagen (processResult=" & processResult & ")"
                     LogImportError "Nachricht " & analyzedCount & " fehlgeschlagen [" & blockRef & "] (Ergebnis: " & processResult & ")", _
                         "Nachricht konnte nicht importiert werden. Pruefen ob Inhalt gueltig ist.", "Fehler", "ToDo"
             End Select
@@ -455,7 +481,12 @@ Public Sub ImportLeadsFromAppleMail()
         End If
     End If
     On Error GoTo 0
-    MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten übertragen. Duplikate: " & duplicateCount & ". Fehler: " & errorCount & ".", vbInformation
+
+    ' --- Import-Summary loggen ---
+    LogImportSummary
+
+    MsgBox "Import abgeschlossen. " & analyzedCount & " Daten analysiert, " & importedCount & " Daten uebertragen. Duplikate: " & duplicateCount & ". Fehler: " & errorCount & "." & vbLf & vbLf & _
+           "Log-Datei: " & ThisWorkbook.Path & "/" & LOG_FILE_NAME, vbInformation
 End Sub
 
 ' =========================
@@ -551,10 +582,8 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     Dim msgFrom As String
     Dim leadType As String
 
-    Debug.Print "[ProcessMsg] blockText Laenge: " & Len(blockText)
-    Debug.Print "[ProcessMsg] blockText erste 300 Zeichen:"
-    Debug.Print Left$(blockText, 300)
-    Debug.Print "[ProcessMsg] ---"
+    Log LOG_DEBUG, "Process", "blockText Laenge: " & Len(blockText)
+    Log LOG_DEBUG, "Process", "blockText erste 200 Zeichen: " & Left$(blockText, 200)
 
     Set payload = ParseMessageBlock(blockText)
 
@@ -566,7 +595,7 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
         On Error Resume Next
         msgDate = CDate(v)
         If Err.Number <> 0 Then
-            Debug.Print "[ProcessMsg] Date-String nicht parsbar: '" & CStr(v) & "' -> verwende Today"
+            Log LOG_WARN, "Process", "Date-String nicht parsbar: '" & CStr(v) & "' -> verwende Today"
             msgDate = Date
             Err.Clear
         End If
@@ -577,13 +606,11 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     msgBody = DecodeBodyIfNeeded(msgBody)
     If TryGetKV(payload, "From", v) Then msgFrom = CStr(v)
 
-    Debug.Print "[ProcessMsg] payload -> Subject='" & Left$(msgSubject, 80) & "'"
-    Debug.Print "[ProcessMsg] payload -> From='" & Left$(msgFrom, 80) & "'"
-    Debug.Print "[ProcessMsg] payload -> Body Laenge=" & Len(msgBody)
+    Log LOG_INFO, "Process", "Subject='" & Left$(msgSubject, 80) & "' From='" & Left$(msgFrom, 60) & "' Body=" & Len(msgBody) & " Zeichen"
 
     ' Leere Nachrichten ueberspringen (kein Subject UND kein Body)
     If Len(Trim$(msgSubject)) = 0 And Len(Trim$(msgBody)) < 10 Then
-        Debug.Print "[ProcessMsg] SKIP: Leere Nachricht (kein Subject, Body < 10 Zeichen)"
+        Log LOG_WARN, "Process", "SKIP: Leere Nachricht (kein Subject, Body < 10 Zeichen)"
         LogImportError "Leere Nachricht uebersprungen [" & BuildMsgRef(msgSubject, vbNullString, msgFrom) & "]", _
             "Moegliche leere oder unvollstaendige E-Mail.", "Hinweis", "Info"
         ProcessSingleMessage = 0
@@ -602,9 +629,9 @@ Private Function ProcessSingleMessage(ByVal tbl As ListObject, ByVal blockText A
     ' Split -> Tokens durchlaufen -> Tag/Monat/Jahr finden -> DateSerial
     Dim origDateStr As String
     origDateStr = GetField(parsed, "OriginalDate")
-    Debug.Print "[ProcessMsg] OriginalDate Key vorhanden: " & (Len(origDateStr) > 0) & " Wert='" & Left$(origDateStr, 80) & "'"
+    Log LOG_DEBUG, "Process", "OriginalDate vorhanden: " & (Len(origDateStr) > 0) & " Wert='" & Left$(origDateStr, 80) & "'"
     If Len(origDateStr) > 0 Then
-        Debug.Print "[ProcessMsg] OriginalDate roh: '" & origDateStr & "'"
+        Log LOG_DEBUG, "Process", "OriginalDate roh: '" & origDateStr & "'"
         Dim dateParts() As String
         Dim dp As Long
         Dim dDay As Long, dMonth As Long, dYear As Long
@@ -633,9 +660,9 @@ NextDP:
             Dim origDateValue As Date
             origDateValue = DateSerial(dYear, dMonth, dDay)
             SetKV parsed, "OriginalDateClean", Format$(origDateValue, "dd.mm.yyyy")
-            Debug.Print "[ProcessMsg] OriginalDateClean: " & Format$(origDateValue, "dd.mm.yyyy") & " (Tag=" & dDay & " Monat=" & dMonth & " Jahr=" & dYear & ")"
+            Log LOG_INFO, "Process", "OriginalDateClean: " & Format$(origDateValue, "dd.mm.yyyy")
         Else
-            Debug.Print "[ProcessMsg] Datum nicht parsbar: '" & origDateStr & "' (Tag=" & dDay & " Monat=" & dMonth & " Jahr=" & dYear & ")"
+            Log LOG_WARN, "Process", "Datum nicht parsbar: '" & origDateStr & "' (Tag=" & dDay & " Monat=" & dMonth & " Jahr=" & dYear & ")"
         End If
     End If
 
@@ -645,7 +672,7 @@ NextDP:
     If TryGetKV(payload, "FileName", v) Then msgFileName = CStr(v)
     If Len(msgFileName) > 0 Then
         SetKV parsed, "MailFileName", msgFileName
-        Debug.Print "[ProcessMsg] MailFileName='" & msgFileName & "'"
+        Log LOG_INFO, "Process", "MailFileName='" & msgFileName & "'"
     End If
 
     ' Referenz-String fuer Fehlerprotokoll
@@ -674,7 +701,7 @@ NextDP:
         checkedName = CheckAndNormalizeLeadName(rawName, existingNames, leadCtx, nameIsDup, newLeadID, existingIDs)
 
         If nameIsDup Then
-            Debug.Print "[ProcessMsg] Namens-Duplikat erkannt -> uebersprungen"
+            Log LOG_INFO, "Process", "Namens-Duplikat erkannt -> uebersprungen"
             ProcessSingleMessage = 2
         Else
             AddLeadRow tbl, parsed, msgDate, leadType
@@ -795,20 +822,19 @@ Private Function ReadTextFile(ByVal filePath As String) As String
 
     ' Bei Umlaut-Dateinamen direkt Shell-Fallback nutzen
     If hasNonAscii Then
-        LogToFile "[ReadTextFile] hasNonAscii=True -> Shell-Read: " & filePath
-        Debug.Print "[ReadTextFile] Umlaut erkannt -> direkt Shell-Read fuer: " & filePath
+        Log LOG_INFO, "FileRead", "Umlaut erkannt -> Shell-Read: " & filePath
         txt = ReadTextFileViaShell(filePath)
-        LogToFile "[ReadTextFile] Shell-Read Ergebnis: " & Len(txt) & " Zeichen"
+        Log LOG_DEBUG, "FileRead", "Shell-Read Ergebnis: " & Len(txt) & " Zeichen"
         ReadTextFile = txt
         Exit Function
     End If
-    LogToFile "[ReadTextFile] hasNonAscii=False, Binary-Read: " & filePath
+    Log LOG_DEBUG, "FileRead", "Binary-Read: " & filePath
 
     f = FreeFile
     On Error Resume Next
     Open filePath For Binary Access Read As #f
     If Err.Number <> 0 Then
-        Debug.Print "[ReadTextFile] Open fehlgeschlagen: " & Err.Description & " -> Pfad: " & filePath
+        Log LOG_WARN, "FileRead", "Open fehlgeschlagen: " & Err.Description & " -> Pfad: " & filePath
         Err.Clear
         On Error GoTo 0
         txt = ReadTextFileViaShell(filePath)
@@ -844,12 +870,11 @@ Private Function ReadTextFile(ByVal filePath As String) As String
     End If
 
     If Not isValid Then
-        LogToFile "[ReadTextFile] Binary-Read ungueltig: " & bytes & " Bytes, kein ASCII -> Shell-Fallback"
-        Debug.Print "[ReadTextFile] Binary-Read ungueltig (" & bytes & " Bytes, kein druckbares ASCII) -> Shell-Fallback fuer: " & filePath
+        Log LOG_WARN, "FileRead", "Binary-Read ungueltig (" & bytes & " Bytes, kein ASCII) -> Shell-Fallback"
         txt = ReadTextFileViaShell(filePath)
-        LogToFile "[ReadTextFile] Shell-Fallback: " & Len(txt) & " Zeichen"
+        Log LOG_DEBUG, "FileRead", "Shell-Fallback: " & Len(txt) & " Zeichen"
     Else
-        LogToFile "[ReadTextFile] Binary-Read OK: " & Len(txt) & " Zeichen"
+        Log LOG_DEBUG, "FileRead", "Binary-Read OK: " & Len(txt) & " Zeichen"
     End If
 
     ReadTextFile = txt
@@ -885,14 +910,13 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
 
     ' Temp-Datei im EML-Ordner (VBA hat dort Zugriff via Dir$, kein Sandbox-Dialog)
     tmpPath = dirPart & "/_tmp_import.eml"
-    LogToFile "[ReadTextFileViaShell] tmpPath=" & tmpPath
+    Log LOG_DEBUG, "ShellRead", "tmpPath=" & tmpPath
 
     ' --- Strategie 1: cp direkt via MacScript ---
     Dim shellCmd As String
     shellCmd = "cp " & sq & filePath & sq & " " & sq & tmpPath & sq
 
-    Debug.Print "[ReadTextFile] Shell-Copy: " & filePath & " -> " & tmpPath
-    LogToFile "[ReadTextFileViaShell] Strategie1 cp: " & filePath
+    Log LOG_DEBUG, "ShellRead", "Strategie1: cp direkt"
 
     On Error Resume Next
     result = MacScript("do shell script " & q & shellCmd & q)
@@ -900,14 +924,12 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         Dim tmpTxt As String
         tmpTxt = ReadTmpFile(tmpPath)
         If Len(tmpTxt) > 10 Then
-            Debug.Print "[ReadTextFile] Shell-Copy erfolgreich: " & Len(tmpTxt) & " Bytes"
-            LogToFile "[ReadTextFileViaShell] Strategie1 OK: " & Len(tmpTxt) & " Bytes"
+            Log LOG_INFO, "ShellRead", "Strategie1 OK: " & Len(tmpTxt) & " Bytes"
             ReadTextFileViaShell = tmpTxt
             Exit Function
         End If
     End If
-    Debug.Print "[ReadTextFile] Shell-Copy fehlgeschlagen: Err=" & Err.Number
-    LogToFile "[ReadTextFileViaShell] Strategie1 FEHL: Err=" & Err.Number
+    Log LOG_WARN, "ShellRead", "Strategie1 FEHL: Err=" & Err.Number
     Err.Clear
     On Error GoTo 0
 
@@ -943,7 +965,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
         End If
         Debug.Print "[ReadTextFile] NFD-Workaround: safeFile=" & safeFile
     End If
-    LogToFile "[ReadTextFileViaShell] Strategie2 pattern=" & safeFile
+    Log LOG_DEBUG, "ShellRead", "Strategie2 pattern=" & safeFile
 
     ' find + cp in einem Shell-Befehl (kein AppleScriptTask noetig)
     ' sq fuer literale Pfade (kein AppleScript-Konflikt), eq fuer $F (braucht Shell-Expansion)
@@ -951,13 +973,12 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
                "test -n " & eq & "$F" & eq & " && " & _
                "cp " & eq & "$F" & eq & " " & sq & tmpPath & sq
 
-    Debug.Print "[ReadTextFile] Shell-Find+Copy: dir=" & dirPart & " pattern=" & safeFile
+    Log LOG_DEBUG, "ShellRead", "Strategie2: find+cp dir=" & dirPart & " pattern=" & safeFile
 
     On Error Resume Next
     result = MacScript("do shell script " & q & shellCmd & q)
     If Err.Number <> 0 Then
-        Debug.Print "[ReadTextFile] Shell-Find fehlgeschlagen: " & Err.Description
-        LogToFile "[ReadTextFileViaShell] Strategie2 FEHL: " & Err.Description
+        Log LOG_ERROR, "ShellRead", "Strategie2 FEHL: " & Err.Description
         Err.Clear
         On Error GoTo 0
         ReadTextFileViaShell = vbNullString
@@ -968,8 +989,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
     ' Temp-Datei lesen
     Dim txt2 As String
     txt2 = ReadTmpFile(tmpPath)
-    Debug.Print "[ReadTextFile] Shell-Find erfolgreich: " & Len(txt2) & " Bytes"
-    LogToFile "[ReadTextFileViaShell] Strategie2 OK: " & Len(txt2) & " Bytes"
+    Log LOG_INFO, "ShellRead", "Strategie2 OK: " & Len(txt2) & " Bytes"
     ReadTextFileViaShell = txt2
 End Function
 
@@ -991,8 +1011,7 @@ Private Function ReadTmpFile(ByVal tmpPath As String) As String
         End If
         Close #f
     Else
-        LogToFile "[ReadTmpFile] Open FEHL: " & Err.Description & " Pfad=" & tmpPath
-        Debug.Print "[ReadTmpFile] Open fehlgeschlagen: " & Err.Description
+        Log LOG_ERROR, "TmpFile", "Open FEHL: " & Err.Description & " Pfad=" & tmpPath
     End If
     Err.Clear
     On Error GoTo 0
@@ -1008,7 +1027,7 @@ End Function
 Private Function ShellReadEmlFile(ByVal folderPath As String, ByVal fileName As String) As String
     ' Zweck: EML-Datei per Python MIME-Parser lesen wenn VBA-ReadTextFile versagt.
     ' Delegiert an PythonReadEmlFile (zentrale Implementierung).
-    LogToFile "[ShellReadEml] -> PythonReadEmlFile: " & fileName
+    Log LOG_DEBUG, "PythonRead", "-> PythonReadEmlFile: " & fileName
     ShellReadEmlFile = PythonReadEmlFile(folderPath, fileName)
 End Function
 
@@ -1073,8 +1092,7 @@ Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As
                "test -n " & eq & "$F" & eq & " && " & _
                "python3 /tmp/_emlread.py " & eq & "$F" & eq
 
-    LogToFile "[PythonRead] Pattern=" & safePattern & " Ordner=" & folderPath
-    Debug.Print "[PythonRead] Shell: " & Left$(shellCmd, 120) & "..."
+    Log LOG_DEBUG, "PythonRead", "Pattern=" & safePattern & " Ordner=" & folderPath
 
     On Error Resume Next
     result = MacScript("do shell script " & q & shellCmd & q)
@@ -1084,30 +1102,161 @@ Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As
     On Error GoTo 0
 
     If errNum <> 0 Then
-        LogToFile "[PythonRead] FEHLER: Err=" & errNum & " Desc=" & errDesc
-        Debug.Print "[PythonRead] FEHLER: " & errDesc
+        Log LOG_ERROR, "PythonRead", "FEHLER: Err=" & errNum & " Desc=" & errDesc
         PythonReadEmlFile = vbNullString
         Exit Function
     End If
 
-    LogToFile "[PythonRead] ERFOLG: " & Len(result) & " Zeichen, Subject-Start: " & Left$(result, 80)
-    Debug.Print "[PythonRead] Erfolg: " & Len(result) & " Zeichen"
+    Log LOG_INFO, "PythonRead", "ERFOLG: " & Len(result) & " Zeichen, Subject-Start: " & Left$(result, 80)
     PythonReadEmlFile = result
 End Function
 
 Private Sub LogToFile(ByVal msg As String)
-    ' Zweck: Debug-Log in Datei schreiben (umgeht Immediate Window 200-Zeilen-Limit).
-    ' Logdatei: im Workbook-Verzeichnis (Sandbox-kompatibel)
+    ' Zweck: Legacy-Wrapper -> delegiert an Log (INFO-Level).
+    Log LOG_INFO, "Legacy", msg
+End Sub
+
+' =========================
+' Strukturiertes Debug-Log System
+' =========================
+Private Sub Log(ByVal lvl As Long, ByVal modul As String, ByVal msg As String)
+    ' Zweck: Zentrale Log-Funktion mit Level, Modul-Tag, Timestamp.
+    ' Schreibt in Datei UND Debug.Print (Immediate Window).
+    ' Format: "HH:MM:SS [LEVEL] [Modul] Nachricht"
+    ' Datei: ThisWorkbook.Path & LOG_FILE_NAME
+    If lvl < LOG_MIN_LEVEL Then Exit Sub
+
+    Dim levelTag As String
+    Select Case lvl
+        Case LOG_DEBUG: levelTag = "DEBUG"
+        Case LOG_INFO:  levelTag = "INFO "
+        Case LOG_WARN:  levelTag = "WARN "
+        Case LOG_ERROR: levelTag = "ERROR"
+        Case Else:      levelTag = "?    "
+    End Select
+
+    Dim line As String
+    line = Format$(Now, "hh:nn:ss") & " [" & levelTag & "] [" & modul & "] " & msg
+    Debug.Print line
+
+    ' In Datei schreiben
     Dim f As Integer
     On Error Resume Next
     f = FreeFile
-    Open ThisWorkbook.Path & "/_vba_eml_debug.log" For Append As #f
+    Open ThisWorkbook.Path & "/" & LOG_FILE_NAME For Append As #f
     If Err.Number = 0 Then
-        Print #f, Format$(Now, "hh:nn:ss") & " " & msg
+        Print #f, line
         Close #f
     End If
     Err.Clear
     On Error GoTo 0
+End Sub
+
+Private Sub LogInitImport()
+    ' Zweck: Import-Session initialisieren (Zaehler zuruecksetzen, Header schreiben).
+    gLogMsgCount = 0
+    gLogMsgOK = 0
+    gLogMsgDup = 0
+    gLogMsgFail = 0
+    gLogFileErrors = vbNullString
+    gLogStartTime = Now
+
+    ' Alte Log-Datei loeschen (frischer Start pro Import)
+    On Error Resume Next
+    Kill ThisWorkbook.Path & "/" & LOG_FILE_NAME
+    On Error GoTo 0
+
+    Log LOG_INFO, "Import", String$(60, "=")
+    Log LOG_INFO, "Import", "IMPORT-SESSION START: " & Format$(Now, "dd.mm.yyyy hh:nn:ss")
+    Log LOG_INFO, "Import", "Version: 2026-03-01-structured-log"
+    Log LOG_INFO, "Import", "Workbook: " & ThisWorkbook.Name
+    Log LOG_INFO, "Import", "Pfad: " & ThisWorkbook.Path
+    Log LOG_INFO, "Import", String$(60, "=")
+End Sub
+
+Private Sub LogMsgStart(ByVal msgNum As Long, ByVal fileName As String, ByVal subject As String)
+    ' Zweck: Beginn einer Nachrichtenverarbeitung loggen.
+    Log LOG_INFO, "Msg" & msgNum, String$(40, "-")
+    Log LOG_INFO, "Msg" & msgNum, "DATEI: " & fileName
+    Log LOG_INFO, "Msg" & msgNum, "BETREFF: " & Left$(subject, 100)
+End Sub
+
+Private Sub LogMsgResult(ByVal msgNum As Long, ByVal fileName As String, ByVal resultCode As Long, ByVal subject As String)
+    ' Zweck: Ergebnis einer Nachrichtenverarbeitung loggen.
+    ' resultCode: 1=OK, 2=Duplikat, 0=Fehler
+    gLogMsgCount = gLogMsgCount + 1
+    Dim tag As String
+    tag = "Msg" & msgNum
+    Select Case resultCode
+        Case 1
+            gLogMsgOK = gLogMsgOK + 1
+            Log LOG_INFO, tag, "ERGEBNIS: OK (importiert)"
+        Case 2
+            gLogMsgDup = gLogMsgDup + 1
+            Log LOG_INFO, tag, "ERGEBNIS: DUPLIKAT (uebersprungen)"
+        Case Else
+            gLogMsgFail = gLogMsgFail + 1
+            gLogFileErrors = gLogFileErrors & fileName & vbLf
+            Log LOG_ERROR, tag, "ERGEBNIS: FEHLGESCHLAGEN (Code=" & resultCode & ")"
+    End Select
+End Sub
+
+Private Sub LogImportSummary()
+    ' Zweck: Zusammenfassung am Ende des Imports in Log und MsgBox.
+    Dim elapsed As String
+    Dim secs As Long
+    secs = DateDiff("s", gLogStartTime, Now)
+    If secs < 60 Then
+        elapsed = secs & "s"
+    Else
+        elapsed = (secs \ 60) & "m " & (secs Mod 60) & "s"
+    End If
+
+    Log LOG_INFO, "Summary", String$(60, "=")
+    Log LOG_INFO, "Summary", "IMPORT-ZUSAMMENFASSUNG"
+    Log LOG_INFO, "Summary", String$(60, "=")
+    Log LOG_INFO, "Summary", "Gesamt verarbeitet: " & gLogMsgCount
+    Log LOG_INFO, "Summary", "Importiert:         " & gLogMsgOK
+    Log LOG_INFO, "Summary", "Duplikate:          " & gLogMsgDup
+    Log LOG_INFO, "Summary", "Fehlgeschlagen:     " & gLogMsgFail
+    Log LOG_INFO, "Summary", "Dauer:              " & elapsed
+    Log LOG_INFO, "Summary", "Log-Datei:          " & ThisWorkbook.Path & "/" & LOG_FILE_NAME
+
+    If gLogMsgFail > 0 Then
+        Log LOG_WARN, "Summary", "FEHLGESCHLAGENE DATEIEN:"
+        Dim errFiles() As String
+        Dim ei As Long
+        errFiles = Split(gLogFileErrors, vbLf)
+        For ei = LBound(errFiles) To UBound(errFiles)
+            If Len(Trim$(errFiles(ei))) > 0 Then
+                Log LOG_WARN, "Summary", "  " & ChrW$(10060) & " " & errFiles(ei)
+            End If
+        Next ei
+    End If
+    Log LOG_INFO, "Summary", String$(60, "=")
+End Sub
+
+Public Sub ExportDebugLog()
+    ' Zweck: Debug-Log-Datei im Finder anzeigen (fuer Kunden-Support).
+    ' Der Kunde kann die Datei dann per Mail schicken.
+    Dim logPath As String
+    logPath = ThisWorkbook.Path & "/" & LOG_FILE_NAME
+
+    If Dir$(logPath) = vbNullString Then
+        MsgBox "Keine Log-Datei vorhanden." & vbLf & vbLf & _
+               "Bitte erst einen Import durchfuehren.", vbExclamation, "Debug-Log"
+        Exit Sub
+    End If
+
+    ' Log-Datei im Finder anzeigen
+    Dim q As String: q = Chr(34)
+    On Error Resume Next
+    MacScript "do shell script " & q & "open -R '" & logPath & "'" & q
+    On Error GoTo 0
+
+    MsgBox "Die Log-Datei wurde im Finder geoeffnet:" & vbLf & vbLf & _
+           logPath & vbLf & vbLf & _
+           "Bitte diese Datei per E-Mail an den Support senden.", vbInformation, "Debug-Log exportieren"
 End Sub
 
 Private Function NormalizeLineEndings(ByVal textIn As String) As String
@@ -2213,47 +2362,38 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
 
     If Not FolderExists(folderPath) Then Exit Function
 
-    Debug.Print "[EML-Import] === Version 2026-02-27 (Python-Fallback) ==="
-    Debug.Print "[EML-Import] Ordner: " & folderPath
-    LogToFile "===== EML-Import Start: " & folderPath & " ====="
+    Log LOG_INFO, "EML", "=== EML-Import Start ==="
+    Log LOG_INFO, "EML", "Ordner: " & folderPath
 
     fileName = Dir$(folderPath & "/" & "*.eml")
     Do While Len(fileName) > 0
         filePath = folderPath & "/" & fileName
-        Debug.Print "[EML-Import] Datei: " & fileName
-        LogToFile "[EML] Datei: " & fileName
+        count = count + 1
+        Log LOG_INFO, "EML", "--- Datei " & count & ": " & fileName & " ---"
 
         rawText = ReadTextFile(filePath)
-        LogToFile "[EML] ReadTextFile: " & Len(rawText) & " Zeichen"
-        Debug.Print "[EML-Import] Dateigroesse: " & Len(rawText) & " Zeichen"
+        Log LOG_DEBUG, "EML", "ReadTextFile: " & Len(rawText) & " Zeichen"
 
         ' Fallback: Wenn ReadTextFile fehlschlaegt, Datei per find + cat via Shell lesen
         ' Noetig fuer Umlaut-Dateinamen (macOS NFD-Encoding vs. VBA MacRoman)
         If Len(rawText) < 20 Then
-            LogToFile "[EML] ReadTextFile zu kurz -> Shell-Fallback"
-            Debug.Print "[EML-Import] ReadTextFile zu kurz -> Shell-Fallback fuer: " & fileName
+            Log LOG_WARN, "EML", "ReadTextFile zu kurz (" & Len(rawText) & ") -> Shell-Fallback"
             rawText = ShellReadEmlFile(folderPath, fileName)
-            LogToFile "[EML] Shell-Fallback: " & Len(rawText) & " Zeichen"
-            Debug.Print "[EML-Import] Shell-Fallback Ergebnis: " & Len(rawText) & " Zeichen"
-        End If
-
-        ' Debug: erste 200 Zeichen des Rohtexts
-        If Len(rawText) > 0 Then
-            Debug.Print "[EML-Import] Rohtext-Start: '" & Left$(Replace(Replace(rawText, vbCr, "<CR>"), vbLf, "<LF>"), 200) & "'"
+            Log LOG_INFO, "EML", "Shell-Fallback Ergebnis: " & Len(rawText) & " Zeichen"
         End If
 
         subj = ExtractHeaderValue(rawText, "Subject:")
         sender = ExtractHeaderValue(rawText, "From:")
         dateText = ExtractHeaderValue(rawText, "Date:")
 
-        Debug.Print "[EML-Import] Subject (roh): '" & Left$(subj, 100) & "'"
-        Debug.Print "[EML-Import] From (roh): '" & Left$(sender, 80) & "'"
-        Debug.Print "[EML-Import] Date (roh): '" & Left$(dateText, 60) & "'"
+        Log LOG_DEBUG, "EML", "Subject (roh): '" & Left$(subj, 100) & "'"
+        Log LOG_DEBUG, "EML", "From (roh): '" & Left$(sender, 80) & "'"
+        Log LOG_DEBUG, "EML", "Date (roh): '" & Left$(dateText, 60) & "'"
 
         ' MIME-kodierte Header dekodieren (=?charset?Q?...?= / =?charset?B?...?=)
         If InStr(1, subj, "=?") > 0 Then
             subj = DecodeMimeHeaderValue(subj)
-            Debug.Print "[EML-Import] Subject (dekodiert): '" & Left$(subj, 100) & "'"
+            Log LOG_DEBUG, "EML", "Subject (MIME-dekodiert): '" & Left$(subj, 100) & "'"
         End If
         If InStr(1, sender, "=?") > 0 Then
             sender = DecodeMimeHeaderValue(sender)
@@ -2266,8 +2406,7 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
         ' Faengt ALLE Fehlerfaelle ab: ReadTextFile liefert raw MIME aber Parsing scheitert,
         ' oder ReadTextFileViaShell liefert Muell, oder ShellReadEmlFile war nie aufgerufen.
         If Len(subj) = 0 And Len(bodyText) < 10 Then
-            LogToFile "[EML] Parsing gescheitert (subj leer, body<10) -> Python MIME-Fallback"
-            Debug.Print "[EML-Import] PYTHON-FALLBACK fuer: " & fileName
+            Log LOG_WARN, "EML", "Parsing gescheitert (subj leer, body<10) -> Python MIME-Fallback"
             pyText = PythonReadEmlFile(folderPath, fileName)
             If Len(pyText) > 50 Then
                 rawText = pyText
@@ -2275,15 +2414,13 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
                 sender = ExtractHeaderValue(rawText, "From:")
                 dateText = ExtractHeaderValue(rawText, "Date:")
                 bodyText = ExtractBodyFromEmail(rawText)
-                LogToFile "[EML] Python-Fallback OK: Subject=" & Left$(subj, 60) & " Body=" & Len(bodyText)
-                Debug.Print "[EML-Import] Python-Ergebnis: Subject='" & Left$(subj, 60) & "' Body=" & Len(bodyText)
+                Log LOG_INFO, "EML", "Python-Fallback OK: Subject='" & Left$(subj, 60) & "' Body=" & Len(bodyText)
             Else
-                LogToFile "[EML] Python-Fallback gescheitert: " & Len(pyText) & " Zeichen"
-                Debug.Print "[EML-Import] Python-Fallback gescheitert: " & Len(pyText) & " Zeichen"
+                Log LOG_ERROR, "EML", "Python-Fallback gescheitert: nur " & Len(pyText) & " Zeichen"
             End If
         End If
 
-        Debug.Print "[EML-Import] Body-Laenge: " & Len(bodyText)
+        Log LOG_INFO, "EML", "Ergebnis: Subject='" & Left$(subj, 60) & "' Body=" & Len(bodyText) & " Zeichen"
 
         outText = outText & MSG_DELIM & vbLf
         outText = outText & DATE_TAG & dateText & vbLf
@@ -2292,14 +2429,11 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
         outText = outText & FILENAME_TAG & fileName & vbLf
         outText = outText & BODY_TAG & bodyText & vbLf
 
-        Debug.Print "[EML-Import] MSG-Block erstellt: Subject='" & Left$(subj, 60) & "' FileName='" & fileName & "'"
-
-        count = count + 1
         If count >= MAX_MESSAGES Then Exit Do
         fileName = Dir$()
     Loop
 
-    Debug.Print "[EML-Import] " & count & " Dateien gelesen"
+    Log LOG_INFO, "EML", "=== " & count & " Dateien gelesen ==="
     FetchMailMessagesFromPath = outText
 End Function
 
