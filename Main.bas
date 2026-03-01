@@ -3099,12 +3099,17 @@ Private Function FindAppleScriptSource() As String
         End If
     End If
 
-    ' 3. Inline-Fallback: Quelldatei in /tmp erzeugen
+    ' 3. Inline-Fallback: Quelldatei in TMPDIR erzeugen
     ' Noetig wenn Kunde nur die Excel-Datei hat, ohne MailReader.applescript im Ordner.
     ' Der AppleScript-Inhalt ist minimal (FetchMessages Handler).
+    ' TMPDIR statt /tmp/ -> sandboxed Excel hat darauf bereits Schreibzugriff.
     Dim tmpSource As String
     Dim f As Integer
-    tmpSource = "/tmp/" & APPLESCRIPT_SOURCE
+    Dim tmpDir As String
+    tmpDir = Environ$("TMPDIR")
+    If Len(tmpDir) = 0 Then tmpDir = "/tmp/"
+    If Right$(tmpDir, 1) <> "/" Then tmpDir = tmpDir & "/"
+    tmpSource = tmpDir & APPLESCRIPT_SOURCE
     On Error Resume Next
     f = FreeFile
     Open tmpSource For Output As #f
@@ -3158,7 +3163,12 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     Debug.Print "[InstallAppleScript] Befehl: " & shellCmd
 
     ' --- Strategie 1: Temp-Script (vermeidet VBA Shell-Quoting komplett) ---
-    scriptFile = "/tmp/_install_applescript.sh"
+    ' TMPDIR statt /tmp/ -> sandboxed Excel hat darauf bereits Schreibzugriff.
+    Dim tmpDir2 As String
+    tmpDir2 = Environ$("TMPDIR")
+    If Len(tmpDir2) = 0 Then tmpDir2 = "/tmp/"
+    If Right$(tmpDir2, 1) <> "/" Then tmpDir2 = tmpDir2 & "/"
+    scriptFile = tmpDir2 & "_install_applescript.sh"
     On Error Resume Next
     f = FreeFile
     Open scriptFile For Output As #f
