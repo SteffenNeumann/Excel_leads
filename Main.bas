@@ -196,20 +196,20 @@ Public Sub DiagnoseMailSetup()
     targetPath = GetAppleScriptTargetPath()
     sourcePath = FindAppleScriptSource()
     If Len(Dir$(targetPath)) > 0 Then
-        report = report & Chr$(9989) & " AppleScript installiert: " & targetPath & vbLf
+        report = report & ChrW$(9989) & " AppleScript installiert: " & targetPath & vbLf
         passed = passed + 1
     Else
-        report = report & Chr$(10060) & " AppleScript FEHLT: " & targetPath & vbLf
+        report = report & ChrW$(10060) & " AppleScript FEHLT: " & targetPath & vbLf
         If Len(sourcePath) > 0 Then
             report = report & "   -> Quelle vorhanden: " & sourcePath & vbLf
             report = report & "   -> AUTO_INSTALL ist " & IIf(AUTO_INSTALL_APPLESCRIPT, "Ein", "Aus") & vbLf
             report = report & "   -> Versuche automatische Installation..." & vbLf
             InstallAppleScript sourcePath, targetPath
             If Len(Dir$(targetPath)) > 0 Then
-                report = report & "   -> " & Chr$(9989) & " Erfolgreich installiert!" & vbLf
+                report = report & "   -> " & ChrW$(9989) & " Erfolgreich installiert!" & vbLf
                 passed = passed + 1
             Else
-                report = report & "   -> " & Chr$(10060) & " Installation fehlgeschlagen" & vbLf
+                report = report & "   -> " & ChrW$(10060) & " Installation fehlgeschlagen" & vbLf
                 ok = False
             End If
         Else
@@ -225,31 +225,31 @@ Public Sub DiagnoseMailSetup()
 
     checks = checks + 1
     If Len(mailbox) > 0 Then
-        report = report & Chr$(9989) & " LEAD_MAILBOX: '" & mailbox & "'" & vbLf
+        report = report & ChrW$(9989) & " LEAD_MAILBOX: '" & mailbox & "'" & vbLf
         passed = passed + 1
     Else
-        report = report & Chr$(9888) & " LEAD_MAILBOX: nicht gesetzt (Default: " & LEAD_MAILBOX_DEFAULT & ")" & vbLf
+        report = report & ChrW$(9888) & " LEAD_MAILBOX: nicht gesetzt (Default: " & LEAD_MAILBOX_DEFAULT & ")" & vbLf
     End If
 
     checks = checks + 1
     If Len(folder) > 0 Then
-        report = report & Chr$(9989) & " LEAD_FOLDER: '" & folder & "'" & vbLf
+        report = report & ChrW$(9989) & " LEAD_FOLDER: '" & folder & "'" & vbLf
         passed = passed + 1
     Else
-        report = report & Chr$(9888) & " LEAD_FOLDER: nicht gesetzt (Default: " & LEAD_FOLDER_DEFAULT & ")" & vbLf
+        report = report & ChrW$(9888) & " LEAD_FOLDER: nicht gesetzt (Default: " & LEAD_FOLDER_DEFAULT & ")" & vbLf
     End If
 
     checks = checks + 1
     If Len(mailPath) > 0 Then
         If FolderExists(mailPath) Then
-            report = report & Chr$(9989) & " mailpath: '" & mailPath & "' (Ordner existiert)" & vbLf
+            report = report & ChrW$(9989) & " mailpath: '" & mailPath & "' (Ordner existiert)" & vbLf
             passed = passed + 1
         Else
-            report = report & Chr$(10060) & " mailpath: '" & mailPath & "' (Ordner NICHT gefunden!)" & vbLf
+            report = report & ChrW$(10060) & " mailpath: '" & mailPath & "' (Ordner NICHT gefunden!)" & vbLf
             ok = False
         End If
     Else
-        report = report & Chr$(8505) & " mailpath: nicht gesetzt (nur Mail-App wird genutzt)" & vbLf
+        report = report & ChrW$(8505) & " mailpath: nicht gesetzt (nur Mail-App wird genutzt)" & vbLf
         passed = passed + 1
     End If
 
@@ -292,19 +292,19 @@ Public Sub DiagnoseMailSetup()
         On Error Resume Next
         testResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, testScript)
         If Err.Number <> 0 Then
-            report = report & Chr$(10060) & " Apple Mail Zugriff FEHLGESCHLAGEN: " & Err.Description & vbLf
+            report = report & ChrW$(10060) & " Apple Mail Zugriff FEHLGESCHLAGEN: " & Err.Description & vbLf
             report = report & "   -> Tipp: Automation-Rechte pruefen (Systemeinstellungen > Datenschutz > Automation)" & vbLf
             ok = False
             Err.Clear
         ElseIf Left$(testResult, 6) = "ERROR:" Then
-            report = report & Chr$(10060) & " Apple Mail Fehler: " & Mid$(testResult, 7) & vbLf
+            report = report & ChrW$(10060) & " Apple Mail Fehler: " & Mid$(testResult, 7) & vbLf
             ok = False
         Else
             If InStr(1, testResult, "OK:") > 0 Then
-                report = report & Chr$(9989) & " Apple Mail: Ordner '" & testFolder & "' gefunden" & vbLf
+                report = report & ChrW$(9989) & " Apple Mail: Ordner '" & testFolder & "' gefunden" & vbLf
                 passed = passed + 1
             Else
-                report = report & Chr$(10060) & " Apple Mail: Ordner '" & testFolder & "' NICHT gefunden" & vbLf
+                report = report & ChrW$(10060) & " Apple Mail: Ordner '" & testFolder & "' NICHT gefunden" & vbLf
                 ok = False
             End If
             report = report & vbLf & "--- Apple Mail Accounts & Ordner ---" & vbLf & testResult & vbLf
@@ -315,9 +315,9 @@ Public Sub DiagnoseMailSetup()
     ' --- 4. Zusammenfassung ---
     report = report & vbLf & "=== Ergebnis: " & passed & "/" & checks & " Checks bestanden ==="
     If ok Then
-        report = report & vbLf & Chr$(9989) & " Konfiguration sieht korrekt aus."
+        report = report & vbLf & ChrW$(9989) & " Konfiguration sieht korrekt aus."
     Else
-        report = report & vbLf & Chr$(10060) & " Es gibt Probleme - siehe Details oben."
+        report = report & vbLf & ChrW$(10060) & " Es gibt Probleme - siehe Details oben."
     End If
 
     Debug.Print report
@@ -3154,9 +3154,14 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     Debug.Print "[InstallAppleScript] osacompile: " & sourcePath & " -> " & targetPath
 
     ' --- Strategie 1: MacScript (blockierend, zuverlaessig) ---
-    ' "do shell script" mit quoted form of handhabt Leerzeichen/Sonderzeichen im Pfad korrekt
+    ' Shell-Befehl mit Single-Quotes (Leerzeichen-sicher), VBA baut nur den String.
+    Dim asCode As String
+    shellCmd = "osacompile -o '" & targetPath & "' '" & sourcePath & "'"
+    asCode = "do shell script " & q & shellCmd & q
+    Debug.Print "[InstallAppleScript] AppleScript: " & asCode
+
     On Error Resume Next
-    result = MacScript("do shell script ""osacompile -o "" & quoted form of " & q & targetPath & q & " & "" "" & quoted form of " & q & sourcePath & q)
+    result = MacScript(asCode)
     If Err.Number = 0 Then
         installed = (Len(Dir$(targetPath)) > 0)
         If installed Then
