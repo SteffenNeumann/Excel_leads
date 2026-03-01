@@ -918,9 +918,11 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
 
     Log LOG_DEBUG, "ShellRead", "Strategie1: cp direkt"
 
-    On Error Resume Next
-    result = MacScript("do shell script " & q & shellCmd & q)
-    If Err.Number = 0 Then
+    result = RunShellCommand(shellCmd)
+    If Len(result) >= 0 Then
+        ' RunShellCommand gibt vbNullString bei Fehler zurueck.
+        ' cp gibt bei Erfolg leeren String zurueck -> Laenge 0 ist OK.
+        ' Pruefung auf Fehler: RunShellCommand loggt intern.
         Dim tmpTxt As String
         tmpTxt = ReadTmpFile(tmpPath)
         If Len(tmpTxt) > 10 Then
@@ -929,9 +931,7 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
             Exit Function
         End If
     End If
-    Log LOG_WARN, "ShellRead", "Strategie1 FEHL: Err=" & Err.Number
-    Err.Clear
-    On Error GoTo 0
+    Log LOG_WARN, "ShellRead", "Strategie1 FEHL"
 
     ' --- Strategie 2: find -name mit * fuer NFD-Umlaute ---
     ' Nicht-ASCII-Zeichen im Dateinamen durch * ersetzen
@@ -975,16 +975,9 @@ Private Function ReadTextFileViaShell(ByVal filePath As String) As String
 
     Log LOG_DEBUG, "ShellRead", "Strategie2: find+cp dir=" & dirPart & " pattern=" & safeFile
 
-    On Error Resume Next
-    result = MacScript("do shell script " & q & shellCmd & q)
-    If Err.Number <> 0 Then
-        Log LOG_ERROR, "ShellRead", "Strategie2 FEHL: " & Err.Description
-        Err.Clear
-        On Error GoTo 0
-        ReadTextFileViaShell = vbNullString
-        Exit Function
-    End If
-    On Error GoTo 0
+    result = RunShellCommand(shellCmd)
+    ' cp gibt bei Erfolg leeren String zurueck, bei Fehler gibt RunShellCommand vbNullString.
+    ' Unterscheidung nur via Temp-Datei-Pruefung moeglich.
 
     ' Temp-Datei lesen
     Dim txt2 As String
@@ -1094,15 +1087,9 @@ Private Function PythonReadEmlFile(ByVal folderPath As String, ByVal fileName As
 
     Log LOG_DEBUG, "PythonRead", "Pattern=" & safePattern & " Ordner=" & folderPath
 
-    On Error Resume Next
-    result = MacScript("do shell script " & q & shellCmd & q)
-    Dim errNum As Long: errNum = Err.Number
-    Dim errDesc As String: errDesc = Err.Description
-    Err.Clear
-    On Error GoTo 0
-
-    If errNum <> 0 Then
-        Log LOG_ERROR, "PythonRead", "FEHLER: Err=" & errNum & " Desc=" & errDesc
+    result = RunShellCommand(shellCmd)
+    If Len(result) = 0 Then
+        Log LOG_ERROR, "PythonRead", "Shell-Befehl fehlgeschlagen (MacScript + AppleScriptTask)"
         PythonReadEmlFile = vbNullString
         Exit Function
     End If
@@ -1115,6 +1102,54 @@ Private Sub LogToFile(ByVal msg As String)
     ' Zweck: Legacy-Wrapper -> delegiert an Log (INFO-Level).
     Log LOG_INFO, "Legacy", msg
 End Sub
+
+' =========================
+' Shell-Befehl Helper (MacScript -> AppleScriptTask Fallback)
+' =========================
+Private Function RunShellCommand(ByVal shellCmd As String) As String
+    ' Zweck: Shell-Befehl auf macOS ausfuehren.
+    ' Strategie 1: MacScript("do shell script ...") - klassisch, ab VBA 2011.
+    ' Strategie 2: AppleScriptTask -> MailReader.scpt Handler -> run script (64-bit sicher).
+    '              Benoetigt installiertes MailReader.scpt.
+    ' Rueckgabe: stdout-Ausgabe des Befehls, oder vbNullString bei Fehler.
+    Dim q As String: q = Chr(34)
+    Dim result As String
+
+    ' --- Strategie 1: MacScript ---
+    On Error Resume Next
+    result = MacScript("do shell script " & q & shellCmd & q)
+    If Err.Number = 0 Then
+        On Error GoTo 0
+        RunShellCommand = result
+        Exit Function
+    End If
+    Log LOG_DEBUG, "Shell", "MacScript fehlgeschlagen (Err=" & Err.Number & "), versuche AppleScriptTask"
+    Err.Clear
+    On Error GoTo 0
+
+    ' --- Strategie 2: AppleScriptTask ---
+    ' MailReader.scpt Handler fuehrt "run script" aus -> interpretiert den String als AppleScript.
+    ' "do shell script \"...\"" ist gueltige AppleScript-Syntax.
+    Dim asCmd As String
+    asCmd = "do shell script " & q & shellCmd & q
+    On Error Resume Next
+    result = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, asCmd)
+    If Err.Number = 0 And Left$(result, 6) <> "ERROR:" Then
+        On Error GoTo 0
+        Log LOG_DEBUG, "Shell", "AppleScriptTask OK"
+        RunShellCommand = result
+        Exit Function
+    End If
+    If Err.Number <> 0 Then
+        Log LOG_ERROR, "Shell", "AppleScriptTask Err=" & Err.Number & " " & Err.Description
+    Else
+        Log LOG_ERROR, "Shell", "AppleScriptTask Fehler: " & Left$(result, 100)
+    End If
+    Err.Clear
+    On Error GoTo 0
+
+    RunShellCommand = vbNullString
+End Function
 
 ' =========================
 ' Umlaut-Bereinigung in Dateinamen (Ansatz A+)
@@ -1157,17 +1192,14 @@ Private Function SanitizeEmlFileNames(ByVal folderPath As String) As Long
     shellCmd = "echo " & sq & b64 & sq & " | base64 -D | perl - " & sq & folderPath & sq
 
     Log LOG_INFO, "Sanitize", "Starte Umlaut-Bereinigung in: " & folderPath
+    Log LOG_DEBUG, "Sanitize", "shellCmd=" & Left$(shellCmd, 120) & "..."
 
-    On Error Resume Next
-    result = MacScript("do shell script " & q & shellCmd & q)
-    If Err.Number <> 0 Then
-        Log LOG_ERROR, "Sanitize", "MacScript FEHLER: " & Err.Number & " " & Err.Description
-        Err.Clear
-        On Error GoTo 0
+    result = RunShellCommand(shellCmd)
+    If Len(result) = 0 Then
+        Log LOG_ERROR, "Sanitize", "Shell-Befehl fehlgeschlagen (MacScript + AppleScriptTask)"
         SanitizeEmlFileNames = -1
         Exit Function
     End If
-    On Error GoTo 0
 
     Dim renamed As Long
     If IsNumeric(Trim$(result)) Then
