@@ -217,3 +217,90 @@ Automatisch generiertes Analytics-Dashboard auf dem Blatt **Dashboard**. Datenqu
 | 2026-02-07 | 143b62e | Design: Dezente Blauton-Palette (Navy/Ocean/Steel/Fog) |
 | 2026-02-07 | da7a052 | Update Pipeline-Leads.xlsm |
 
+---
+
+## Troubleshooting Guide
+
+Übersicht aller bekannten Probleme, Lösungsversuche und deren Status.
+
+### Legende
+- ✅ **Gelöst** – Fix bestätigt und produktiv
+- 🔧 **Implementiert** – Fix committet, wartet auf Bestätigung beim Kunden
+- ❌ **Fehlgeschlagen** – Ansatz verworfen
+- ⏳ **Offen** – Noch nicht gelöst
+
+---
+
+### 1. Umlaut-Dateien (.eml) können nicht gelesen werden
+
+**Symptom:** `Nachricht X fehlgeschlagen [Datei: WG_ Neue Anfrage_ Sabine Bäuml.eml] (Ergebnis: 0)`
+VBA `Dir$`, `Open For Binary`, `MacScript` können NFD-kodierte Umlaute (ö = o + U+0308) in Dateinamen nicht verarbeiten.
+
+| # | Ansatz | Commit | Status |
+|---|---|---|---|
+| 1 | VBA `Dir$` mit Umlaut-Sonderbehandlung | — | ❌ Dir$ gibt NFD-Namen nicht zurück |
+| 2 | Python als primärer EML-Reader | `f315924` | ❌ Python hilft nicht wenn Dateiname selbst das Problem ist |
+| 3 | **Ansatz A+: perl-basierte regelkonforme Umbenennung (ä→ae, ö→oe, ü→ue, ß→ss)** | `0f98747` | 🔧 Perl-Skript base64-kodiert, `SanitizeEmlFileNames` VOR `Dir$` ausgeführt |
+
+**Aktueller Stand:** SanitizeEmlFileNames läuft via `RunShellCommand` (MacScript → AppleScriptTask Fallback). Perl ist auf jedem Mac vorinstalliert. Umbenennung erfolgt VOR dem VBA-Import. Warte auf Kundenbestätigung.
+
+---
+
+### 2. MacScript funktioniert nicht auf 64-bit Excel
+
+**Symptom:** `MacScript` schlägt fehl mit Laufzeitfehler auf neueren 64-bit Excel-for-Mac Installationen. Alle Shell-Aufrufe (Perl-Rename, Python-Fallback, EML-Lesen) brechen ab.
+
+| # | Ansatz | Commit | Status |
+|---|---|---|---|
+| 1 | **RunShellCommand Helper mit MacScript → AppleScriptTask Fallback** | `8ea347b` | ✅ Bestätigt: 3 Renames via MacScript, 3 via AppleScriptTask |
+
+**Lösung:** `RunShellCommand()` versucht zuerst `MacScript("do shell script ...")`, bei Fehler Fallback auf `AppleScriptTask(MailReader.scpt, FetchMessages, "do shell script ...")`. Alle Shell-Aufrufe (SanitizeEmlFileNames, ReadTextFileViaShell, PythonReadEmlFile) nutzen diesen Helper.
+
+---
+
+### 3. "AppleScript Quelle fehlt" beim Kunden
+
+**Symptom:** `MailReader.scpt` und `.applescript` liegen nur im Repo-Root, nicht im `Excel_files/`-Ordner, wo das Workbook liegt. `AppleScriptTask` findet die .scpt nicht.
+
+| # | Ansatz | Commit | Status |
+|---|---|---|---|
+| 1 | Dateien nach `Excel_files/` kopiert + osacompile via MacScript statt `Shell` | `12e719a` | ❌ Hilft nicht wenn Kunde nur die .xlsm hat |
+| 2 | **MailReader.scpt als Base64 direkt im VBA eingebettet (1138 Bytes)** | `a375de7` | ❌ MWriteBase64ToFile nutzte MSXML2.DOMDocument (Windows-only) |
+| 3 | **Pure-VBA DecodeBase64() Decoder** (ersetzt MSXML2) | `a375de7` | ❌ VBA `Open For Binary` kann in Sandbox nicht in Application Scripts schreiben |
+| 4 | **Shell-basierte Installation: Base64 → TMPDIR → `base64 -D` via Shell → Ziel** | `bfebe45` | 🔧 TMPDIR-Write per VBA (erlaubt), Shell dekodiert zum Ziel (umgeht Sandbox) |
+
+**Aktueller Stand:** Strategie-Reihenfolge in `InstallAppleScript`:
+1. Base64 → TMPDIR (VBA) → `base64 -D` via MacScript Shell → Ziel
+2. osacompile via MacScript (`.applescript` → `.scpt`)
+3. FileCopy (nur nicht-sandboxed Excel)
+4. MsgBox mit manuellem Terminal-Befehl
+
+Existenzprüfung via `FileExistsViaShell()` (`test -f` via MacScript) statt `Dir$()`.
+Warte auf Kundenbestätigung.
+
+---
+
+### 4. VBA Dir$/Open/FileCopy versagt in Sandbox für Application Scripts
+
+**Symptom:** `Dir$(targetPath)` gibt immer leeren String zurück für `~/Library/Application Scripts/com.microsoft.Excel/`. VBA `Open For Binary Access Write` und `FileCopy` schlagen ebenfalls fehl. Die .scpt-Installation meldet jedes Mal "nicht vorhanden" und scheitert an allen Strategien.
+
+| # | Ansatz | Commit | Status |
+|---|---|---|---|
+| 1 | **FileExistsViaShell()** – `test -f` via MacScript statt Dir$ | `bfebe45` | 🔧 |
+| 2 | **Shell-Write statt VBA I/O** – `base64 -D > target` via MacScript | `bfebe45` | 🔧 |
+
+**Aktueller Stand:** Alle Dateizugriffe auf den Application-Scripts-Ordner laufen jetzt über Shell-Kommandos. VBA-I/O wird nur noch für TMPDIR verwendet (dort hat VBA Zugriff). Warte auf Kundenbestätigung.
+
+---
+
+### Commit-Historie (chronologisch)
+| Datum | SHA | Beschreibung |
+|---|---|---|
+| 2026-02-26 | `b6553ce` | Structured debug logging system |
+| 2026-02-26 | `f315924` | Python als primärer EML-Reader |
+| 2026-02-26 | `0f98747` | SanitizeEmlFileNames (perl base64, Ansatz A+) |
+| 2026-02-27 | `12e719a` | AppleScript-Dateien nach Excel_files/ |
+| 2026-02-27 | `8ea347b` | RunShellCommand MacScript→AppleScriptTask Fallback |
+| 2026-03-01 | `a375de7` | Embedded MailReader.scpt als Base64, DecodeBase64 |
+| 2026-03-01 | `bfebe45` | Shell-basierte .scpt Installation (Sandbox-Fix) |
+
