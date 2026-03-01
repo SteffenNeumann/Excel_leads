@@ -3132,15 +3132,17 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     ' WICHTIG: AppleScriptTask braucht eine KOMPILIERTE .scpt-Datei.
     '          FileCopy kopiert nur Bytes -> AppleScriptTask scheitert.
     '          osacompile erzeugt das korrekte kompilierte Format.
-    ' Strategie: Shell("osacompile ...") via VBA (kein MacScript noetig, Catalina+-kompatibel).
-    ' Abhängigkeiten: EnsureFolderExists, VBA Shell.
+    ' Strategie: MacScript("do shell script osacompile ...") -> blockierend, korrekt.
+    '            Fallback: VBA Shell (asynchron) falls MacScript scheitert.
+    ' Abhängigkeiten: EnsureFolderExists, MacScript/Shell.
     ' Rückgabe: keine (kompiliert Datei oder zeigt MsgBox).
     Dim folderPath As String
     Dim shellCmd As String
+    Dim result As String
     Dim q As String
-    Dim waitSec As Long
+    Dim installed As Boolean
 
-    q = "'"  ' Shell-Quoting mit Single-Quotes (sicher fuer Pfade mit Leerzeichen)
+    q = Chr(34)
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
     EnsureFolderExists folderPath
 
@@ -3149,34 +3151,50 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
         Exit Sub
     End If
 
-    ' osacompile: kompiliert .applescript -> .scpt (natives AppleScript-Format)
-    ' Single-Quotes im Shell-Befehl handhabt Leerzeichen/Sonderzeichen im Pfad korrekt
-    shellCmd = "osacompile -o " & q & targetPath & q & " " & q & sourcePath & q
-
     Debug.Print "[InstallAppleScript] osacompile: " & sourcePath & " -> " & targetPath
-    Debug.Print "[InstallAppleScript] Shell: " & shellCmd
 
+    ' --- Strategie 1: MacScript (blockierend, zuverlaessig) ---
+    ' "do shell script" mit quoted form of handhabt Leerzeichen/Sonderzeichen im Pfad korrekt
     On Error Resume Next
-    Shell shellCmd
-    If Err.Number <> 0 Then
-        Debug.Print "[InstallAppleScript] Shell fehlgeschlagen (Err " & Err.Number & "): " & Err.Description
-        Err.Clear
+    result = MacScript("do shell script ""osacompile -o "" & quoted form of " & q & targetPath & q & " & "" "" & quoted form of " & q & sourcePath & q)
+    If Err.Number = 0 Then
+        installed = (Len(Dir$(targetPath)) > 0)
+        If installed Then
+            Debug.Print "[InstallAppleScript] MacScript OK: " & targetPath
+        Else
+            Debug.Print "[InstallAppleScript] MacScript lief ohne Fehler, aber Datei nicht erstellt"
+        End If
+    Else
+        Debug.Print "[InstallAppleScript] MacScript Err " & Err.Number & ": " & Err.Description
     End If
+    Err.Clear
     On Error GoTo 0
 
-    ' Kurz warten bis osacompile fertig ist (asynchron)
-    Dim startTime As Double
-    startTime = Timer
-    Do While Len(Dir$(targetPath)) = 0
-        If Timer - startTime > 5 Then Exit Do  ' Max. 5 Sekunden warten
-        DoEvents
-    Loop
+    ' --- Strategie 2: VBA Shell (Fallback, asynchron) ---
+    If Not installed Then
+        shellCmd = "osacompile -o '" & targetPath & "' '" & sourcePath & "'"
+        Debug.Print "[InstallAppleScript] Fallback Shell: " & shellCmd
+        On Error Resume Next
+        Shell shellCmd
+        Err.Clear
+        On Error GoTo 0
 
-    ' Verifizieren dass die Datei erstellt wurde
-    If Len(Dir$(targetPath)) > 0 Then
+        ' Warten bis osacompile fertig (asynchron)
+        Dim startTime As Double
+        startTime = Timer
+        Do While Len(Dir$(targetPath)) = 0
+            If Timer - startTime > 5 Then Exit Do
+            DoEvents
+        Loop
+        installed = (Len(Dir$(targetPath)) > 0)
+    End If
+
+    ' --- Ergebnis ---
+    If installed Then
         Debug.Print "[InstallAppleScript] OK: " & targetPath & " installiert"
     Else
-        Debug.Print "[InstallAppleScript] FEHLER: " & targetPath & " wurde nicht erstellt"
+        Debug.Print "[InstallAppleScript] FEHLER: " & targetPath & " nicht erstellt"
+        shellCmd = "osacompile -o '" & targetPath & "' '" & sourcePath & "'"
         MsgBox "AppleScript konnte nicht kompiliert werden." & vbLf & _
                "Quelle: " & sourcePath & vbLf & _
                "Ziel: " & targetPath & vbLf & vbLf & _
