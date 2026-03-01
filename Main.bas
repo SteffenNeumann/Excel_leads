@@ -3281,8 +3281,10 @@ End Function
 ' =========================
 Private Sub EnsureAppleScriptInstalled()
     ' Zweck: AppleScript ins Zielverzeichnis kopieren, falls es fehlt oder veraltet ist.
-    ' Abhängigkeiten: GetAppleScriptTargetPath, InstallAppleScript.
+    ' Abhängigkeiten: GetAppleScriptTargetPath, InstallAppleScript, FileExistsViaShell.
     ' Rückgabe: keine (Seiteneffekt Datei-Kopie).
+    ' HINWEIS: Dir$() funktioniert NICHT fuer den Application-Scripts-Ordner
+    '          in sandboxed Excel -> Existenzpruefung via Shell.
     Dim targetPath As String
     Dim sourcePath As String
     Dim needsInstall As Boolean
@@ -3290,13 +3292,12 @@ Private Sub EnsureAppleScriptInstalled()
     targetPath = GetAppleScriptTargetPath()
     sourcePath = FindAppleScriptSource()
 
-    If Len(Dir$(targetPath)) = 0 Then
+    ' Shell-basierte Existenzpruefung (Dir$ versagt in Sandbox)
+    If Not FileExistsViaShell(targetPath) Then
         needsInstall = True
-    ElseIf Len(sourcePath) > 0 Then
-        ' Auch neu installieren wenn Quelle neuer ist als Ziel
-        On Error Resume Next
-        If FileDateTime(sourcePath) > FileDateTime(targetPath) Then needsInstall = True
-        On Error GoTo 0
+        Log LOG_INFO, "Install", "AppleScript nicht gefunden: " & targetPath
+    Else
+        Log LOG_DEBUG, "Install", "AppleScript vorhanden: " & targetPath
     End If
 
     If needsInstall Then
@@ -3306,6 +3307,25 @@ Private Sub EnsureAppleScriptInstalled()
         Debug.Print "[AppleScript] Bereits installiert: " & targetPath
     End If
 End Sub
+
+Private Function FileExistsViaShell(ByVal filePath As String) As Boolean
+    ' Zweck: Pruefen ob eine Datei existiert - via Shell statt Dir$.
+    ' Dir$() versagt in sandboxed Excel fuer Application-Scripts-Ordner.
+    ' Rueckgabe: True wenn Datei existiert.
+    Dim q As String: q = Chr(34)
+    Dim result As String
+    On Error Resume Next
+    result = MacScript("do shell script " & q & "test -f '" & filePath & "' && echo YES || echo NO" & q)
+    If Err.Number <> 0 Then
+        Err.Clear
+        On Error GoTo 0
+        ' MacScript nicht verfuegbar -> Fallback auf Dir$
+        FileExistsViaShell = (Len(Dir$(filePath)) > 0)
+        Exit Function
+    End If
+    On Error GoTo 0
+    FileExistsViaShell = (Trim$(result) = "YES")
+End Function
 
 Private Function GetAppleScriptTargetPath() As String
     ' Zweck: Zielpfad für das AppleScript ermitteln.
@@ -3380,9 +3400,9 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     ' WICHTIG: AppleScriptTask braucht eine KOMPILIERTE .scpt-Datei.
     '
     ' Strategien (in Reihenfolge):
-    '   1. Eingebettete .scpt aus Base64 direkt per VBA Binary-Write (KEINE externe Datei!)
-    '   2. FileCopy der vorkompilierten .scpt (falls vorhanden)
-    '   3. osacompile via MacScript (falls MacScript verfuegbar)
+    '   1. Eingebettete .scpt aus Base64 via Shell (TMPDIR -> base64 -D -> Ziel)
+    '   2. osacompile via MacScript (Shell, .applescript -> .scpt)
+    '   3. FileCopy der vorkompilierten .scpt (nur nicht-sandboxed Excel)
     '   4. MsgBox mit Terminal-Befehl (manueller Fallback)
     '
     ' Abhängigkeiten: EnsureFolderExists, APPLESCRIPT_FILE Konstante.
@@ -3393,10 +3413,10 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
     EnsureFolderExists folderPath
 
-    ' --- Strategie 1: Eingebettete .scpt aus Base64 ---
+    ' --- Strategie 1: Eingebettete .scpt aus Base64 via Shell ---
     ' MailReader.scpt (1138 Bytes) als Base64 im VBA-Code eingebettet.
     ' Komplett unabhaengig von externen Dateien.
-    ' Inhalt: on FetchMessages(scriptText) -> try -> return run script scriptText
+    ' Ablauf: Base64 -> TMPDIR (VBA) -> Shell base64 -D -> Ziel (Sandbox-sicher)
     Dim b64Scpt As String
     b64Scpt = "RmFzZFVBUyAxLjEwMS4xMA4AAAAED///AAEAAgADAf//AAANAAEAAWsAAAAAAAAA" & _
               "BAIABAACAAUABg0ABQACaQAAAAAAAwAHAAgNAAcAA0kAAAAAAAD//gAJ//0L//4A" & _
@@ -3423,14 +3443,73 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
               "CmVycm4L/94AEDAABmVycm51bQAGZXJyTnVtBv/dAAAR/+cAGhQAC6BqDAAAD1cA" & _
               "D1gAAQAC46Il5CWhJQ8PAGFzY3IAAQAN+t7erQ=="
 
-    installed = WriteBase64ToFile(b64Scpt, targetPath)
+    ' Schritt A: Base64-Text in TMPDIR schreiben (VBA hat hier Zugriff)
+    Dim tmpDir As String
+    tmpDir = Environ$("TMPDIR")
+    If Len(tmpDir) = 0 Then tmpDir = "/tmp/"
+    If Right$(tmpDir, 1) <> "/" Then tmpDir = tmpDir & "/"
+    Dim tmpB64 As String
+    tmpB64 = tmpDir & "MailReader.b64"
+
+    On Error Resume Next
+    Dim ft As Integer
+    ft = FreeFile
+    Open tmpB64 For Output As #ft
+    Print #ft, b64Scpt;
+    Close #ft
+    If Err.Number <> 0 Then
+        Log LOG_WARN, "Install", "Temp-Write fehlgeschlagen: " & Err.Description
+        Err.Clear
+        On Error GoTo 0
+        GoTo Strategy2
+    End If
+    On Error GoTo 0
+
+    ' Schritt B: Shell dekodiert Base64 -> Zieldatei (umgeht Sandbox)
+    Dim q As String: q = Chr(34)
+    Dim shellCmd As String
+    shellCmd = "/bin/mkdir -p '" & folderPath & "' && /usr/bin/base64 -D < '" & tmpB64 & "' > '" & targetPath & "' && echo OK"
+    On Error Resume Next
+    Dim shellResult As String
+    shellResult = MacScript("do shell script " & q & shellCmd & q)
+    If Err.Number = 0 And InStr(shellResult, "OK") > 0 Then
+        installed = True
+    End If
+    Err.Clear
+    On Error GoTo 0
+
+    ' Temp aufraeumen
+    On Error Resume Next
+    Kill tmpB64
+    On Error GoTo 0
+
     If installed Then
-        Log LOG_INFO, "Install", "OK (eingebettete Base64 .scpt): " & targetPath
+        Log LOG_INFO, "Install", "OK (Base64 via Shell): " & targetPath
         Exit Sub
     End If
-    Log LOG_WARN, "Install", "Base64-Write fehlgeschlagen, versuche FileCopy"
+    Log LOG_WARN, "Install", "Base64-Shell fehlgeschlagen, versuche FileCopy"
 
-    ' --- Strategie 2: FileCopy der vorkompilierten .scpt ---
+Strategy2:
+
+    ' --- Strategie 2: osacompile via MacScript (Shell) ---
+    ' Kompiliert die .applescript-Quelle zur .scpt am Ziel.
+    ' Shell umgeht VBA-Sandbox-Beschraenkung beim Schreiben.
+    If Len(sourcePath) > 0 Then
+        Dim sq As String: sq = "'"
+        If Len(q) = 0 Then q = Chr(34)
+        shellCmd = "/usr/bin/osacompile -o " & sq & targetPath & sq & " " & sq & sourcePath & sq & " && echo OK"
+        On Error Resume Next
+        shellResult = MacScript("do shell script " & q & shellCmd & q)
+        If Err.Number = 0 And InStr(shellResult, "OK") > 0 Then installed = True
+        Err.Clear
+        On Error GoTo 0
+    End If
+    If installed Then
+        Log LOG_INFO, "Install", "OK (osacompile): " & targetPath
+        Exit Sub
+    End If
+
+    ' --- Strategie 3: FileCopy (nur auf nicht-sandboxed Excel) ---
     Dim precompiled As String
     If Len(sourcePath) > 0 Then
         Dim sourceDir As String
@@ -3439,7 +3518,7 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
         If Len(Dir$(precompiled)) > 0 Then
             On Error Resume Next
             FileCopy precompiled, targetPath
-            If Err.Number = 0 Then installed = (Len(Dir$(targetPath)) > 0)
+            If Err.Number = 0 Then installed = FileExistsViaShell(targetPath)
             Err.Clear
             On Error GoTo 0
         End If
@@ -3449,27 +3528,12 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
         Exit Sub
     End If
 
-    ' --- Strategie 3: osacompile via MacScript ---
-    Dim q As String: q = Chr(34)
-    Dim sq As String: sq = "'"
-    Dim shellCmd As String
-    If Len(sourcePath) > 0 Then
-        shellCmd = "/usr/bin/osacompile -o " & sq & targetPath & sq & " " & sq & sourcePath & sq
-        On Error Resume Next
-        MacScript "do shell script " & q & shellCmd & q
-        If Err.Number = 0 Then installed = (Len(Dir$(targetPath)) > 0)
-        Err.Clear
-        On Error GoTo 0
-    End If
-    If installed Then
-        Log LOG_INFO, "Install", "OK (osacompile): " & targetPath
-        Exit Sub
-    End If
-
     ' --- Strategie 4: Manuelle Anweisung ---
     Log LOG_ERROR, "Install", "FEHLER: Alle Strategien gescheitert"
     MsgBox "AppleScript konnte nicht automatisch installiert werden." & vbLf & _
            "Ziel: " & targetPath & vbLf & vbLf & _
+           "Terminal-Befehl:" & vbLf & _
+           "echo '" & b64Scpt & "' | base64 -D > '" & targetPath & "'" & vbLf & vbLf & _
            "Bitte kontaktieren Sie den Support.", vbExclamation
 End Sub
 
