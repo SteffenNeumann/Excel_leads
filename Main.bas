@@ -337,8 +337,16 @@ Public Sub ImportLeadsFromAppleMail()
     ' --- Eingabeprüfung ---
     If Not ValidateMailSettings() Then Exit Sub
 
+    ' AppleScript nur installieren wenn Live-Mail-Abruf konfiguriert ist.
+    ' EML-Ordner-Import (mailpath) braucht kein AppleScript.
     If AUTO_INSTALL_APPLESCRIPT Then
-        EnsureAppleScriptInstalled
+        Dim mbCheck As String
+        mbCheck = Trim$(GetLeadMailbox())
+        If Len(mbCheck) > 0 Then
+            EnsureAppleScriptInstalled
+        Else
+            Debug.Print "[Main] Kein LEAD_MAILBOX -> AppleScript-Installation uebersprungen (nur EML-Ordner)"
+        End If
     End If
 
     ' --- Variablen (Objekte) ---
