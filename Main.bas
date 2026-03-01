@@ -3393,58 +3393,30 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
         Exit Sub
     End If
 
-    ' --- Strategie 2: osacompile via Temp-Script ---
-    ' Funktioniert nur auf nicht-sandboxed Excel (Shell wird von Sandbox blockiert).
+    ' --- Strategie 2: osacompile via MacScript ---
+    ' MacScript("do shell script ...") umgeht die Sandbox-Beschraenkung,
+    ' die VBA Shell blockiert. osacompile kompiliert .applescript -> .scpt.
     Dim q As String
+    Dim sq As String
     Dim shellCmd As String
-    Dim scriptFile As String
-    Dim f As Integer
-    Dim startTime As Double
-    Dim tmpDir2 As String
 
     q = Chr(34)
-    shellCmd = "/usr/bin/osacompile -o " & q & targetPath & q & " " & q & sourcePath & q
-    Debug.Print "[InstallAppleScript] osacompile: " & shellCmd
-
-    tmpDir2 = Environ$("TMPDIR")
-    If Len(tmpDir2) = 0 Then tmpDir2 = "/tmp/"
-    If Right$(tmpDir2, 1) <> "/" Then tmpDir2 = tmpDir2 & "/"
-    scriptFile = tmpDir2 & "_install_applescript.sh"
+    sq = "'"
+    shellCmd = "/usr/bin/osacompile -o " & sq & targetPath & sq & " " & sq & sourcePath & sq
+    Debug.Print "[InstallAppleScript] osacompile via MacScript: " & shellCmd
 
     On Error Resume Next
-    f = FreeFile
-    Open scriptFile For Output As #f
-    Print #f, "#!/bin/sh"
-    Print #f, shellCmd
-    Close #f
-    If Err.Number <> 0 Then
-        Debug.Print "[InstallAppleScript] Temp-Script fehlgeschlagen: " & Err.Description
-        Err.Clear
-        On Error GoTo 0
-        GoTo ShowManual
+    MacScript "do shell script " & q & shellCmd & q
+    If Err.Number = 0 Then
+        installed = (Len(Dir$(targetPath)) > 0)
+    Else
+        Debug.Print "[InstallAppleScript] MacScript osacompile Err " & Err.Number & ": " & Err.Description
     End If
     Err.Clear
     On Error GoTo 0
 
-    On Error Resume Next
-    Shell "/bin/sh " & scriptFile
-    Err.Clear
-    On Error GoTo 0
-
-    startTime = Timer
-    Do While Len(Dir$(targetPath)) = 0
-        If Timer - startTime > 8 Then Exit Do
-        DoEvents
-    Loop
-    installed = (Len(Dir$(targetPath)) > 0)
-
-    On Error Resume Next
-    Kill scriptFile
-    Err.Clear
-    On Error GoTo 0
-
     If installed Then
-        Debug.Print "[InstallAppleScript] OK (osacompile): " & targetPath
+        Debug.Print "[InstallAppleScript] OK (osacompile via MacScript): " & targetPath
         Exit Sub
     End If
 
