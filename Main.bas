@@ -3132,15 +3132,17 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
     ' WICHTIG: AppleScriptTask braucht eine KOMPILIERTE .scpt-Datei.
     '          FileCopy kopiert nur Bytes -> AppleScriptTask scheitert.
     '          osacompile erzeugt das korrekte kompilierte Format.
-    ' Strategie: MacScript("do shell script osacompile ...") -> blockierend, korrekt.
-    '            Fallback: VBA Shell (asynchron) falls MacScript scheitert.
-    ' Abhängigkeiten: EnsureFolderExists, MacScript/Shell.
+    ' Strategie: Shell-Befehl in Temp-Script schreiben -> /bin/sh ausfuehren.
+    '            Vermeidet alle VBA-Quoting-Probleme bei langen Pfaden mit Leerzeichen.
+    ' Abhängigkeiten: EnsureFolderExists.
     ' Rückgabe: keine (kompiliert Datei oder zeigt MsgBox).
     Dim folderPath As String
     Dim shellCmd As String
-    Dim result As String
     Dim q As String
     Dim installed As Boolean
+    Dim scriptFile As String
+    Dim f As Integer
+    Dim startTime As Double
 
     q = Chr(34)
     folderPath = Left$(targetPath, InStrRev(targetPath, "/") - 1)
@@ -3151,55 +3153,74 @@ Private Sub InstallAppleScript(ByVal sourcePath As String, ByVal targetPath As S
         Exit Sub
     End If
 
-    Debug.Print "[InstallAppleScript] osacompile: " & sourcePath & " -> " & targetPath
+    ' osacompile-Befehl mit Double-Quotes (Leerzeichen-sicher)
+    shellCmd = "/usr/bin/osacompile -o " & q & targetPath & q & " " & q & sourcePath & q
+    Debug.Print "[InstallAppleScript] Befehl: " & shellCmd
 
-    ' --- Strategie 1: MacScript (blockierend, zuverlaessig) ---
-    ' Shell-Befehl mit Single-Quotes (Leerzeichen-sicher), VBA baut nur den String.
-    Dim asCode As String
-    shellCmd = "osacompile -o '" & targetPath & "' '" & sourcePath & "'"
-    asCode = "do shell script " & q & shellCmd & q
-    Debug.Print "[InstallAppleScript] AppleScript: " & asCode
-
+    ' --- Strategie 1: Temp-Script (vermeidet VBA Shell-Quoting komplett) ---
+    scriptFile = "/tmp/_install_applescript.sh"
     On Error Resume Next
-    result = MacScript(asCode)
-    If Err.Number = 0 Then
-        installed = (Len(Dir$(targetPath)) > 0)
-        If installed Then
-            Debug.Print "[InstallAppleScript] MacScript OK: " & targetPath
-        Else
-            Debug.Print "[InstallAppleScript] MacScript lief ohne Fehler, aber Datei nicht erstellt"
-        End If
-    Else
-        Debug.Print "[InstallAppleScript] MacScript Err " & Err.Number & ": " & Err.Description
+    f = FreeFile
+    Open scriptFile For Output As #f
+    Print #f, "#!/bin/sh"
+    Print #f, shellCmd
+    Close #f
+
+    If Err.Number <> 0 Then
+        Debug.Print "[InstallAppleScript] Temp-Script schreiben fehlgeschlagen: " & Err.Description
+        Err.Clear
+        On Error GoTo 0
+        GoTo FallbackDirect
     End If
     Err.Clear
     On Error GoTo 0
 
-    ' --- Strategie 2: VBA Shell (Fallback, asynchron) ---
-    If Not installed Then
-        shellCmd = "osacompile -o '" & targetPath & "' '" & sourcePath & "'"
-        Debug.Print "[InstallAppleScript] Fallback Shell: " & shellCmd
-        On Error Resume Next
-        Shell shellCmd
-        Err.Clear
-        On Error GoTo 0
+    ' Temp-Script ausfuehren
+    Debug.Print "[InstallAppleScript] Starte: /bin/sh " & scriptFile
+    On Error Resume Next
+    Shell "/bin/sh " & scriptFile
+    Err.Clear
+    On Error GoTo 0
 
-        ' Warten bis osacompile fertig (asynchron)
-        Dim startTime As Double
-        startTime = Timer
-        Do While Len(Dir$(targetPath)) = 0
-            If Timer - startTime > 5 Then Exit Do
-            DoEvents
-        Loop
-        installed = (Len(Dir$(targetPath)) > 0)
+    ' Warten bis osacompile fertig (asynchron, max 8 Sek.)
+    startTime = Timer
+    Do While Len(Dir$(targetPath)) = 0
+        If Timer - startTime > 8 Then Exit Do
+        DoEvents
+    Loop
+    installed = (Len(Dir$(targetPath)) > 0)
+
+    ' Temp-Script aufraeumen
+    On Error Resume Next
+    Kill scriptFile
+    Err.Clear
+    On Error GoTo 0
+
+    If installed Then
+        Debug.Print "[InstallAppleScript] OK: " & targetPath & " installiert"
+        Exit Sub
     End If
+
+FallbackDirect:
+    ' --- Strategie 2: Direkter Shell-Aufruf (Fallback) ---
+    Debug.Print "[InstallAppleScript] Fallback: direkter Shell-Aufruf"
+    On Error Resume Next
+    Shell "/bin/sh -c " & q & shellCmd & q
+    Err.Clear
+    On Error GoTo 0
+
+    startTime = Timer
+    Do While Len(Dir$(targetPath)) = 0
+        If Timer - startTime > 8 Then Exit Do
+        DoEvents
+    Loop
+    installed = (Len(Dir$(targetPath)) > 0)
 
     ' --- Ergebnis ---
     If installed Then
-        Debug.Print "[InstallAppleScript] OK: " & targetPath & " installiert"
+        Debug.Print "[InstallAppleScript] OK (Fallback): " & targetPath & " installiert"
     Else
         Debug.Print "[InstallAppleScript] FEHLER: " & targetPath & " nicht erstellt"
-        shellCmd = "osacompile -o '" & targetPath & "' '" & sourcePath & "'"
         MsgBox "AppleScript konnte nicht kompiliert werden." & vbLf & _
                "Quelle: " & sourcePath & vbLf & _
                "Ziel: " & targetPath & vbLf & vbLf & _
