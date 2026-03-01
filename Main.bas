@@ -1117,6 +1117,76 @@ Private Sub LogToFile(ByVal msg As String)
 End Sub
 
 ' =========================
+' Umlaut-Bereinigung in Dateinamen (Ansatz A+)
+' =========================
+Private Function SanitizeEmlFileNames(ByVal folderPath As String) As Long
+    ' Zweck: Umlaute in .eml-Dateinamen regelkonform ersetzen (ae/oe/ue/ss).
+    ' macOS speichert Umlaute als NFD (z.B. o + combining diaeresis = 2 Zeichen).
+    ' VBA kann NFD-Dateinamen nicht zuverlaessig oeffnen.
+    ' Loesung: perl mit Unicode::Normalize (auf jedem Mac vorinstalliert) benennt
+    ' die Dateien VOR dem Import um. VBA sieht dann nur ASCII-Dateinamen.
+    ' Das Perl-Skript ist base64-kodiert um 3-stufige Quoting-Probleme
+    ' (VBA -> AppleScript -> Shell) komplett zu vermeiden.
+    ' Rueckgabe: Anzahl umbenannter Dateien, -1 bei Fehler.
+    Dim q As String: q = Chr(34)
+    Dim sq As String: sq = "'"
+    Dim result As String
+
+    ' Base64-kodiertes Perl-Skript:
+    '   use Unicode::Normalize; use Encode; use utf8;
+    '   chdir($ARGV[0]); for each *.eml:
+    '     NFD -> NFC normalisieren
+    '     ae/oe/ue/Ae/Oe/Ue/ss regelkonform ersetzen
+    '     rename falls geaendert
+    '   print Anzahl umbenannter Dateien
+    Dim b64 As String
+    b64 = "dXNlIFVuaWNvZGU6Ok5vcm1hbGl6ZTsKdXNlIEVuY29kZTsKdXNlIHV0Zjg7" & _
+          "CmNoZGlyKCRBUkdWWzBdKSBvciBkaWUgImNkOiAkISI7Cm15ICRjID0gMDsKZm9y" & _
+          "IG15ICRmIChnbG9iKCIqLmVtbCIpKSB7CiAgICBteSAkZCA9IGRlY29kZSgiVVRG" & _
+          "LTgiLCAkZik7CiAgICBteSAkbmZjID0gTkZDKCRkKTsKICAgIG15ICRuID0gJG5m" & _
+          "YzsKICAgICRuID1+IHMvXHh7ZTR9L2FlL2c7ICRuID1+IHMvXHh7ZjZ9L29lL2c7" & _
+          "ICRuID1+IHMvXHh7ZmN9L3VlL2c7CiAgICAkbiA9fiBzL1x4e2M0fS9BZS9nOyAk" & _
+          "biA9fiBzL1x4e2Q2fS9PZS9nOyAkbiA9fiBzL1x4e2RjfS9VZS9nOwogICAgJG4g" & _
+          "PX4gcy9ceHtkZn0vc3MvZzsKICAgIG15ICRlZiA9IGVuY29kZSgiVVRGLTgiLCAk" & _
+          "bmZjKTsKICAgIG15ICRlbiA9IGVuY29kZSgiVVRGLTgiLCAkbik7CiAgICBpZiAo" & _
+          "JGVmIG5lICRlbikgewogICAgICAgIHJlbmFtZSgkZiwgJGVuKSBvciBkaWUgInJl" & _
+          "bmFtZTogJCEiOwogICAgICAgICRjKys7CiAgICB9Cn0KcHJpbnQgJGM7Cg=="
+
+    ' Shell-Befehl: base64 dekodieren -> perl ausfuehren mit Ordnerpfad als Argument
+    Dim shellCmd As String
+    shellCmd = "echo " & sq & b64 & sq & " | base64 -D | perl - " & sq & folderPath & sq
+
+    Log LOG_INFO, "Sanitize", "Starte Umlaut-Bereinigung in: " & folderPath
+
+    On Error Resume Next
+    result = MacScript("do shell script " & q & shellCmd & q)
+    If Err.Number <> 0 Then
+        Log LOG_ERROR, "Sanitize", "MacScript FEHLER: " & Err.Number & " " & Err.Description
+        Err.Clear
+        On Error GoTo 0
+        SanitizeEmlFileNames = -1
+        Exit Function
+    End If
+    On Error GoTo 0
+
+    Dim renamed As Long
+    If IsNumeric(Trim$(result)) Then
+        renamed = CLng(Trim$(result))
+    Else
+        Log LOG_WARN, "Sanitize", "Unerwartete Ausgabe: '" & Left$(result, 80) & "'"
+        renamed = 0
+    End If
+
+    If renamed > 0 Then
+        Log LOG_INFO, "Sanitize", renamed & " Datei(en) umbenannt (Umlaute -> ae/oe/ue/ss)"
+    Else
+        Log LOG_DEBUG, "Sanitize", "Keine Umlaute in Dateinamen gefunden"
+    End If
+
+    SanitizeEmlFileNames = renamed
+End Function
+
+' =========================
 ' Strukturiertes Debug-Log System
 ' =========================
 Private Sub Log(ByVal lvl As Long, ByVal modul As String, ByVal msg As String)
@@ -2365,47 +2435,28 @@ Private Function FetchMailMessagesFromPath(ByVal folderPath As String) As String
     Log LOG_INFO, "EML", "=== EML-Import Start ==="
     Log LOG_INFO, "EML", "Ordner: " & folderPath
 
+    ' Umlaute in Dateinamen regelkonform ersetzen (Hörath -> Hoerath etc.)
+    ' Muss VOR Dir$ laufen, damit VBA nur ASCII-Dateinamen sieht.
+    Dim sanitizeResult As Long
+    sanitizeResult = SanitizeEmlFileNames(folderPath)
+    If sanitizeResult < 0 Then
+        Log LOG_WARN, "EML", "Umlaut-Bereinigung fehlgeschlagen -> Import versucht trotzdem"
+    End If
+
     fileName = Dir$(folderPath & "/" & "*.eml")
     Do While Len(fileName) > 0
         filePath = folderPath & "/" & fileName
         count = count + 1
         Log LOG_INFO, "EML", "--- Datei " & count & ": " & fileName & " ---"
 
-        ' Pruefen ob Dateiname Nicht-ASCII-Zeichen enthaelt (Umlaute/NFD)
-        Dim fileHasUmlaut As Boolean
-        Dim ci2 As Long
-        fileHasUmlaut = False
-        For ci2 = 1 To Len(fileName)
-            If AscW(Mid$(fileName, ci2, 1)) > 127 Then
-                fileHasUmlaut = True
-                Exit For
-            End If
-        Next ci2
+        rawText = ReadTextFile(filePath)
+        Log LOG_DEBUG, "EML", "ReadTextFile: " & Len(rawText) & " Zeichen"
 
-        If fileHasUmlaut Then
-            ' UMLAUT-DATEI: Python MIME-Parser als primaerer Leser (NFD-sicher)
-            Log LOG_INFO, "EML", "Umlaut erkannt -> Python primaer fuer: " & fileName
-            pyText = PythonReadEmlFile(folderPath, fileName)
-            If Len(pyText) > 50 Then
-                rawText = pyText
-                Log LOG_INFO, "EML", "Python primaer OK: " & Len(rawText) & " Zeichen"
-            Else
-                ' Python fehlgeschlagen -> ReadTextFile als Fallback versuchen
-                Log LOG_WARN, "EML", "Python primaer FEHL (" & Len(pyText) & " Zeichen) -> ReadTextFile Fallback"
-                rawText = ReadTextFile(filePath)
-                If Len(rawText) < 20 Then
-                    rawText = ShellReadEmlFile(folderPath, fileName)
-                End If
-            End If
-        Else
-            ' ASCII-DATEI: ReadTextFile als primaerer Leser (schneller)
-            rawText = ReadTextFile(filePath)
-            Log LOG_DEBUG, "EML", "ReadTextFile: " & Len(rawText) & " Zeichen"
-            If Len(rawText) < 20 Then
-                Log LOG_WARN, "EML", "ReadTextFile zu kurz (" & Len(rawText) & ") -> Shell-Fallback"
-                rawText = ShellReadEmlFile(folderPath, fileName)
-                Log LOG_INFO, "EML", "Shell-Fallback Ergebnis: " & Len(rawText) & " Zeichen"
-            End If
+        ' Fallback: Wenn ReadTextFile fehlschlaegt, Datei per Shell lesen
+        If Len(rawText) < 20 Then
+            Log LOG_WARN, "EML", "ReadTextFile zu kurz (" & Len(rawText) & ") -> Shell-Fallback"
+            rawText = ShellReadEmlFile(folderPath, fileName)
+            Log LOG_INFO, "EML", "Shell-Fallback Ergebnis: " & Len(rawText) & " Zeichen"
         End If
 
         subj = ExtractHeaderValue(rawText, "Subject:")
