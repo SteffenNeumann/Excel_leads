@@ -1,1 +1,1 @@
-2026-03-01 15:21:00 8ea347b
+2026-03-01 18:18:55 | SHA: a375de7 | Embedded MailReader.scpt as Base64, pure-VBA decoder
