@@ -4,7 +4,7 @@ Option Explicit
 ' ==============================================================
 ' Main.bas -- Lead-Import aus gespeicherten EML-Dateien
 ' --------------------------------------------------------------
-' Version  : 2.8
+' Version  : 2.9
 ' Datum    : 2026-04-19
 ' Autor    : Steffen
 ' --------------------------------------------------------------
@@ -26,6 +26,7 @@ Option Explicit
 '   Benoetigt: MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
 '
 ' Changelog:
+'   v2.9 | 2026-04-19 | Trim Spaltennamen, Zell-Notiz, StatusBar-Fortschritt
 '   v2.8 | 2026-04-19 | Status='Lead erhalten', Leadquelle-Praefix entfernt
 '   v2.7 | 2026-04-19 | Leadquelle aus From-Header statt Subject
 '   v2.6 | 2026-04-19 | Sandbox-Fix: AppleScriptTask Shell-Copy statt GetOpenFilename
@@ -229,6 +230,8 @@ Public Sub ImportLeadsFromMailFolder()
     For pathIdx = 0 To pathCount - 1
         emlPath = emlPaths(pathIdx)
 
+        Application.StatusBar = "Lead-Import: " & (pathIdx + 1) & " / " & pathCount & " EML-Dateien..."
+
         Set kv     = ParseEmlToKv(emlPath)
         Set fields = BuildLeadFields(kv)
 
@@ -242,12 +245,13 @@ Public Sub ImportLeadsFromMailFolder()
             skipped = skipped + 1
 
         Else
-            AddLeadRow fields, tbl
+            AddLeadRow fields, tbl, mailsFolder
             imported = imported + 1
         End If
 
     Next pathIdx
 
+    Application.StatusBar = False
     Application.ScreenUpdating = True
     Application.Calculation = xlCalculationAutomatic
 
@@ -934,10 +938,12 @@ End Function
 ' SCHRITT 3 -- Neue Zeile in Pipeline-Tabelle schreiben
 ' ==============================================================
 
-Private Sub AddLeadRow(fields As Collection, tbl As ListObject)
+Private Sub AddLeadRow(fields As Collection, tbl As ListObject, mailsFolder As String)
     Dim newRow   As ListRow
     Dim hIdx     As Collection
     Dim mailDate As Date
+    Dim colKey   As String
+    Dim colNum   As Long
 
     Set hIdx   = BuildHIdx(tbl)
     Set newRow = tbl.ListRows.Add(AlwaysInsert:=True)
@@ -945,6 +951,18 @@ Private Sub AddLeadRow(fields As Collection, tbl As ListObject)
     mailDate = ParseMailDate(KVGet(fields, "mail_date"))
 
     SetCellDate newRow, hIdx, C_ERHALTEN, mailDate
+
+    ' Zell-Notiz: Import-Metadaten
+    colKey = LCase$(C_ERHALTEN)
+    If KVExists(hIdx, colKey) Then
+        colNum = CLng(KVGet(hIdx, colKey))
+        On Error Resume Next
+        newRow.Range.Cells(1, colNum).AddComment _
+            "Automatischer Import vom: " & Format$(Now, "DD.MM.YYYY") & _
+            " | Quelle: Dateiordner: " & mailsFolder
+        On Error GoTo 0
+    End If
+
     SetCell     newRow, hIdx, C_ID,       KVGet(fields, "id")
     SetCell     newRow, hIdx, C_STATUS,   "Lead erhalten"
     SetCell     newRow, hIdx, C_QUELLE,   KVGet(fields, "leadquelle")
@@ -1004,7 +1022,7 @@ Private Function BuildHIdx(tbl As ListObject) As Collection
 
     Set hIdx = KVNew()
     For Each col In tbl.ListColumns
-        KVSet hIdx, LCase$(col.Name), CStr(col.Index)
+        KVSet hIdx, LCase$(Trim$(col.Name)), CStr(col.Index)
     Next col
     Set BuildHIdx = hIdx
 End Function
@@ -1095,7 +1113,7 @@ End Function
 
 Private Function ExtractFromName(fromHdr As String) As String
     ' "PflegeHelfer24" <noreply@x.de>  -> PflegeHelfer24
-    ' Anfragen - Verbund Pflegehilfe <anfragen@pflegehilfe.de> -> Anfragen - Verbund Pflegehilfe
+    ' Anfragen - Verbund Pflegehilfe <anfragen@pflegehilfe.de> -> Verbund Pflegehilfe
     Dim ltPos As Long
     Dim s     As String
 
@@ -1104,7 +1122,7 @@ Private Function ExtractFromName(fromHdr As String) As String
     If ltPos > 1 Then
         s = Trim$(Left$(s, ltPos - 1))
     End If
-    ' Anf&uuml;hrungszeichen entfernen
+    ' Anfuehrungszeichen entfernen
     If Left$(s, 1) = """" And Right$(s, 1) = """" And Len(s) > 1 Then
         s = Mid$(s, 2, Len(s) - 2)
     End If
@@ -1171,7 +1189,7 @@ Public Sub DiagnoseImport()
     Dim keyIdx     As Long
     Dim mailsFolder As String
 
-    msg = "=== Lead-Import Diagnose v2.8 ===" & vbLf & vbLf
+    msg = "=== Lead-Import Diagnose v2.9 ===" & vbLf & vbLf
 
     ' 0) Pfad aus Einstellungen lesen
     mailsFolder = GetMailsFolder()
