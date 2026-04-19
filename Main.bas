@@ -430,9 +430,9 @@ End Function
 
 ' --- EML-Datei einlesen ---
 ' Strategie (Mac):
-'   AppleScriptTask Shell-Copy in Temp-Datei im Workbook-Verzeichnis
-'   (dort hat VBA Sandbox-Zugriff). Open For Binary wird auf Mac
-'   NICHT versucht -- das loest sonst den Sandbox-Dialog aus.
+'   Versuch 1: Open For Binary direkt (klappt auf Excel 365 Mac ohne Dialog)
+'   Versuch 2: AppleScriptTask Shell-Copy (Fallback falls Sandbox blockiert)
+'              Benoetigt MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
 ' Windows: direkt Binary-Read.
 Private Function ReadEmlText(filePath As String) As String
     Dim fileNum    As Integer
@@ -442,7 +442,8 @@ Private Function ReadEmlText(filePath As String) As String
     Dim i          As Long
 
     #If Mac Then
-        ' Mac: direkt Shell-Copy (Open For Binary wuerde Sandbox-Dialog ausloesen)
+        ' Mac: direkt Shell-Copy via AppleScriptTask (Open For Binary loest Sandbox-Dialog aus)
+        ' EnsureMailReaderScptInstalled installiert MailReader.scpt automatisch falls noetig.
         On Error GoTo ErrHandler
         result = ReadEmlViaShellCopy(filePath)
         If Len(result) > 0 Then
@@ -467,9 +468,10 @@ Private Function ReadEmlText(filePath As String) As String
     Close #fileNum
 
     ' Bytes 1:1 als Latin-1 -- Base64 und EML-Header sind 7-Bit-ASCII-sicher
-    result = String$(fileLen, " ")
+    result = Space$(fileLen)
     For i = 0 To fileLen - 1
-        Mid$(result, i + 1, 1) = Chr(rawBytes(i))
+        ' Chr(0) bei Mid$-Assignment wirft Err 5 -- Nullbytes als Space behandeln
+        If rawBytes(i) > 0 Then Mid$(result, i + 1, 1) = Chr(rawBytes(i))
     Next i
 
     result = Replace(result, vbCrLf, vbLf)
@@ -483,6 +485,112 @@ ErrHandler:
     Close #fileNum
     On Error GoTo 0
 End Function
+
+' --- MailReader.scpt automatisch in Application Scripts installieren ---
+' macOS Sandbox erlaubt sandboxed Apps explizit Schreibzugriff auf
+'   ~/Library/Application Scripts/<bundle-id>/
+' wobei ~ = ECHTER Home-Pfad (/Users/<user>), NICHT Container-Pfad.
+' Das Verzeichnis wird von macOS beim ersten Sandbox-Start automatisch angelegt.
+' Deshalb: kein MkDir noetig, nur Open For Output am echten Pfad.
+'
+' Strategie (3 Versuche):
+'   1. AppleScriptTask-Test → bereits installiert?
+'   2. Open For Output am ECHTEN Home-Pfad (kein MkDir)
+'   3. Open For Output am Container-Pfad (Fallback, mit MkDir)
+Private Sub EnsureMailReaderScptInstalled()
+    Dim fileNum   As Integer
+    Dim content   As String
+    Dim realPath  As String
+    Dim contPath  As String
+    Dim writeErr  As Long
+
+    ' --- Versuch 1: Bereits installiert? ---
+    On Error Resume Next
+    Dim testResult As String
+    testResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, """ok""")
+    If Err.Number = 0 Then
+        On Error GoTo 0
+        Debug.Print "[INFO] MailReader.scpt bereits vorhanden (AppleScriptTask ok)"
+        Exit Sub
+    End If
+    Err.Clear
+    On Error GoTo 0
+
+    ' Eingebetteter Inhalt
+    content = "on FetchMessages(scriptText)" & vbLf & _
+              Chr(9) & "try" & vbLf & _
+              Chr(9) & Chr(9) & "return run script scriptText" & vbLf & _
+              Chr(9) & "on error errMsg number errNum" & vbLf & _
+              Chr(9) & Chr(9) & "return ""ERROR:"" & errNum & "":"" & errMsg" & vbLf & _
+              Chr(9) & "end try" & vbLf & _
+              "end FetchMessages" & vbLf
+
+    ' --- Versuch 2: ECHTER Home-Pfad (macOS legt Verzeichnis automatisch an) ---
+    realPath = "/Users/" & Environ("USER") & _
+               "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
+    On Error Resume Next
+    fileNum = FreeFile()
+    Open realPath For Output As #fileNum
+    writeErr = Err.Number
+    If writeErr = 0 Then
+        Print #fileNum, content
+        Close #fileNum
+        writeErr = Err.Number
+    End If
+    On Error GoTo 0
+
+    If writeErr = 0 Then
+        Debug.Print "[INFO] MailReader.scpt installiert (real path): " & realPath
+        Exit Sub
+    End If
+
+    Debug.Print "[WARN] Real-Pfad fehlgeschlagen (Err " & writeErr & "): " & realPath
+
+    ' --- Versuch 3: Container-Pfad mit rekursivem MkDir ---
+    contPath = Environ("HOME") & _
+               "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
+    EnsureFolderExists Environ("HOME") & _
+               "/Library/Application Scripts/com.microsoft.Excel"
+
+    On Error Resume Next
+    writeErr = 0
+    fileNum = FreeFile()
+    Open contPath For Output As #fileNum
+    writeErr = Err.Number
+    If writeErr = 0 Then
+        Print #fileNum, content
+        Close #fileNum
+        writeErr = Err.Number
+    End If
+    On Error GoTo 0
+
+    If writeErr = 0 Then
+        Debug.Print "[INFO] MailReader.scpt installiert (container path): " & contPath
+        Exit Sub
+    End If
+
+    LogError "EnsureMailReaderScptInstalled", _
+        "Schreiben fehlgeschlagen (Err " & writeErr & ") nach: " & contPath, "Warn"
+End Sub
+
+' --- Ordnerstruktur rekursiv anlegen ---
+Private Sub EnsureFolderExists(ByVal folderPath As String)
+    Dim parts()     As String
+    Dim i           As Long
+    Dim currentPath As String
+
+    parts = Split(folderPath, "/")
+    currentPath = ""
+
+    For i = LBound(parts) To UBound(parts)
+        If Len(parts(i)) > 0 Then
+            currentPath = currentPath & "/" & parts(i)
+            On Error Resume Next
+            If Len(Dir$(currentPath, vbDirectory)) = 0 Then MkDir currentPath
+            On Error GoTo 0
+        End If
+    Next i
+End Sub
 
 ' --- Mac-Fallback: Shell-Copy ueber AppleScriptTask ---
 ' Kopiert die Datei per "cp" in eine Temp-Datei im Workbook-Verzeichnis
@@ -501,6 +609,23 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
 
     On Error GoTo ErrHandler
 
+    ' MailReader.scpt automatisch installieren falls noch nicht vorhanden
+    EnsureMailReaderScptInstalled
+
+    ' Pruefen ob .scpt jetzt wirklich vorhanden (AppleScriptTask-Test statt Dir$)
+    On Error Resume Next
+    Dim scptTest As String
+    scptTest = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, """ok""")
+    Dim scptErr As Long: scptErr = Err.Number
+    On Error GoTo ErrHandler
+
+    If scptErr <> 0 Then
+        LogError "ReadEmlViaShellCopy", _
+            APPLESCRIPT_FILE & " konnte nicht installiert werden (Err " & scptErr & "). " & _
+            "Bitte manuell kopieren nach: ~/Library/Application Scripts/com.microsoft.Excel/", "Warn"
+        Exit Function
+    End If
+
     ' Temp-Datei im Workbook-Verzeichnis (Sandbox-sicher)
     wbFolder = ThisWorkbook.Path
     If Right$(wbFolder, 1) <> "/" Then wbFolder = wbFolder & "/"
@@ -511,7 +636,7 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
     Dim dstEsc As String
     srcEsc = Replace(filePath, "'", "'\''")
     dstEsc = Replace(tmpPath, "'", "'\''")
-    script = "do shell script ""cp '" & srcEsc & "' '" & dstEsc & "'""" 
+    script = "do shell script ""cp '" & srcEsc & "' '" & dstEsc & "'"""
 
     cpResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
 
@@ -529,9 +654,10 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
     Get #fileNum, , rawBytes
     Close #fileNum
 
-    result = String$(fileLen, " ")
+    result = Space$(fileLen)
     For i = 0 To fileLen - 1
-        Mid$(result, i + 1, 1) = Chr(rawBytes(i))
+        ' Chr(0) bei Mid$-Assignment wirft Err 5 -- Nullbytes als Space behandeln
+        If rawBytes(i) > 0 Then Mid$(result, i + 1, 1) = Chr(rawBytes(i))
     Next i
 
     ReadEmlViaShellCopy = result
