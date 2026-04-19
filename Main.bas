@@ -4,7 +4,7 @@ Option Explicit
 ' ==============================================================
 ' Main.bas -- Lead-Import aus gespeicherten EML-Dateien
 ' --------------------------------------------------------------
-' Version  : 2.6
+' Version  : 2.7
 ' Datum    : 2026-04-19
 ' Autor    : Steffen
 ' --------------------------------------------------------------
@@ -26,6 +26,7 @@ Option Explicit
 '   Benoetigt: MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
 '
 ' Changelog:
+'   v2.7 | 2026-04-19 | Leadquelle aus From-Header statt Subject
 '   v2.6 | 2026-04-19 | Sandbox-Fix: AppleScriptTask Shell-Copy statt GetOpenFilename
 '                        Kein manueller Dialog mehr noetig (wie legacy_main)
 '   v2.5 | 2026-04-19 | Sandbox-Fix: GetOpenFilename einmalig + CanReadFile-Check
@@ -272,6 +273,7 @@ Private Function ParseEmlToKv(emlPath As String) As Collection
 
     KVSet kv, "_Subject", GetHeaderValue(raw, "Subject")
     KVSet kv, "_Date",    GetHeaderValue(raw, "Date")
+    KVSet kv, "_From",    GetHeaderValue(raw, "From")
 
     boundary = GetMimeBoundary(raw)
     If Len(boundary) = 0 Then Set ParseEmlToKv = kv: Exit Function
@@ -831,6 +833,7 @@ End Function
 Private Function BuildLeadFields(kv As Collection) As Collection
     Dim fields   As Collection
     Dim subject  As String
+    Dim fromHdr  As String
     Dim mailDate As String
     Dim id       As String
     Dim vorname  As String
@@ -851,6 +854,7 @@ Private Function BuildLeadFields(kv As Collection) As Collection
     Set fields = KVNew()
 
     subject  = KVGet(kv, "_Subject")
+    fromHdr  = KVGet(kv, "_From")
     mailDate = KVGet(kv, "_Date")
 
     ' -- Typ: Neue Anfrage ------------------------------------------
@@ -914,7 +918,7 @@ Private Function BuildLeadFields(kv As Collection) As Collection
     KVSet fields, "id",         id
     KVSet fields, "mail_date",  mailDate
     KVSet fields, "plz",        plz
-    KVSet fields, "leadquelle", subject
+    KVSet fields, "leadquelle", ExtractFromName(fromHdr)
     KVSet fields, "name",       nameVal
     KVSet fields, "adresse",    adresse
     KVSet fields, "ort",        ort
@@ -1088,6 +1092,24 @@ Private Function MonthFromAbbr(abbr As String) As Long
     End Select
 End Function
 
+Private Function ExtractFromName(fromHdr As String) As String
+    ' "PflegeHelfer24" <noreply@x.de>  -> PflegeHelfer24
+    ' Anfragen - Verbund Pflegehilfe <anfragen@pflegehilfe.de> -> Anfragen - Verbund Pflegehilfe
+    Dim ltPos As Long
+    Dim s     As String
+
+    s = Trim$(fromHdr)
+    ltPos = InStr(s, "<")
+    If ltPos > 1 Then
+        s = Trim$(Left$(s, ltPos - 1))
+    End If
+    ' Anf&uuml;hrungszeichen entfernen
+    If Left$(s, 1) = """" And Right$(s, 1) = """" And Len(s) > 1 Then
+        s = Mid$(s, 2, Len(s) - 2)
+    End If
+    ExtractFromName = s
+End Function
+
 Private Function TmpBase() As String
     Dim tmpDir As String
     tmpDir = Environ("TMPDIR")
@@ -1144,7 +1166,7 @@ Public Sub DiagnoseImport()
     Dim keyIdx     As Long
     Dim mailsFolder As String
 
-    msg = "=== Lead-Import Diagnose v2.5 ===" & vbLf & vbLf
+    msg = "=== Lead-Import Diagnose v2.7 ===" & vbLf & vbLf
 
     ' 0) Pfad aus Einstellungen lesen
     mailsFolder = GetMailsFolder()
@@ -1273,6 +1295,7 @@ Public Sub DiagnoseEmlContent()
 
     msg = "Datei    : " & emlFile & vbLf
     msg = msg & "Subject  : " & GetHeaderValue(raw, "Subject") & vbLf
+    msg = msg & "From     : " & GetHeaderValue(raw, "From") & vbLf
     msg = msg & "Date     : " & GetHeaderValue(raw, "Date") & vbLf
     msg = msg & "Boundary : " & IIf(Len(boundary) > 0, boundary, "(kein multipart)") & vbLf & vbLf
 
@@ -1303,6 +1326,7 @@ Public Sub DiagnoseEmlContent()
     msg = msg & "=== ParseEmlToKv ===" & vbLf
     Set testKv = ParseEmlToKv(emlPath)
     msg = msg & "_Subject : " & KVGet(testKv, "_Subject") & vbLf
+    msg = msg & "_From    : " & KVGet(testKv, "_From") & vbLf
     msg = msg & "_Date    : " & KVGet(testKv, "_Date") & vbLf
 
     keyList = KVGet(testKv, KV_KEYLIST)
