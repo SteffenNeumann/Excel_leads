@@ -1126,9 +1126,9 @@ Private Function ExtractFromName(fromHdr As String) As String
     If Left$(s, 1) = """" And Right$(s, 1) = """" And Len(s) > 1 Then
         s = Mid$(s, 2, Len(s) - 2)
     End If
-    ' Praefix "Anfragen - " entfernen (z.B. Verbund Pflegehilfe)
-    If LCase$(Left$(s, 8)) = "anfragen" And InStr(s, " - ") > 0 Then
-        s = Split(s, " - ", 2)(1)
+    ' Praefix vor "-" entfernen (z.B. "Anfragen - Verbund Pflegehilfe" -> "Verbund Pflegehilfe")
+    If InStr(s, "-") > 0 Then
+        s = Trim$(Split(s, "-", 2)(1))
     End If
     ExtractFromName = s
 End Function
