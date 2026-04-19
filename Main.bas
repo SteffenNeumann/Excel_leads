@@ -591,9 +591,10 @@ Private Sub EnsureMailReaderScptInstalled()
               Chr(9) & "end try" & vbLf & _
               "end FetchMessages" & vbLf
 
-    ' --- Versuch 2: ECHTER Home-Pfad (macOS legt Verzeichnis automatisch an) ---
+    ' --- Versuch 2: ECHTER Home-Pfad (mit EnsureFolderExists, falls Verz. fehlt) ---
     realPath = "/Users/" & Environ("USER") & _
                "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
+    EnsureFolderExists "/Users/" & Environ("USER") & "/Library/Application Scripts/com.microsoft.Excel"
     On Error Resume Next
     fileNum = FreeFile()
     Open realPath For Output As #fileNum
@@ -696,11 +697,8 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
     tmpPath = wbFolder & "_tmp_eml_import.eml"
 
     ' AppleScript: Shell-Copy in Temp-Pfad
-    Dim srcEsc As String
-    Dim dstEsc As String
-    srcEsc = Replace(filePath, "'", "'\''")
-    dstEsc = Replace(tmpPath, "'", "'\''")
-    script = "do shell script ""cp '" & srcEsc & "' '" & dstEsc & "'"""
+    ' quoted form of (Legacy-Muster): Unicode-sicher fuer Umlaute in Dateinamen
+    script = "do shell script ""cp "" & quoted form of " & Chr(34) & filePath & Chr(34) & " & "" "" & quoted form of " & Chr(34) & tmpPath & Chr(34)
 
     cpResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
 
