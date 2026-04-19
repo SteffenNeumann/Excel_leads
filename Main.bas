@@ -73,13 +73,15 @@ Private Const KV_KEYLIST As String = "__KEYS__"
 ' --- Fehler-Log (modulweit, wird pro Import-Lauf gefuellt) ---
 Private m_errLog As Collection
 
-Private Sub LogError(proc As String, Optional detail As String = "")
+Private Sub LogError(proc As String, Optional detail As String = "", Optional logType As String = "Error")
     If m_errLog Is Nothing Then Set m_errLog = New Collection
+    Dim ts As String: ts = Format$(Now, "YYYY-MM-DD HH:NN:SS")
+    Dim msg As String: msg = proc & " | Err " & Err.Number & ": " & Err.Description
+    ' Format: Type | Zeitstempel | Meldung | Detail
     Dim entry As String
-    entry = Format$(Now, "HH:NN:SS") & " | " & proc & " | Err " & Err.Number & ": " & Err.Description
-    If Len(detail) > 0 Then entry = entry & " | " & detail
+    entry = logType & "|" & ts & "|" & msg & "|" & detail
     m_errLog.Add entry
-    Debug.Print "[ERR] " & entry
+    Debug.Print "[" & UCase$(logType) & "] " & ts & " " & msg & IIf(Len(detail) > 0, " | " & detail, "")
 End Sub
 
 Private Function ErrLogText() As String
@@ -87,7 +89,8 @@ Private Function ErrLogText() As String
     Dim txt As String
     If m_errLog Is Nothing Then Exit Function
     For i = 1 To m_errLog.Count
-        txt = txt & m_errLog(i) & vbLf
+        ' Entry-Format: Type|Zeitstempel|Meldung|Detail -> lesbarer Text
+        txt = txt & Replace(m_errLog(i), "|", " | ") & vbLf
     Next i
     ErrLogText = txt
 End Function
@@ -97,10 +100,11 @@ Private Function ErrLogCount() As Long
 End Function
 
 Private Sub WriteErrLogToSheet()
-    ' Schreibt alle gesammelten Fehler in das Sheet "ErrLog".
-    ' Erstellt das Sheet automatisch, falls es nicht existiert.
+    ' Schreibt alle gesammelten Fehler in Tabelle "Tabelle3" auf Sheet "ErrLog".
+    ' Spalten: Type, Zeitstempel, Meldung, Details/Ursache
     Dim ws       As Worksheet
-    Dim nextRow  As Long
+    Dim tbl      As ListObject
+    Dim newRow   As ListRow
     Dim i        As Long
 
     If m_errLog Is Nothing Then Exit Sub
@@ -109,27 +113,30 @@ Private Sub WriteErrLogToSheet()
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets("ErrLog")
     On Error GoTo 0
-
     If ws Is Nothing Then
-        Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
-        ws.Name = "ErrLog"
-        ws.Range("A1").Value = "Zeitstempel"
-        ws.Range("B1").Value = "Prozedur"
-        ws.Range("C1").Value = "Fehler"
-        ws.Range("D1").Value = "Detail"
-        ws.Range("A1:D1").Font.Bold = True
+        Debug.Print "[WARN] Sheet 'ErrLog' nicht gefunden – Fehler nur im Direktfenster."
+        Exit Sub
     End If
 
-    nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
+    On Error Resume Next
+    Set tbl = ws.ListObjects("Tabelle3")
+    On Error GoTo 0
+    If tbl Is Nothing Then
+        Debug.Print "[WARN] Tabelle 'Tabelle3' auf Sheet 'ErrLog' nicht gefunden."
+        Exit Sub
+    End If
 
     For i = 1 To m_errLog.Count
         Dim parts() As String
-        parts = Split(m_errLog(i), " | ")
-        ws.Cells(nextRow, 1).Value = parts(0)                                        ' Zeitstempel
-        If UBound(parts) >= 1 Then ws.Cells(nextRow, 2).Value = parts(1)              ' Prozedur
-        If UBound(parts) >= 2 Then ws.Cells(nextRow, 3).Value = parts(2)              ' Fehler
-        If UBound(parts) >= 3 Then ws.Cells(nextRow, 4).Value = parts(3)              ' Detail
-        nextRow = nextRow + 1
+        parts = Split(m_errLog(i), "|")
+        Set newRow = tbl.ListRows.Add
+        newRow.Range(1, tbl.ListColumns("Type").Index).Value = parts(0)               ' Type
+        If UBound(parts) >= 1 Then _
+            newRow.Range(1, tbl.ListColumns("Zeitstempel").Index).Value = parts(1)    ' Zeitstempel
+        If UBound(parts) >= 2 Then _
+            newRow.Range(1, tbl.ListColumns("Meldung").Index).Value = parts(2)        ' Meldung
+        If UBound(parts) >= 3 Then _
+            newRow.Range(1, tbl.ListColumns("Details/Ursache").Index).Value = parts(3) ' Details/Ursache
     Next i
 End Sub
 
