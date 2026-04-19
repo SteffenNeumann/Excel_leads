@@ -521,7 +521,13 @@ End Function
 '   1. AppleScriptTask-Test → bereits installiert?
 '   2. Open For Output am ECHTEN Home-Pfad (kein MkDir)
 '   3. Open For Output am Container-Pfad (Fallback, mit MkDir)
+' Wird nur einmal pro Session versucht (Static-Flag).
+' Falls Install scheitert: kein Fehler -- ReadEmlText nutzt Open For Binary Fallback.
 Private Sub EnsureMailReaderScptInstalled()
+    Static alreadyTried As Boolean
+    If alreadyTried Then Exit Sub
+    alreadyTried = True
+
     Dim fileNum   As Integer
     Dim content   As String
     Dim realPath  As String
@@ -593,8 +599,8 @@ Private Sub EnsureMailReaderScptInstalled()
         Exit Sub
     End If
 
-    LogError "EnsureMailReaderScptInstalled", _
-        "Schreiben fehlgeschlagen (Err " & writeErr & ") nach: " & contPath, "Warn"
+    ' Kein LogError -- Fallback (Open For Binary) existiert in ReadEmlText
+    Debug.Print "[INFO] .scpt-Install nicht moeglich (Err " & writeErr & ") -> Open For Binary Fallback"
 End Sub
 
 ' --- Ordnerstruktur rekursiv anlegen ---
