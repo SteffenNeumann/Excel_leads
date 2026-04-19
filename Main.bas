@@ -454,8 +454,44 @@ Private Function ReadEmlText(filePath As String) As String
             Exit Function
         End If
 
-        ' --- Versuch 2: Open For Binary direkt (Freigabe-Dialog, wie Legacy) ---
-        Debug.Print "[ReadEmlText] ShellCopy nicht verfuegbar -> Fallback Open For Binary"
+        ' --- Versuch 2: FileCopy zu ASCII-Temp (Umlaut-Workaround, wie legacy ReadTextFileViaShell) ---
+        ' VBA Open For Binary scheitert bei Umlauten im Dateinamen (Err 75 auf Mac).
+        ' FileCopy nutzt macOS-API und unterstuetzt Unicode-Pfade korrekt.
+        Dim tmpPath As String
+        tmpPath = TmpBase() & "_emlread_tmp.eml"
+        On Error Resume Next
+        FileCopy filePath, tmpPath
+        Dim fcErr As Long: fcErr = Err.Number
+        On Error GoTo 0
+
+        If fcErr = 0 Then
+            On Error GoTo ErrHandler
+            fileNum = FreeFile()
+            Open tmpPath For Binary Access Read As #fileNum
+            fileLen = LOF(fileNum)
+            If fileLen > 0 Then
+                ReDim rawBytes(0 To fileLen - 1)
+                Get #fileNum, , rawBytes
+            End If
+            Close #fileNum
+            fileNum = 0
+            On Error Resume Next
+            Kill tmpPath
+            On Error GoTo 0
+
+            If fileLen = 0 Then Exit Function
+            result = Space$(fileLen)
+            For i = 0 To fileLen - 1
+                If rawBytes(i) > 0 Then Mid$(result, i + 1, 1) = Chr(rawBytes(i))
+            Next i
+            result = Replace(result, vbCrLf, vbLf)
+            result = Replace(result, vbCr,   vbLf)
+            ReadEmlText = result
+            Exit Function
+        End If
+
+        ' --- Versuch 3: Open For Binary direkt (letzte Option, scheitert bei Umlauten) ---
+        Debug.Print "[ReadEmlText] FileCopy fehlgeschlagen (Err " & fcErr & ") -> Open For Binary direkt"
         On Error GoTo ErrHandler
         fileNum = FreeFile()
         Open filePath For Binary Access Read As #fileNum
