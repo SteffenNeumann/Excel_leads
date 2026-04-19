@@ -429,10 +429,9 @@ ErrHandler:
 End Function
 
 ' --- EML-Datei einlesen ---
-' Strategie (Mac):
-'   Versuch 1: Open For Binary direkt (klappt auf Excel 365 Mac ohne Dialog)
-'   Versuch 2: AppleScriptTask Shell-Copy (Fallback falls Sandbox blockiert)
-'              Benoetigt MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
+' Strategie (Mac, wie legacy_main.bas):
+'   Versuch 1: AppleScriptTask Shell-Copy (kein Sandbox-Dialog, braucht MailReader.scpt)
+'   Versuch 2: Open For Binary direkt (loest Freigabe-Dialog aus, aber funktioniert)
 ' Windows: direkt Binary-Read.
 Private Function ReadEmlText(filePath As String) As String
     Dim fileNum    As Integer
@@ -442,15 +441,40 @@ Private Function ReadEmlText(filePath As String) As String
     Dim i          As Long
 
     #If Mac Then
-        ' Mac: direkt Shell-Copy via AppleScriptTask (Open For Binary loest Sandbox-Dialog aus)
-        ' EnsureMailReaderScptInstalled installiert MailReader.scpt automatisch falls noetig.
-        On Error GoTo ErrHandler
+        ' --- Versuch 1: Shell-Copy via AppleScriptTask (kein Dialog) ---
+        On Error Resume Next
         result = ReadEmlViaShellCopy(filePath)
-        If Len(result) > 0 Then
+        Dim shellErr As Long: shellErr = Err.Number
+        On Error GoTo 0
+
+        If shellErr = 0 And Len(result) > 0 Then
             result = Replace(result, vbCrLf, vbLf)
             result = Replace(result, vbCr,   vbLf)
             ReadEmlText = result
+            Exit Function
         End If
+
+        ' --- Versuch 2: Open For Binary direkt (Freigabe-Dialog, wie Legacy) ---
+        Debug.Print "[ReadEmlText] ShellCopy nicht verfuegbar -> Fallback Open For Binary"
+        On Error GoTo ErrHandler
+        fileNum = FreeFile()
+        Open filePath For Binary Access Read As #fileNum
+
+        fileLen = LOF(fileNum)
+        If fileLen = 0 Then Close #fileNum: Exit Function
+
+        ReDim rawBytes(0 To fileLen - 1)
+        Get #fileNum, , rawBytes
+        Close #fileNum
+
+        result = Space$(fileLen)
+        For i = 0 To fileLen - 1
+            If rawBytes(i) > 0 Then Mid$(result, i + 1, 1) = Chr(rawBytes(i))
+        Next i
+
+        result = Replace(result, vbCrLf, vbLf)
+        result = Replace(result, vbCr,   vbLf)
+        ReadEmlText = result
         Exit Function
     #End If
 
@@ -620,9 +644,7 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
     On Error GoTo ErrHandler
 
     If scptErr <> 0 Then
-        LogError "ReadEmlViaShellCopy", _
-            APPLESCRIPT_FILE & " konnte nicht installiert werden (Err " & scptErr & "). " & _
-            "Bitte manuell kopieren nach: ~/Library/Application Scripts/com.microsoft.Excel/", "Warn"
+        Debug.Print "[ReadEmlViaShellCopy] .scpt nicht verfuegbar (Err " & scptErr & ") -> Fallback"
         Exit Function
     End If
 
