@@ -553,22 +553,20 @@ End Function
 ' Das Verzeichnis wird von macOS beim ersten Sandbox-Start automatisch angelegt.
 ' Deshalb: kein MkDir noetig, nur Open For Output am echten Pfad.
 '
-' Strategie (3 Versuche):
-'   1. AppleScriptTask-Test → bereits installiert?
-'   2. Open For Output am ECHTEN Home-Pfad (kein MkDir)
-'   3. Open For Output am Container-Pfad (Fallback, mit MkDir)
+' Strategie:
+'   1. AppleScriptTask-Test -> bereits installiert?
+'   2. FileCopy aus Workbook-Ordner zum Container-Pfad (wie legacy InstallAppleScript).
+'      MailReader.scpt ist eine kompilierte Binaerdatei -- kein Plaintext einbetten!
+'      FileCopy TO container path funktioniert in der Mac-Sandbox.
 ' Wird nur einmal pro Session versucht (Static-Flag).
-' Falls Install scheitert: kein Fehler -- ReadEmlText nutzt Open For Binary Fallback.
 Private Sub EnsureMailReaderScptInstalled()
     Static alreadyTried As Boolean
     If alreadyTried Then Exit Sub
     alreadyTried = True
 
-    Dim fileNum   As Integer
-    Dim content   As String
-    Dim realPath  As String
-    Dim contPath  As String
-    Dim writeErr  As Long
+    Dim sourcePath As String
+    Dim contPath   As String
+    Dim writeErr   As Long
 
     ' --- Versuch 1: Bereits installiert? ---
     On Error Resume Next
@@ -582,81 +580,28 @@ Private Sub EnsureMailReaderScptInstalled()
     Err.Clear
     On Error GoTo 0
 
-    ' Eingebetteter Inhalt
-    content = "on FetchMessages(scriptText)" & vbLf & _
-              Chr(9) & "try" & vbLf & _
-              Chr(9) & Chr(9) & "return run script scriptText" & vbLf & _
-              Chr(9) & "on error errMsg number errNum" & vbLf & _
-              Chr(9) & Chr(9) & "return ""ERROR:"" & errNum & "":"" & errMsg" & vbLf & _
-              Chr(9) & "end try" & vbLf & _
-              "end FetchMessages" & vbLf
+    ' --- Versuch 2: FileCopy der kompilierten .scpt aus Workbook-Ordner ---
+    ' (Exakt wie legacy InstallAppleScript: FileCopy sourcePath, containerPath)
+    sourcePath = ThisWorkbook.Path & "/" & APPLESCRIPT_FILE
+    contPath   = Environ("HOME") & "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
 
-    ' --- Versuch 2: ECHTER Home-Pfad (mit EnsureFolderExists, falls Verz. fehlt) ---
-    realPath = "/Users/" & Environ("USER") & _
-               "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
-    EnsureFolderExists "/Users/" & Environ("USER") & "/Library/Application Scripts/com.microsoft.Excel"
-    On Error Resume Next
-    fileNum = FreeFile()
-    Open realPath For Output As #fileNum
-    writeErr = Err.Number
-    If writeErr = 0 Then
-        Print #fileNum, content
-        Close #fileNum
-        writeErr = Err.Number
-    End If
-    On Error GoTo 0
-
-    If writeErr = 0 Then
-        Debug.Print "[INFO] MailReader.scpt installiert (real path): " & realPath
+    If Len(Dir$(sourcePath)) = 0 Then
+        Debug.Print "[WARN] MailReader.scpt fehlt im Workbook-Ordner: " & sourcePath
         Exit Sub
     End If
 
-    Debug.Print "[WARN] Real-Pfad fehlgeschlagen (Err " & writeErr & "): " & realPath
-
-    ' --- Versuch 3: TMPDIR schreiben, dann FileCopy zum Container-Pfad ---
-    ' (Open For Output am Container-Pfad schlaegt mit Err 75 fehl;
-    '  FileCopy vom TMPDIR funktioniert wie Legacy's InstallAppleScript)
-    Dim tmpScptPath As String
-    tmpScptPath = TmpBase() & "mailreader_install.scpt"
+    EnsureFolderExists Environ("HOME") & "/Library/Application Scripts/com.microsoft.Excel"
 
     On Error Resume Next
-    writeErr = 0
-    fileNum = FreeFile()
-    Open tmpScptPath For Output As #fileNum
-    writeErr = Err.Number
-    If writeErr = 0 Then
-        Print #fileNum, content
-        Close #fileNum
-    End If
-    On Error GoTo 0
-
-    If writeErr <> 0 Then
-        Debug.Print "[INFO] .scpt-Install nicht moeglich (TMPDIR Err " & writeErr & ") -> Open For Binary Fallback"
-        Exit Sub
-    End If
-
-    contPath = Environ("HOME") & _
-               "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
-    EnsureFolderExists Environ("HOME") & _
-               "/Library/Application Scripts/com.microsoft.Excel"
-
-    On Error Resume Next
-    writeErr = 0
-    FileCopy tmpScptPath, contPath
+    FileCopy sourcePath, contPath
     writeErr = Err.Number
     On Error GoTo 0
 
-    On Error Resume Next
-    Kill tmpScptPath
-    On Error GoTo 0
-
     If writeErr = 0 Then
-        Debug.Print "[INFO] MailReader.scpt installiert (TMPDIR->container FileCopy): " & contPath
-        Exit Sub
+        Debug.Print "[INFO] MailReader.scpt installiert: " & contPath
+    Else
+        Debug.Print "[WARN] FileCopy fehlgeschlagen (Err " & writeErr & "): " & sourcePath & " -> " & contPath
     End If
-
-    ' Kein LogError -- Fallback (Open For Binary) existiert in ReadEmlText
-    Debug.Print "[INFO] .scpt-Install nicht moeglich (FileCopy Err " & writeErr & ") -> Open For Binary Fallback"
 End Sub
 
 ' --- Ordnerstruktur rekursiv anlegen ---
