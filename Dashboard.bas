@@ -4,7 +4,71 @@ Option Explicit
 '  Dashboard Builder - Lead Analytics Dashboard
 '  Quelle: Kundenliste (Pipeline-Sheet)
 '  Design: Rounded cards, shadow, blue accent
+'  Version:   1.3
+'  Geaendert: 2026-04-18
 ' ============================================================
+
+' ------------------------------------------------------------
+'  DEBUG: Zeigt exakte Rohdaten der Absprung-Spalten
+'  Ausfuehren: VBA-Editor -> Run -> DebugGrundValues
+' ------------------------------------------------------------
+Public Sub DebugGrundValues()
+    Dim tbl As ListObject
+    Dim dataArr As Variant, headers As Variant
+    Dim hCols As Long, nRows As Long
+    Dim cGrund As Long, cAbgNach As Long, cMonat As Long
+    Dim c As Long, r As Long, ci As Long
+    Dim raw As String, cleaned As String, codes As String
+    Dim out As String
+    Dim shown As Long
+    Dim fPath As String
+
+    On Error Resume Next
+    Set tbl = ThisWorkbook.Worksheets("Pipeline").ListObjects("Kundenliste")
+    On Error GoTo 0
+    If tbl Is Nothing Then MsgBox "Tabelle nicht gefunden": Exit Sub
+
+    dataArr = tbl.DataBodyRange.Value
+    headers = tbl.HeaderRowRange.Value
+    hCols = UBound(headers, 2)
+    nRows = UBound(dataArr, 1)
+
+    For c = 1 To hCols
+        Select Case Trim(CStr(headers(1, c)))
+            Case "Lead erhalten": cMonat = c
+            Case "Grund zum Absprung":  cGrund = c
+            Case "Abgesprungen nach":   cAbgNach = c
+        End Select
+    Next c
+
+    out = "cMonat=" & cMonat & "  cGrund=" & cGrund & "  cAbgNach=" & cAbgNach & vbLf
+    out = out & String(60, "-") & vbLf
+
+    shown = 0
+    For r = 1 To nRows
+        raw = CStr(dataArr(r, cGrund) & "")
+        If Len(raw) > 0 Then
+            cleaned = Trim(Replace(Replace(raw, Chr(10), "|"), Chr(13), "|"))
+            cleaned = Replace(cleaned, Chr(160), "[NBSP]")
+            codes = " Codes:"
+            For ci = 1 To IIf(Len(raw) < 5, Len(raw), 5)
+                codes = codes & Asc(Mid(raw, ci, 1)) & ","
+            Next ci
+            out = out & "Z" & r & ": Len=" & Len(raw) & "  |" & cleaned & "|" & codes & vbLf
+            shown = shown + 1
+            If shown >= 20 Then out = out & "... (max 20 Zeilen)": Exit For
+        End If
+    Next r
+
+    fPath = Environ("USERPROFILE") & "\Desktop\debug_grund.txt"
+    If fPath = "\Desktop\debug_grund.txt" Then
+        fPath = Environ("HOME") & "/Desktop/debug_grund.txt"
+    End If
+    Open fPath For Output As #1
+    Print #1, out
+    Close #1
+    MsgBox "Debug-Datei gespeichert:" & vbLf & fPath, vbInformation
+End Sub
 
 Private Sub FormatCard(shp As Shape)
     With shp
@@ -63,8 +127,8 @@ Public Sub BuildDashboard()
     Dim mLabels(1 To 60) As String, mKeys(1 To 60) As Long
     Dim mLeads(1 To 60) As Long, mClosed(1 To 60) As Long, mDropped(1 To 60) As Long
     Dim mCount As Long
-    Dim rLabels(1 To 50) As String, rCounts(1 To 50) As Long, rCount As Long
-    Dim aLabels(1 To 50) As String, aCounts(1 To 50) As Long, aCount As Long
+    Dim rLabels(1 To 500) As String, rCounts(1 To 500) As Long, rCount As Long
+    Dim aLabels(1 To 500) As String, aCounts(1 To 500) As Long, aCount As Long
     Dim totalLeads As Long, totalClosed As Long
     Dim totalDropped As Long, totalLaufend As Long
     Dim curYM As Long, curMLeads As Long, curMClosed As Long, curMDropped As Long
@@ -120,13 +184,39 @@ Public Sub BuildDashboard()
 
     For c = 1 To hCols
         Select Case Trim(CStr(headers(1, c)))
-            Case "Monat Lead erhalten": cMonat = c
+            Case "Lead erhalten": cMonat = c
             Case "Abschluss": cAbschluss = c
             Case "Grund zum Absprung": cGrund = c
             Case "Abgesprungen nach": cAbgNach = c
             Case "Status": cStatus = c
         End Select
     Next c
+
+    ' ===== PFLICHT-SPALTEN VALIDIEREN =====
+    If cMonat = 0 Then
+        Dim dbgHeaders As String
+        dbgHeaders = "Gefundene Spalten in 'Kundenliste':" & vbLf
+        For c = 1 To hCols
+            dbgHeaders = dbgHeaders & "  [" & c & "] """ & Trim(CStr(headers(1, c))) & """" & vbLf
+        Next c
+        Application.ScreenUpdating = True
+        MsgBox "Spalte 'Lead erhalten' nicht gefunden!" & vbLf & vbLf & _
+               dbgHeaders & vbLf & _
+               "Bitte Spaltenname in der Tabelle pruefen.", _
+               vbCritical, "Dashboard: Spalte fehlt"
+        Exit Sub
+    End If
+    If cAbschluss = 0 Or cStatus = 0 Or cGrund = 0 Or cAbgNach = 0 Then
+        Application.ScreenUpdating = True
+        MsgBox "Fehlende Pflichtspalten:" & vbLf & _
+               IIf(cAbschluss = 0, "  - 'Abschluss'" & vbLf, "") & _
+               IIf(cStatus = 0, "  - 'Status'" & vbLf, "") & _
+               IIf(cGrund = 0, "  - 'Grund zum Absprung'" & vbLf, "") & _
+               IIf(cAbgNach = 0, "  - 'Abgesprungen nach'" & vbLf, "") & vbLf & _
+               "Bitte Spaltennamen in 'Kundenliste' pruefen.", _
+               vbCritical, "Dashboard: Spalten fehlen"
+        Exit Sub
+    End If
 
     curYM = Year(Date) * 100 + Month(Date)
 
@@ -155,8 +245,10 @@ Public Sub BuildDashboard()
         ym = Year(dt) * 100 + Month(dt)
         mLabel = Format(dt, "MMM YY")
         abschluss = LCase(Trim(CStr(dataArr(r, cAbschluss) & "")))
-        grund = Trim(CStr(dataArr(r, cGrund) & ""))
-        abgNach = Trim(CStr(dataArr(r, cAbgNach) & ""))
+        grund = Trim(Replace(Replace(CStr(dataArr(r, cGrund) & ""), Chr(10), " "), Chr(13), " "))
+        grund = Application.WorksheetFunction.Trim(grund) ' entfernt doppelte Leerzeichen
+        abgNach = Trim(Replace(Replace(CStr(dataArr(r, cAbgNach) & ""), Chr(10), " "), Chr(13), " "))
+        abgNach = Application.WorksheetFunction.Trim(abgNach)
 
         ' Month lookup
         found = False
@@ -185,7 +277,7 @@ Public Sub BuildDashboard()
         If Len(grund) > 0 Then
             found = False
             For idx = 1 To rCount
-                If rLabels(idx) = grund Then
+                If LCase(rLabels(idx)) = LCase(grund) Then
                     found = True: rCounts(idx) = rCounts(idx) + 1: Exit For
                 End If
             Next idx
@@ -198,7 +290,7 @@ Public Sub BuildDashboard()
         If Len(abgNach) > 0 Then
             found = False
             For idx = 1 To aCount
-                If aLabels(idx) = abgNach Then
+                If LCase(aLabels(idx)) = LCase(abgNach) Then
                     found = True: aCounts(idx) = aCounts(idx) + 1: Exit For
                 End If
             Next idx

@@ -293,6 +293,39 @@ Warte auf Kundenbestätigung.
 
 ---
 
+### 5. ⚠️ LESSON LEARNED: Excel-Datei durch openpyxl zerstört (Datenverlust)
+
+**Symptom:** Nach dem Ausführen eines Python-Skripts mit `openpyxl` war die `.xlsm`-Datei korrupt und konnte nicht mehr geöffnet werden. Alle VBA-Module, Tabellenformatierungen und Daten waren zerstört.
+
+**Ursache:** `openpyxl` kann `.xlsm`-Dateien (mit VBA-Makros) öffnen und lesen, **unterstützt aber das Schreiben nicht vollständig**. Beim Speichern mit `workbook.save()` werden VBA-Makros, Named Ranges, Datenvalidierungen und sonstige Excel-spezifische Metadaten teilweise oder vollständig gelöscht. Besonders kritisch: Die Datei war gleichzeitig in Excel geöffnet – dadurch entstand eine Schreibkollision.
+
+**Auswirkung:** Produktionsdatei `.xlsm` war nicht mehr öffenbar. Wiederherstellung nur über Backup möglich.
+
+| # | Was schief lief | Warum gefährlich |
+|---|---|---|
+| 1 | `openpyxl` + `.xlsm` + `workbook.save()` | VBA-Module, Validierungen und Named Ranges werden gelöscht |
+| 2 | Datei war gleichzeitig in Excel offen | Schreibkollision → Datei-Korruption |
+| 3 | Kein Backup vor dem Skript-Aufruf | Kein Fallback möglich |
+
+**Goldene Regeln für dieses Projekt:**
+
+> 🚫 **NIEMALS** `openpyxl` (oder andere Python-Bibliotheken) zum **Schreiben** in `.xlsm`-Dateien verwenden.
+>
+> 🚫 **NIEMALS** eine `.xlsm`-Datei per Skript modifizieren, solange sie in Excel geöffnet ist.
+>
+> ✅ Dateiänderungen an `.xlsm` **ausschließlich über VBA** (innerhalb von Excel) vornehmen.
+>
+> ✅ Vor jedem externen Skript, das die `.xlsm` berührt: **Backup anlegen** (z. B. in `Backup/`-Ordner).
+>
+> ✅ Python/openpyxl darf die `.xlsm` nur **lesen** (`read_only=True`), niemals schreiben.
+
+**Erlaubte Alternativen für externe Datenänderungen:**
+- Daten in eine **separate `.xlsx`** (ohne Makros) schreiben → VBA liest diese ein
+- VBA-Makro per Shell triggern: `osascript -e 'tell application "Microsoft Excel" to run macro ...'`
+- Daten als **CSV exportieren** → VBA importiert die CSV
+
+---
+
 ### Commit-Historie (chronologisch)
 | Datum | SHA | Beschreibung |
 |---|---|---|
