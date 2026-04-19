@@ -864,10 +864,9 @@ Private Function Base64DecodeToString(b64 As String) As String
 End Function
 
 ' --- CSV in KV-Store einlesen (Header-Zeile + erste Datenzeile) ---
+' Beachtet mehrzeilige Felder in Anfuehrungszeichen (Quote-aware).
 Private Sub ParseCsvIntoDict(csvText As String, kv As Collection)
     Dim csvNorm     As String
-    Dim lines()     As String
-    Dim lineIdx     As Long
     Dim headerLine  As String
     Dim dataLine    As String
     Dim headers()   As String
@@ -875,26 +874,54 @@ Private Sub ParseCsvIntoDict(csvText As String, kv As Collection)
     Dim colIdx      As Long
     Dim fieldName   As String
     Dim fieldVal    As String
-    Dim headerFound As Boolean
-    Dim dataFound   As Boolean
+    Dim pos         As Long
+    Dim lineEnd     As Long
 
     csvNorm = Replace(Replace(csvText, vbCrLf, vbLf), vbCr, vbLf)
-    lines   = Split(csvNorm, vbLf)
 
-    For lineIdx = 0 To UBound(lines)
-        If Len(Trim$(lines(lineIdx))) > 0 Then
-            If Not headerFound Then
-                headerLine  = lines(lineIdx)
-                headerFound = True
-            ElseIf Not dataFound Then
-                dataLine  = lines(lineIdx)
-                dataFound = True
-                Exit For
+    ' --- Header-Zeile: erste nicht-leere Zeile (keine Quotes erwartet) ---
+    pos = 1
+    Do While pos <= Len(csvNorm)
+        lineEnd = InStr(pos, csvNorm, vbLf)
+        If lineEnd = 0 Then lineEnd = Len(csvNorm) + 1
+        headerLine = Mid$(csvNorm, pos, lineEnd - pos)
+        pos = lineEnd + 1
+        If Len(Trim$(headerLine)) > 0 Then Exit Do
+    Loop
+    If Len(Trim$(headerLine)) = 0 Then Exit Sub
+
+    ' --- Daten-Zeile: naechste logische Zeile (Quote-aware) ---
+    ' Sammelt Zeilen bis alle Anfuehrungszeichen geschlossen sind.
+    Dim inQuote As Boolean
+    Dim ch      As String
+    Dim ci      As Long
+    dataLine = ""
+    Do While pos <= Len(csvNorm)
+        lineEnd = InStr(pos, csvNorm, vbLf)
+        If lineEnd = 0 Then lineEnd = Len(csvNorm) + 1
+        If Len(dataLine) > 0 Then
+            dataLine = dataLine & vbLf & Mid$(csvNorm, pos, lineEnd - pos)
+        Else
+            Dim chunk As String
+            chunk = Mid$(csvNorm, pos, lineEnd - pos)
+            If Len(Trim$(chunk)) = 0 Then
+                pos = lineEnd + 1
+                GoTo NextChunk
             End If
+            dataLine = chunk
         End If
-    Next lineIdx
+        pos = lineEnd + 1
 
-    If Not headerFound Or Not dataFound Then Exit Sub
+        ' Pruefen ob alle Quotes geschlossen sind
+        inQuote = False
+        For ci = 1 To Len(dataLine)
+            ch = Mid$(dataLine, ci, 1)
+            If ch = """" Then inQuote = Not inQuote
+        Next ci
+        If Not inQuote Then Exit Do
+NextChunk:
+    Loop
+    If Len(Trim$(dataLine)) = 0 Then Exit Sub
 
     headers = ParseCsvLine(headerLine)
     values  = ParseCsvLine(dataLine)
