@@ -4,7 +4,7 @@ Option Explicit
 ' ==============================================================
 ' Main.bas -- Lead-Import aus gespeicherten EML-Dateien
 ' --------------------------------------------------------------
-' Version  : 2.7
+' Version  : 2.8
 ' Datum    : 2026-04-19
 ' Autor    : Steffen
 ' --------------------------------------------------------------
@@ -26,6 +26,7 @@ Option Explicit
 '   Benoetigt: MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
 '
 ' Changelog:
+'   v2.8 | 2026-04-19 | Status='Lead erhalten', Leadquelle-Praefix entfernt
 '   v2.7 | 2026-04-19 | Leadquelle aus From-Header statt Subject
 '   v2.6 | 2026-04-19 | Sandbox-Fix: AppleScriptTask Shell-Copy statt GetOpenFilename
 '                        Kein manueller Dialog mehr noetig (wie legacy_main)
@@ -945,7 +946,7 @@ Private Sub AddLeadRow(fields As Collection, tbl As ListObject)
 
     SetCellDate newRow, hIdx, C_ERHALTEN, mailDate
     SetCell     newRow, hIdx, C_ID,       KVGet(fields, "id")
-    SetCell     newRow, hIdx, C_STATUS,   "Offen"
+    SetCell     newRow, hIdx, C_STATUS,   "Lead erhalten"
     SetCell     newRow, hIdx, C_QUELLE,   KVGet(fields, "leadquelle")
     SetCell     newRow, hIdx, C_NAME,     KVGet(fields, "name")
     SetCell     newRow, hIdx, C_PLZ,      KVGet(fields, "plz")
@@ -1107,6 +1108,10 @@ Private Function ExtractFromName(fromHdr As String) As String
     If Left$(s, 1) = """" And Right$(s, 1) = """" And Len(s) > 1 Then
         s = Mid$(s, 2, Len(s) - 2)
     End If
+    ' Praefix "Anfragen - " entfernen (z.B. Verbund Pflegehilfe)
+    If Left$(s, 12) = "Anfragen - " Then
+        s = Mid$(s, 13)
+    End If
     ExtractFromName = s
 End Function
 
@@ -1166,7 +1171,7 @@ Public Sub DiagnoseImport()
     Dim keyIdx     As Long
     Dim mailsFolder As String
 
-    msg = "=== Lead-Import Diagnose v2.7 ===" & vbLf & vbLf
+    msg = "=== Lead-Import Diagnose v2.8 ===" & vbLf & vbLf
 
     ' 0) Pfad aus Einstellungen lesen
     mailsFolder = GetMailsFolder()
