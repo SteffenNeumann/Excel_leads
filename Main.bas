@@ -99,6 +99,16 @@ Private Function ErrLogCount() As Long
     If Not m_errLog Is Nothing Then ErrLogCount = m_errLog.Count
 End Function
 
+' --- TEST-SUB: Nach dem Test wieder loeschen! ---
+Public Sub TestErrLog()
+    Set m_errLog = New Collection
+    LogError "TestErrLog", "Testfehler Nr. 1 - simuliert", "Error"
+    LogError "TestErrLog", "Warnung: Datei nicht optimal", "Warnung"
+    LogError "TestErrLog", "Info: Import gestartet", "Info"
+    WriteErrLogToSheet
+    MsgBox "3 Test-Eintraege in ErrLog geschrieben." & vbLf & vbLf & ErrLogText(), vbInformation, "ErrLog Test"
+End Sub
+
 Private Sub WriteErrLogToSheet()
     ' Schreibt alle gesammelten Fehler in Tabelle "Tabelle3" auf Sheet "ErrLog".
     ' Spalten: Type, Zeitstempel, Meldung, Details/Ursache
@@ -126,17 +136,29 @@ Private Sub WriteErrLogToSheet()
         Exit Sub
     End If
 
+    ' Spalten-Indizes einmalig aufloesen
+    Dim cType As Long, cZeit As Long, cMeld As Long, cDetail As Long
+    On Error Resume Next
+    cType   = tbl.ListColumns("Type").Index
+    cZeit   = tbl.ListColumns("Zeitstempel").Index
+    cMeld   = tbl.ListColumns("Meldung").Index
+    cDetail = tbl.ListColumns("Details/Ursache").Index
+    On Error GoTo 0
+    If cType = 0 Or cZeit = 0 Or cMeld = 0 Or cDetail = 0 Then
+        Debug.Print "[WARN] ErrLog-Spalte nicht gefunden: Type=" & cType & _
+                    " Zeitstempel=" & cZeit & " Meldung=" & cMeld & _
+                    " Details/Ursache=" & cDetail
+        Exit Sub
+    End If
+
     For i = 1 To m_errLog.Count
         Dim parts() As String
         parts = Split(m_errLog(i), "|")
         Set newRow = tbl.ListRows.Add
-        newRow.Range(1, tbl.ListColumns("Type").Index).Value = parts(0)               ' Type
-        If UBound(parts) >= 1 Then _
-            newRow.Range(1, tbl.ListColumns("Zeitstempel").Index).Value = parts(1)    ' Zeitstempel
-        If UBound(parts) >= 2 Then _
-            newRow.Range(1, tbl.ListColumns("Meldung").Index).Value = parts(2)        ' Meldung
-        If UBound(parts) >= 3 Then _
-            newRow.Range(1, tbl.ListColumns("Details/Ursache").Index).Value = parts(3) ' Details/Ursache
+        newRow.Range.Cells(1, cType).Value = parts(0)
+        If UBound(parts) >= 1 Then newRow.Range.Cells(1, cZeit).Value = parts(1)
+        If UBound(parts) >= 2 Then newRow.Range.Cells(1, cMeld).Value = parts(2)
+        If UBound(parts) >= 3 Then newRow.Range.Cells(1, cDetail).Value = parts(3)
     Next i
 End Sub
 
@@ -1120,20 +1142,29 @@ Private Function LeadAlreadyExists(leadId As String, tbl As ListObject) As Boole
     Dim idColIdx As Long
     Dim dataRng  As Range
     Dim cell     As Range
+    Dim cleanId  As String
+    Dim cellVal  As String
 
     On Error GoTo ErrHandler
 
-    If Len(Trim$(leadId)) = 0 Then Exit Function
+    ' Unsichtbare Zeichen (CR, LF, Tab) entfernen
+    cleanId = Trim$(Replace(Replace(Replace(leadId, vbCr, ""), vbLf, ""), vbTab, ""))
+    If Len(cleanId) = 0 Then Exit Function
 
     Set hIdx = BuildHIdx(tbl)
-    If Not KVExists(hIdx, LCase$(C_ID)) Then Exit Function
+    If Not KVExists(hIdx, LCase$(C_ID)) Then
+        Debug.Print "[WARN] Spalte '" & C_ID & "' nicht in Tabelle gefunden."
+        Exit Function
+    End If
     idColIdx = CLng(KVGet(hIdx, LCase$(C_ID)))
 
     Set dataRng = tbl.ListColumns(idColIdx).DataBodyRange
     If dataRng Is Nothing Then Exit Function
 
     For Each cell In dataRng
-        If StrComp(Trim$(CStr(cell.Value)), leadId, vbTextCompare) = 0 Then
+        cellVal = Trim$(Replace(Replace(Replace(CStr(cell.Value), vbCr, ""), vbLf, ""), vbTab, ""))
+        If StrComp(cellVal, cleanId, vbTextCompare) = 0 Then
+            Debug.Print "[DUP] Duplikat erkannt: " & cleanId
             LeadAlreadyExists = True
             Exit Function
         End If
