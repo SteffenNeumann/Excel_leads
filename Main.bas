@@ -4,7 +4,7 @@ Option Explicit
 ' ==============================================================
 ' Main.bas -- Lead-Import aus gespeicherten EML-Dateien
 ' --------------------------------------------------------------
-' Version  : 2.5
+' Version  : 2.6
 ' Datum    : 2026-04-19
 ' Autor    : Steffen
 ' --------------------------------------------------------------
@@ -19,12 +19,15 @@ Option Explicit
 ' Umlaut-Sicherheit : Base64-Bytes -> Utf8BytesToString (pure VBA)
 ' Dictionary        : Pure VBA Collection (kein Scripting.Dictionary)
 '
-' Mac-Sandbox-Loesung (v2.5):
-'   GetOpenFilename wird EINMALIG aufgerufen um Ordner-Zugriff zu
-'   erteilen. Danach funktioniert Open For Binary fuer alle Dateien
-'   im Ordner ohne weitere Dialoge. Kein AppleScriptTask, kein .scpt.
+' Mac-Sandbox-Loesung (v2.6):
+'   Open For Binary direkt versuchen. Falls Sandbox blockiert:
+'   AppleScriptTask ruft Shell "cp" auf -> kopiert EML in Temp-Datei
+'   mit ASCII-Name im gleichen Ordner -> Binary-Read ohne Dialog.
+'   Benoetigt: MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
 '
 ' Changelog:
+'   v2.6 | 2026-04-19 | Sandbox-Fix: AppleScriptTask Shell-Copy statt GetOpenFilename
+'                        Kein manueller Dialog mehr noetig (wie legacy_main)
 '   v2.5 | 2026-04-19 | Sandbox-Fix: GetOpenFilename einmalig + CanReadFile-Check
 '                        ZugriffErteilen() als eigenstaendiger Public Sub
 '   v2.4 | 2026-04-19 | ReadEmlText via MacScript/cat (kein Sandbox-Dialog)
@@ -34,6 +37,10 @@ Option Explicit
 '   v2.0 | 2026-04-18 | Pure VBA MIME-Parser, kein Shell-Zugriff
 '   v1.1 | 2026-04-18 | Python/Perl via do shell script (obsolet)
 ' ==============================================================
+
+' --- AppleScriptTask (Mac-Sandbox-Workaround) ---
+Private Const APPLESCRIPT_FILE    As String = "MailReader.scpt"
+Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
 
 ' --- Pfad-Einstellung (wird aus Sheet "Berechnung", Named Range "mailpath" gelesen) ---
 Private Const SETTINGS_SHEET   As String = "Berechnung"
@@ -209,15 +216,9 @@ Public Sub ImportLeadsFromMailFolder()
         Exit Sub
     End If
 
-    ' --- Mac-Sandbox: Ordner-Zugriff einmalig per GetOpenFilename erteilen ---
-    ' Nur noetig wenn Open For Binary keinen Zugriff hat.
-    ' Nach einem erfolgreichen GetOpenFilename-Aufruf speichert Excel
-    ' einen Ordner-Bookmark und alle Binary-Reads laufen ohne Dialog.
-    #If Mac Then
-        If Not CanReadFile(emlPaths(0)) Then
-            If Not RequestFolderAccess() Then Exit Sub
-        End If
-    #End If
+    ' Mac-Sandbox: kein vorab-Dialog noetig.
+    ' ReadEmlText nutzt AppleScriptTask-Fallback (Shell-Copy) wenn
+    ' Open For Binary scheitert -- kein Sandbox-Popup pro Datei.
 
     Application.ScreenUpdating = False
     Application.Calculation = xlCalculationManual
@@ -285,9 +286,9 @@ End Function
 
 ' --- EML-Datei einlesen ---
 ' Strategie (Mac):
-'   1. MacScript "cat" -- laeuft ausserhalb VBA-Sandbox, kein Dialog (schnell).
-'   2. Fallback Binary-Read -- funktioniert nachdem RequestFolderAccess() den
-'      Ordner-Bookmark gesetzt hat (kein Dialog mehr).
+'   AppleScriptTask Shell-Copy in Temp-Datei im Workbook-Verzeichnis
+'   (dort hat VBA Sandbox-Zugriff). Open For Binary wird auf Mac
+'   NICHT versucht -- das loest sonst den Sandbox-Dialog aus.
 ' Windows: direkt Binary-Read.
 Private Function ReadEmlText(filePath As String) As String
     Dim fileNum    As Integer
@@ -297,26 +298,20 @@ Private Function ReadEmlText(filePath As String) As String
     Dim i          As Long
 
     #If Mac Then
-        ' Versuch 1: MacScript/cat -- kein Sandbox-Dialog, schnell
-        Dim script As String
-        script = "do shell script ""cat -- "" & quoted form of " & Chr(34) & filePath & Chr(34)
-        On Error Resume Next
-        result = MacScript(script)
-        If Err.Number = 0 And Len(result) > 0 Then
-            On Error GoTo 0
+        ' Mac: direkt Shell-Copy (Open For Binary wuerde Sandbox-Dialog ausloesen)
+        result = ReadEmlViaShellCopy(filePath)
+        If Len(result) > 0 Then
             result = Replace(result, vbCrLf, vbLf)
             result = Replace(result, vbCr,   vbLf)
             ReadEmlText = result
-            Exit Function
         End If
-        Err.Clear
-        On Error GoTo 0
-        ' Versuch 2: Binary-Read (Ordner-Zugriff wurde per RequestFolderAccess erteilt)
+        Exit Function
     #End If
 
+    ' Windows: Binary-Read direkt
     fileNum = FreeFile()
     On Error Resume Next
-    Open filePath For Binary As #fileNum
+    Open filePath For Binary Access Read As #fileNum
     If Err.Number <> 0 Then
         Err.Clear
         On Error GoTo 0
@@ -340,6 +335,78 @@ Private Function ReadEmlText(filePath As String) As String
     result = Replace(result, vbCrLf, vbLf)
     result = Replace(result, vbCr,   vbLf)
     ReadEmlText = result
+End Function
+
+' --- Mac-Fallback: Shell-Copy ueber AppleScriptTask ---
+' Kopiert die Datei per "cp" in eine Temp-Datei im Workbook-Verzeichnis
+' (dort hat VBA immer Sandbox-Zugriff, kein Dialog).
+' Danach Binary-Read der Temp-Datei, anschliessend Kill.
+Private Function ReadEmlViaShellCopy(filePath As String) As String
+    Dim tmpPath    As String
+    Dim wbFolder   As String
+    Dim script     As String
+    Dim cpResult   As String
+    Dim fileNum    As Integer
+    Dim fileLen    As Long
+    Dim rawBytes() As Byte
+    Dim result     As String
+    Dim i          As Long
+
+    ' Temp-Datei im Workbook-Verzeichnis (Sandbox-sicher)
+    wbFolder = ThisWorkbook.Path
+    If Right$(wbFolder, 1) <> "/" Then wbFolder = wbFolder & "/"
+    tmpPath = wbFolder & "_tmp_eml_import.eml"
+
+    ' AppleScript: Shell-Copy in Temp-Pfad
+    ' Pfade mit einfachen Anf.zeichen escapen (Shell-sicher).
+    ' Eventuelles ' im Pfad wird zu '\'' escaped.
+    Dim srcEsc As String
+    Dim dstEsc As String
+    srcEsc = Replace(filePath, "'", "'\''")
+    dstEsc = Replace(tmpPath, "'", "'\''")
+    script = "do shell script ""cp '" & srcEsc & "' '" & dstEsc & "'""" 
+
+    On Error Resume Next
+    cpResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    If Err.Number <> 0 Then
+        Err.Clear
+        On Error GoTo 0
+        Exit Function
+    End If
+    On Error GoTo 0
+
+    ' Pruefen ob Shell-Ergebnis ein Fehler ist
+    If Left$(cpResult, 6) = "ERROR:" Then Exit Function
+
+    ' Temp-Datei lesen (ASCII-Name -> kein Sandbox-Dialog)
+    fileNum = FreeFile()
+    On Error Resume Next
+    Open tmpPath For Binary Access Read As #fileNum
+    If Err.Number <> 0 Then
+        Err.Clear
+        On Error GoTo 0
+        Exit Function
+    End If
+    On Error GoTo 0
+
+    fileLen = LOF(fileNum)
+    If fileLen = 0 Then Close #fileNum: GoTo Cleanup
+
+    ReDim rawBytes(0 To fileLen - 1)
+    Get #fileNum, , rawBytes
+    Close #fileNum
+
+    result = String$(fileLen, " ")
+    For i = 0 To fileLen - 1
+        Mid$(result, i + 1, 1) = Chr(rawBytes(i))
+    Next i
+
+    ReadEmlViaShellCopy = result
+
+Cleanup:
+    On Error Resume Next
+    Kill tmpPath
+    On Error GoTo 0
 End Function
 
 ' --- Header-Wert auslesen (inkl. Folding ueber mehrere Zeilen) ---
@@ -1033,66 +1100,21 @@ End Function
 ' MAC-SANDBOX: ORDNER-ZUGRIFF (einmalig pro Session)
 ' ==============================================================
 
-' Prueft ob VBA die Datei ohne Dialog lesen kann.
-Private Function CanReadFile(filePath As String) As Boolean
-    Dim f As Integer
-    f = FreeFile()
-    On Error Resume Next
-    Open filePath For Binary As #f
-    If Err.Number = 0 Then
-        Close #f
-        CanReadFile = True
-    End If
-    Err.Clear
-    On Error GoTo 0
-End Function
-
-' Zeigt GetOpenFilename EINMALIG -- Excel speichert danach einen
-' Ordner-Bookmark und alle Open-For-Binary-Aufrufe laufen ohne Dialog.
-' Wichtig: Rueckgabe als Variant (nicht String) -- bei Abbruch kommt Boolean False.
-Private Function RequestFolderAccess() As Boolean
-    Dim result As Variant
-    MsgBox "Mac-Sicherheitsdialog:" & vbLf & vbLf & _
-           "Im n" & ChrW(228) & "chsten Fenster bitte eine beliebige EML-Datei" & vbLf & _
-           "aus dem Ordner ausw" & ChrW(228) & "hlen:" & vbLf & vbLf & _
-           GetMailsFolder() & vbLf & vbLf & _
-           "Dieser Schritt ist nur einmalig n" & ChrW(246) & "tig.", _
-           vbInformation, "Einmaliger Ordner-Zugriff"
-    result = Application.GetOpenFilename( _
-        "EML-Dateien,*.eml", 1, _
-        "Zugriff erteilen: Eine EML aus dem Mails-Ordner w" & ChrW(228) & "hlen", _
-        False, False)
-    ' Bei Abbruch: result ist Boolean False (kein String!)
-    If VarType(result) = vbBoolean Then
-        MsgBox "Kein Zugriff erteilt -- Import abgebrochen." & vbLf & _
-               "Bitte 'ZugriffErteilen' ausf" & ChrW(252) & "hren und erneut starten.", _
-               vbExclamation, "Abgebrochen"
-        RequestFolderAccess = False
-    Else
-        RequestFolderAccess = True
-    End If
-End Function
+' CanReadFile und RequestFolderAccess entfernt (v2.6).
+' Sandbox-Zugriff wird jetzt ueber AppleScriptTask Shell-Copy geloest
+' (ReadEmlViaShellCopy) -- kein manueller Dialog mehr noetig.
 
 ' Public Sub: Zugriff manuell vorab erteilen (z.B. einmal nach Excel-Neustart).
 ' Danach kann ImportLeadsFromMailFolder ohne Dialoge laufen.
 Public Sub ZugriffErteilen()
-    #If Mac Then
-        Dim result As Variant
-        result = Application.GetOpenFilename( _
-            "EML-Dateien,*.eml", 1, _
-            "Einmalig Zugriff erteilen: Eine EML aus dem Mails-Ordner w" & ChrW(228) & "hlen", _
-            False, False)
-        If VarType(result) = vbBoolean Then
-            MsgBox "Abgebrochen. Vor dem Import bitte 'ZugriffErteilen' erneut ausf" & _
-                   ChrW(252) & "hren.", vbExclamation, "Kein Zugriff"
-        Else
-            MsgBox "Zugriff erteilt!" & vbLf & _
-                   "Jetzt 'ImportLeadsFromMailFolder' starten.", _
-                   vbInformation, "Zugriff OK"
-        End If
-    #Else
-        MsgBox "ZugriffErteilen ist nur auf Mac ben" & ChrW(246) & "tigt.", vbInformation
-    #End If
+    ' Seit v2.6 nicht mehr noetig -- AppleScriptTask umgeht Sandbox.
+    ' Bleibt als Stub fuer Rueckwaertskompatibilitaet.
+    MsgBox "Seit v2.6 nicht mehr n" & ChrW(246) & "tig." & vbLf & _
+           "Der Import nutzt jetzt AppleScriptTask und ben" & ChrW(246) & "tigt" & vbLf & _
+           "keinen manuellen Zugriffsdialog mehr." & vbLf & vbLf & _
+           "Voraussetzung: MailReader.scpt liegt in:" & vbLf & _
+           "~/Library/Application Scripts/com.microsoft.Excel/", _
+           vbInformation, "Info"
 End Sub
 
 ' ==============================================================
