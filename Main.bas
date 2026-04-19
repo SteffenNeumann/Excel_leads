@@ -4,7 +4,7 @@ Option Explicit
 ' ==============================================================
 ' Main.bas -- Lead-Import aus gespeicherten EML-Dateien
 ' --------------------------------------------------------------
-' Version  : 2.9
+' Version  : 3.0
 ' Datum    : 2026-04-19
 ' Autor    : Steffen
 ' --------------------------------------------------------------
@@ -26,6 +26,7 @@ Option Explicit
 '   Benoetigt: MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
 '
 ' Changelog:
+'   v3.0 | 2026-04-19 | ErrLog, CleanExit-Pattern, EnableEvents, durchgaengiges Error-Handling
 '   v2.9 | 2026-04-19 | Trim Spaltennamen, Zell-Notiz, StatusBar-Fortschritt
 '   v2.8 | 2026-04-19 | Status='Lead erhalten', Leadquelle-Praefix entfernt
 '   v2.7 | 2026-04-19 | Leadquelle aus From-Header statt Subject
@@ -68,6 +69,32 @@ Private Const C_NOTIZEN  As String = "Notizen"
 
 ' KV-Store: Internes Schluessellisten-Feld (fuer Diagnose-Iteration)
 Private Const KV_KEYLIST As String = "__KEYS__"
+
+' --- Fehler-Log (modulweit, wird pro Import-Lauf gefuellt) ---
+Private m_errLog As Collection
+
+Private Sub LogError(proc As String, Optional detail As String = "")
+    If m_errLog Is Nothing Then Set m_errLog = New Collection
+    Dim entry As String
+    entry = Format$(Now, "HH:NN:SS") & " | " & proc & " | Err " & Err.Number & ": " & Err.Description
+    If Len(detail) > 0 Then entry = entry & " | " & detail
+    m_errLog.Add entry
+    Debug.Print "[ERR] " & entry
+End Sub
+
+Private Function ErrLogText() As String
+    Dim i As Long
+    Dim txt As String
+    If m_errLog Is Nothing Then Exit Function
+    For i = 1 To m_errLog.Count
+        txt = txt & m_errLog(i) & vbLf
+    Next i
+    ErrLogText = txt
+End Function
+
+Private Function ErrLogCount() As Long
+    If Not m_errLog Is Nothing Then ErrLogCount = m_errLog.Count
+End Function
 
 ' ==============================================================
 ' PFAD-EINSTELLUNG (aus Sheet "Berechnung", Named Range "mailpath")
@@ -180,11 +207,15 @@ Public Sub ImportLeadsFromMailFolder()
     Dim nameVal     As String
     Dim imported    As Long
     Dim skipped     As Long
+    Dim errCount    As Long
     Dim emlFile     As String
     Dim emlPath     As String
     Dim emlPaths()  As String
     Dim pathCount   As Long
     Dim mailsFolder As String
+
+    ' --- Fehler-Log zuruecksetzen ---
+    Set m_errLog = New Collection
 
     ' --- Pfad aus Einstellungen lesen ---
     mailsFolder = GetMailsFolder()
@@ -219,12 +250,12 @@ Public Sub ImportLeadsFromMailFolder()
         Exit Sub
     End If
 
-    ' Mac-Sandbox: kein vorab-Dialog noetig.
-    ' ReadEmlText nutzt AppleScriptTask-Fallback (Shell-Copy) wenn
-    ' Open For Binary scheitert -- kein Sandbox-Popup pro Datei.
-
+    ' --- Performance-Optimierung ---
     Application.ScreenUpdating = False
     Application.Calculation = xlCalculationManual
+    Application.EnableEvents = False
+
+    On Error GoTo CleanExit_Err
 
     Dim pathIdx As Long
     For pathIdx = 0 To pathCount - 1
@@ -232,8 +263,23 @@ Public Sub ImportLeadsFromMailFolder()
 
         Application.StatusBar = "Lead-Import: " & (pathIdx + 1) & " / " & pathCount & " EML-Dateien..."
 
+        ' Einzelne EML in eigenem Fehler-Block verarbeiten
+        On Error Resume Next
         Set kv     = ParseEmlToKv(emlPath)
+        If Err.Number <> 0 Then
+            LogError "ImportLeads.ParseEml", Dir$(emlPath)
+            Err.Clear
+            On Error GoTo CleanExit_Err
+            GoTo NextEml
+        End If
         Set fields = BuildLeadFields(kv)
+        If Err.Number <> 0 Then
+            LogError "ImportLeads.BuildFields", Dir$(emlPath)
+            Err.Clear
+            On Error GoTo CleanExit_Err
+            GoTo NextEml
+        End If
+        On Error GoTo CleanExit_Err
 
         leadId  = KVGet(fields, "id")
         nameVal = KVGet(fields, "name")
@@ -245,20 +291,45 @@ Public Sub ImportLeadsFromMailFolder()
             skipped = skipped + 1
 
         Else
+            On Error Resume Next
             AddLeadRow fields, tbl, mailsFolder
-            imported = imported + 1
+            If Err.Number <> 0 Then
+                LogError "ImportLeads.AddRow", Dir$(emlPath)
+                Err.Clear
+                errCount = errCount + 1
+            Else
+                imported = imported + 1
+            End If
+            On Error GoTo CleanExit_Err
         End If
 
+NextEml:
     Next pathIdx
 
+    GoTo CleanExit
+
+CleanExit_Err:
+    LogError "ImportLeadsFromMailFolder", "Unerwarteter Fehler"
+
+CleanExit:
     Application.StatusBar = False
     Application.ScreenUpdating = True
     Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
 
-    MsgBox "Import abgeschlossen:" & vbLf & _
-           imported & " Leads neu importiert" & vbLf & _
-           skipped & " Duplikate " & ChrW(252) & "bersprungen", _
-           vbInformation, "Lead-Import"
+    Dim summary As String
+    summary = "Import abgeschlossen:" & vbLf & _
+              imported & " Leads neu importiert" & vbLf & _
+              skipped & " Duplikate " & ChrW(252) & "bersprungen"
+
+    If ErrLogCount() > 0 Then
+        summary = summary & vbLf & vbLf & _
+                  "--- FEHLER (" & ErrLogCount() & ") ---" & vbLf & _
+                  ErrLogText()
+        MsgBox summary, vbExclamation, "Lead-Import (mit Fehlern)"
+    Else
+        MsgBox summary, vbInformation, "Lead-Import"
+    End If
 End Sub
 
 ' ==============================================================
@@ -272,6 +343,8 @@ Private Function ParseEmlToKv(emlPath As String) As Collection
     Dim csvText  As String
 
     Set kv = KVNew()
+
+    On Error GoTo ErrHandler
 
     raw = ReadEmlText(emlPath)
     If Len(raw) = 0 Then Set ParseEmlToKv = kv: Exit Function
@@ -288,6 +361,11 @@ Private Function ParseEmlToKv(emlPath As String) As Collection
 
     ParseCsvIntoDict csvText, kv
 
+    Set ParseEmlToKv = kv
+    Exit Function
+
+ErrHandler:
+    LogError "ParseEmlToKv", Dir$(emlPath)
     Set ParseEmlToKv = kv
 End Function
 
@@ -306,6 +384,7 @@ Private Function ReadEmlText(filePath As String) As String
 
     #If Mac Then
         ' Mac: direkt Shell-Copy (Open For Binary wuerde Sandbox-Dialog ausloesen)
+        On Error GoTo ErrHandler
         result = ReadEmlViaShellCopy(filePath)
         If Len(result) > 0 Then
             result = Replace(result, vbCrLf, vbLf)
@@ -315,16 +394,11 @@ Private Function ReadEmlText(filePath As String) As String
         Exit Function
     #End If
 
+    On Error GoTo ErrHandler
+
     ' Windows: Binary-Read direkt
     fileNum = FreeFile()
-    On Error Resume Next
     Open filePath For Binary Access Read As #fileNum
-    If Err.Number <> 0 Then
-        Err.Clear
-        On Error GoTo 0
-        Exit Function
-    End If
-    On Error GoTo 0
 
     fileLen = LOF(fileNum)
     If fileLen = 0 Then Close #fileNum: Exit Function
@@ -342,6 +416,13 @@ Private Function ReadEmlText(filePath As String) As String
     result = Replace(result, vbCrLf, vbLf)
     result = Replace(result, vbCr,   vbLf)
     ReadEmlText = result
+    Exit Function
+
+ErrHandler:
+    LogError "ReadEmlText", filePath
+    On Error Resume Next
+    Close #fileNum
+    On Error GoTo 0
 End Function
 
 ' --- Mac-Fallback: Shell-Copy ueber AppleScriptTask ---
@@ -359,42 +440,28 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
     Dim result     As String
     Dim i          As Long
 
+    On Error GoTo ErrHandler
+
     ' Temp-Datei im Workbook-Verzeichnis (Sandbox-sicher)
     wbFolder = ThisWorkbook.Path
     If Right$(wbFolder, 1) <> "/" Then wbFolder = wbFolder & "/"
     tmpPath = wbFolder & "_tmp_eml_import.eml"
 
     ' AppleScript: Shell-Copy in Temp-Pfad
-    ' Pfade mit einfachen Anf.zeichen escapen (Shell-sicher).
-    ' Eventuelles ' im Pfad wird zu '\'' escaped.
     Dim srcEsc As String
     Dim dstEsc As String
     srcEsc = Replace(filePath, "'", "'\''")
     dstEsc = Replace(tmpPath, "'", "'\''")
     script = "do shell script ""cp '" & srcEsc & "' '" & dstEsc & "'""" 
 
-    On Error Resume Next
     cpResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
-    If Err.Number <> 0 Then
-        Err.Clear
-        On Error GoTo 0
-        Exit Function
-    End If
-    On Error GoTo 0
 
     ' Pruefen ob Shell-Ergebnis ein Fehler ist
-    If Left$(cpResult, 6) = "ERROR:" Then Exit Function
+    If Left$(cpResult, 6) = "ERROR:" Then GoTo Cleanup
 
     ' Temp-Datei lesen (ASCII-Name -> kein Sandbox-Dialog)
     fileNum = FreeFile()
-    On Error Resume Next
     Open tmpPath For Binary Access Read As #fileNum
-    If Err.Number <> 0 Then
-        Err.Clear
-        On Error GoTo 0
-        Exit Function
-    End If
-    On Error GoTo 0
 
     fileLen = LOF(fileNum)
     If fileLen = 0 Then Close #fileNum: GoTo Cleanup
@@ -409,6 +476,13 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
     Next i
 
     ReadEmlViaShellCopy = result
+    GoTo Cleanup
+
+ErrHandler:
+    LogError "ReadEmlViaShellCopy", filePath
+    On Error Resume Next
+    Close #fileNum
+    On Error GoTo 0
 
 Cleanup:
     On Error Resume Next
@@ -840,6 +914,8 @@ Private Function BuildLeadFields(kv As Collection) As Collection
     Dim subject  As String
     Dim fromHdr  As String
     Dim mailDate As String
+
+    On Error GoTo ErrHandler
     Dim id       As String
     Dim vorname  As String
     Dim nachname As String
@@ -932,6 +1008,12 @@ Private Function BuildLeadFields(kv As Collection) As Collection
     KVSet fields, "notizen",    notizen
 
     Set BuildLeadFields = fields
+    Exit Function
+
+ErrHandler:
+    LogError "BuildLeadFields", KVGet(kv, "_Subject")
+    If fields Is Nothing Then Set fields = KVNew()
+    Set BuildLeadFields = fields
 End Function
 
 ' ==============================================================
@@ -944,6 +1026,8 @@ Private Sub AddLeadRow(fields As Collection, tbl As ListObject, mailsFolder As S
     Dim mailDate As Date
     Dim colKey   As String
     Dim colNum   As Long
+
+    On Error GoTo ErrHandler
 
     Set hIdx   = BuildHIdx(tbl)
     Set newRow = tbl.ListRows.Add(AlwaysInsert:=True)
@@ -960,7 +1044,7 @@ Private Sub AddLeadRow(fields As Collection, tbl As ListObject, mailsFolder As S
         newRow.Range.Cells(1, colNum).AddComment _
             "Automatischer Import vom: " & Format$(Now, "DD.MM.YYYY") & _
             " | Quelle: Dateiordner: " & mailsFolder
-        On Error GoTo 0
+        On Error GoTo ErrHandler
     End If
 
     SetCell     newRow, hIdx, C_ID,       KVGet(fields, "id")
@@ -974,6 +1058,10 @@ Private Sub AddLeadRow(fields As Collection, tbl As ListObject, mailsFolder As S
 
     If Len(KVGet(fields, "adresse")) > 0 Then SetCell newRow, hIdx, C_ADRESSE, KVGet(fields, "adresse")
     If Len(KVGet(fields, "ort"))     > 0 Then SetCell newRow, hIdx, C_ORT,     KVGet(fields, "ort")
+    Exit Sub
+
+ErrHandler:
+    LogError "AddLeadRow", KVGet(fields, "id")
 End Sub
 
 ' ==============================================================
@@ -986,15 +1074,15 @@ Private Function LeadAlreadyExists(leadId As String, tbl As ListObject) As Boole
     Dim dataRng  As Range
     Dim cell     As Range
 
+    On Error GoTo ErrHandler
+
     If Len(Trim$(leadId)) = 0 Then Exit Function
 
     Set hIdx = BuildHIdx(tbl)
     If Not KVExists(hIdx, LCase$(C_ID)) Then Exit Function
     idColIdx = CLng(KVGet(hIdx, LCase$(C_ID)))
 
-    On Error Resume Next
     Set dataRng = tbl.ListColumns(idColIdx).DataBodyRange
-    On Error GoTo 0
     If dataRng Is Nothing Then Exit Function
 
     For Each cell In dataRng
@@ -1003,6 +1091,10 @@ Private Function LeadAlreadyExists(leadId As String, tbl As ListObject) As Boole
             Exit Function
         End If
     Next cell
+    Exit Function
+
+ErrHandler:
+    LogError "LeadAlreadyExists", leadId
 End Function
 
 ' ==============================================================
