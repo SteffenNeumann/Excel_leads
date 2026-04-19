@@ -96,6 +96,43 @@ Private Function ErrLogCount() As Long
     If Not m_errLog Is Nothing Then ErrLogCount = m_errLog.Count
 End Function
 
+Private Sub WriteErrLogToSheet()
+    ' Schreibt alle gesammelten Fehler in das Sheet "ErrLog".
+    ' Erstellt das Sheet automatisch, falls es nicht existiert.
+    Dim ws       As Worksheet
+    Dim nextRow  As Long
+    Dim i        As Long
+
+    If m_errLog Is Nothing Then Exit Sub
+    If m_errLog.Count = 0 Then Exit Sub
+
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets("ErrLog")
+    On Error GoTo 0
+
+    If ws Is Nothing Then
+        Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
+        ws.Name = "ErrLog"
+        ws.Range("A1").Value = "Zeitstempel"
+        ws.Range("B1").Value = "Prozedur"
+        ws.Range("C1").Value = "Fehler"
+        ws.Range("D1").Value = "Detail"
+        ws.Range("A1:D1").Font.Bold = True
+    End If
+
+    nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
+
+    For i = 1 To m_errLog.Count
+        Dim parts() As String
+        parts = Split(m_errLog(i), " | ")
+        ws.Cells(nextRow, 1).Value = parts(0)                                        ' Zeitstempel
+        If UBound(parts) >= 1 Then ws.Cells(nextRow, 2).Value = parts(1)              ' Prozedur
+        If UBound(parts) >= 2 Then ws.Cells(nextRow, 3).Value = parts(2)              ' Fehler
+        If UBound(parts) >= 3 Then ws.Cells(nextRow, 4).Value = parts(3)              ' Detail
+        nextRow = nextRow + 1
+    Next i
+End Sub
+
 ' ==============================================================
 ' PFAD-EINSTELLUNG (aus Sheet "Berechnung", Named Range "mailpath")
 ' ==============================================================
@@ -316,6 +353,9 @@ CleanExit:
     Application.ScreenUpdating = True
     Application.Calculation = xlCalculationAutomatic
     Application.EnableEvents = True
+
+    ' Fehler in Sheet "ErrLog" schreiben
+    WriteErrLogToSheet
 
     Dim summary As String
     summary = "Import abgeschlossen:" & vbLf & _
