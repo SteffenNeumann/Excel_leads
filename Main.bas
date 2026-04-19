@@ -99,16 +99,6 @@ Private Function ErrLogCount() As Long
     If Not m_errLog Is Nothing Then ErrLogCount = m_errLog.Count
 End Function
 
-' --- TEST-SUB: Nach dem Test wieder loeschen! ---
-Public Sub TestErrLog()
-    Set m_errLog = New Collection
-    LogError "TestErrLog", "Testfehler Nr. 1 - simuliert", "Error"
-    LogError "TestErrLog", "Warnung: Datei nicht optimal", "Warnung"
-    LogError "TestErrLog", "Info: Import gestartet", "Info"
-    WriteErrLogToSheet
-    MsgBox "3 Test-Eintraege in ErrLog geschrieben." & vbLf & vbLf & ErrLogText(), vbInformation, "ErrLog Test"
-End Sub
-
 Private Sub WriteErrLogToSheet()
     ' Schreibt alle gesammelten Fehler in Tabelle "Tabelle3" auf Sheet "ErrLog".
     ' Spalten: Type, Zeitstempel, Meldung, Details/Ursache
@@ -139,15 +129,15 @@ Private Sub WriteErrLogToSheet()
     ' Spalten-Indizes einmalig aufloesen
     Dim cType As Long, cZeit As Long, cMeld As Long, cDetail As Long
     On Error Resume Next
-    cType   = tbl.ListColumns("Type").Index
+    cType   = tbl.ListColumns("Typ").Index
     cZeit   = tbl.ListColumns("Zeitstempel").Index
     cMeld   = tbl.ListColumns("Meldung").Index
-    cDetail = tbl.ListColumns("Details/Ursache").Index
+    cDetail = tbl.ListColumns("Details / Ursache").Index
     On Error GoTo 0
     If cType = 0 Or cZeit = 0 Or cMeld = 0 Or cDetail = 0 Then
-        Debug.Print "[WARN] ErrLog-Spalte nicht gefunden: Type=" & cType & _
+        Debug.Print "[WARN] ErrLog-Spalte nicht gefunden: Typ=" & cType & _
                     " Zeitstempel=" & cZeit & " Meldung=" & cMeld & _
-                    " Details/Ursache=" & cDetail
+                    " Details / Ursache=" & cDetail
         Exit Sub
     End If
 
