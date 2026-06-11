@@ -4,8 +4,8 @@ Option Explicit
 ' ==============================================================
 ' Main.bas -- Lead-Import aus gespeicherten EML-Dateien
 ' --------------------------------------------------------------
-' Version  : 3.0
-' Datum    : 2026-04-19
+' Version  : 3.3
+' Datum    : 2026-06-11
 ' Autor    : Steffen
 ' --------------------------------------------------------------
 ' Liest .eml-Dateien direkt per VBA -- kein Python, kein Shell.
@@ -19,13 +19,19 @@ Option Explicit
 ' Umlaut-Sicherheit : Base64-Bytes -> Utf8BytesToString (pure VBA)
 ' Dictionary        : Pure VBA Collection (kein Scripting.Dictionary)
 '
-' Mac-Sandbox-Loesung (v2.6):
-'   Open For Binary direkt versuchen. Falls Sandbox blockiert:
-'   AppleScriptTask ruft Shell "cp" auf -> kopiert EML in Temp-Datei
-'   mit ASCII-Name im gleichen Ordner -> Binary-Read ohne Dialog.
+' Mac-Sandbox-Loesung (v3.2):
+'   RemoveQuarantine entfernt com.apple.quarantine via AppleScriptTask
+'   einmalig vor dem Dir$-Scan -> kein Sandbox-Dialog, kein Err 75.
 '   Benoetigt: MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
 '
 ' Changelog:
+'   v3.3 | 2026-06-11 | InstallMailReaderScpt public + 4-stufige Install-Strategie
+'                        (FileCopy -> MacScript-Fallback -> MsgBox mit Terminal-Befehl)
+'                        Static alreadyTried ausgelagert -> manueller Reset via InstallMailReaderScpt()
+'   v3.2 | 2026-06-11 | Umlaut-Fix: CopyFile/RemoveXattr-Handler in MailReader.scpt
+'                        run script mit Umlaut-Pfaden schlug mit Syntax-Error fehl (-2741)
+'   v3.1 | 2026-06-11 | Quarantine-Fix: RemoveQuarantine via AppleScriptTask vor Dir$-Scan
+'                        LogError Pipe-Bug behoben (Dateipfad in Details/Ursache sichtbar)
 '   v3.0 | 2026-04-19 | ErrLog, CleanExit-Pattern, EnableEvents, durchgaengiges Error-Handling
 '   v2.9 | 2026-04-19 | Trim Spaltennamen, Zell-Notiz, StatusBar-Fortschritt
 '   v2.8 | 2026-04-19 | Status='Lead erhalten', Leadquelle-Praefix entfernt
@@ -45,6 +51,8 @@ Option Explicit
 ' --- AppleScriptTask (Mac-Sandbox-Workaround) ---
 Private Const APPLESCRIPT_FILE    As String = "MailReader.scpt"
 Private Const APPLESCRIPT_HANDLER As String = "FetchMessages"
+Private Const HANDLER_COPY        As String = "CopyFile"
+Private Const HANDLER_XATTR       As String = "RemoveXattr"
 
 ' --- Pfad-Einstellung (wird aus Sheet "Berechnung", Named Range "mailpath" gelesen) ---
 Private Const SETTINGS_SHEET   As String = "Berechnung"
@@ -76,7 +84,7 @@ Private m_errLog As Collection
 Private Sub LogError(proc As String, Optional detail As String = "", Optional logType As String = "Error")
     If m_errLog Is Nothing Then Set m_errLog = New Collection
     Dim ts As String: ts = Format$(Now, "YYYY-MM-DD HH:NN:SS")
-    Dim msg As String: msg = proc & " | Err " & Err.Number & ": " & Err.Description
+    Dim msg As String: msg = proc & " [Err " & Err.Number & ": " & Err.Description & "]"
     ' Format: Type | Zeitstempel | Meldung | Detail
     Dim entry As String
     entry = logType & "|" & ts & "|" & msg & "|" & detail
@@ -276,6 +284,9 @@ Public Sub ImportLeadsFromMailFolder()
     ' --- Pfad aus Einstellungen lesen ---
     mailsFolder = GetMailsFolder()
     If Len(mailsFolder) = 0 Then Exit Sub   ' Fehler wurde in GetMailsFolder gemeldet
+
+    ' --- Quarantine-Flag entfernen (Mac: verhindert Sandbox-Dialog + Err 75) ---
+    RemoveQuarantine mailsFolder
 
     On Error Resume Next
     Set ws = ThisWorkbook.Worksheets(SHEET_NAME)
@@ -550,58 +561,97 @@ End Function
 ' macOS Sandbox erlaubt sandboxed Apps explizit Schreibzugriff auf
 '   ~/Library/Application Scripts/<bundle-id>/
 ' wobei ~ = ECHTER Home-Pfad (/Users/<user>), NICHT Container-Pfad.
-' Das Verzeichnis wird von macOS beim ersten Sandbox-Start automatisch angelegt.
-' Deshalb: kein MkDir noetig, nur Open For Output am echten Pfad.
 '
-' Strategie:
-'   1. AppleScriptTask-Test -> bereits installiert?
-'   2. FileCopy aus Workbook-Ordner zum Container-Pfad (wie legacy InstallAppleScript).
-'      MailReader.scpt ist eine kompilierte Binaerdatei -- kein Plaintext einbetten!
-'      FileCopy TO container path funktioniert in der Mac-Sandbox.
-' Wird nur einmal pro Session versucht (Static-Flag).
+' Strategie (v3.3):
+'   1. AppleScriptTask-Test mit HANDLER_COPY -> bereits vorhanden + aktuell?
+'   2. FileCopy aus Workbook-Ordner (zuverlaessig in den meisten Sandbox-Zust"anden)
+'   3. MacScript-Fallback: do shell script cp (umgeht Sandbox-Einschraenkung)
+'   4. MsgBox mit manuellem Terminal-Befehl (letzte Option)
+'
+' WICHTIG: Static alreadyTried -> nur einmal pro Session versucht.
+' Nach Modulimport oder VBA-Reset wird Static zurueckgesetzt.
+' Bei Problemen: im Direktbereich "alreadyTried = False" geht nicht (Static).
+' Stattdessen: Excel neu starten oder InstallMailReaderScpt() manuell aufrufen.
 Private Sub EnsureMailReaderScptInstalled()
     Static alreadyTried As Boolean
     If alreadyTried Then Exit Sub
     alreadyTried = True
+    InstallMailReaderScpt
+End Sub
 
+' Oeffentlich aufrufbar fuer manuellen Reset (Direktbereich: InstallMailReaderScpt)
+Public Sub InstallMailReaderScpt()
     Dim sourcePath As String
     Dim contPath   As String
+    Dim contDir    As String
     Dim writeErr   As Long
 
-    ' --- Versuch 1: Bereits installiert? ---
+    ' --- Versuch 1: Bereits installiert mit CopyFile-Handler? ---
     On Error Resume Next
     Dim testResult As String
-    testResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, """ok""")
+    testResult = AppleScriptTask(APPLESCRIPT_FILE, HANDLER_COPY, "_test_|_test_")
     If Err.Number = 0 Then
         On Error GoTo 0
-        Debug.Print "[INFO] MailReader.scpt bereits vorhanden (AppleScriptTask ok)"
+        Debug.Print "[INFO] MailReader.scpt mit CopyFile-Handler vorhanden"
         Exit Sub
     End If
     Err.Clear
     On Error GoTo 0
 
-    ' --- Versuch 2: FileCopy der kompilierten .scpt aus Workbook-Ordner ---
-    ' (Exakt wie legacy InstallAppleScript: FileCopy sourcePath, containerPath)
     sourcePath = ThisWorkbook.Path & "/" & APPLESCRIPT_FILE
-    contPath   = Environ("HOME") & "/Library/Application Scripts/com.microsoft.Excel/" & APPLESCRIPT_FILE
+    contDir    = Environ("HOME") & "/Library/Application Scripts/com.microsoft.Excel"
+    contPath   = contDir & "/" & APPLESCRIPT_FILE
 
     If Len(Dir$(sourcePath)) = 0 Then
-        Debug.Print "[WARN] MailReader.scpt fehlt im Workbook-Ordner: " & sourcePath
+        MsgBox "MailReader.scpt fehlt im Workbook-Ordner:" & vbLf & sourcePath & vbLf & vbLf & _
+               "Bitte die Datei dort ablegen und erneut versuchen.", vbCritical, "Installation fehlgeschlagen"
         Exit Sub
     End If
 
-    EnsureFolderExists Environ("HOME") & "/Library/Application Scripts/com.microsoft.Excel"
+    EnsureFolderExists contDir
 
+    ' --- Versuch 2: FileCopy (funktioniert in den meisten Sandbox-Zustaenden) ---
     On Error Resume Next
     FileCopy sourcePath, contPath
     writeErr = Err.Number
     On Error GoTo 0
 
     If writeErr = 0 Then
-        Debug.Print "[INFO] MailReader.scpt installiert: " & contPath
-    Else
-        Debug.Print "[WARN] FileCopy fehlgeschlagen (Err " & writeErr & "): " & sourcePath & " -> " & contPath
+        Debug.Print "[INFO] MailReader.scpt installiert via FileCopy: " & contPath
+        Exit Sub
     End If
+    Debug.Print "[WARN] FileCopy fehlgeschlagen (Err " & writeErr & ") -> MacScript-Fallback"
+
+    ' --- Versuch 3: MacScript shell cp (Fallback wenn FileCopy in Sandbox blockiert) ---
+    ' Pfade enthalten keine Umlaute -> run script sicher verwendbar
+    On Error Resume Next
+    Dim cpScript As String
+    cpScript = "do shell script ""cp "" & quoted form of """ & sourcePath & """ & "" "" & quoted form of """ & contPath & """"
+    MacScript cpScript
+    writeErr = Err.Number
+    On Error GoTo 0
+
+    If writeErr = 0 Then
+        ' Pruefen ob Datei wirklich angelegt wurde
+        On Error Resume Next
+        Dim chk As String
+        chk = AppleScriptTask(APPLESCRIPT_FILE, HANDLER_COPY, "_test_|_test_")
+        Dim chkErr As Long: chkErr = Err.Number
+        On Error GoTo 0
+        If chkErr = 0 Then
+            Debug.Print "[INFO] MailReader.scpt installiert via MacScript"
+            Exit Sub
+        End If
+    End If
+    Debug.Print "[WARN] MacScript-Fallback fehlgeschlagen (Err " & writeErr & ")"
+
+    ' --- Versuch 4: MsgBox mit manuellem Befehl ---
+    MsgBox "MailReader.scpt konnte nicht automatisch installiert werden." & vbLf & vbLf & _
+           "Bitte Terminal " & ChrW(246) & "ffnen und diesen Befehl ausf" & ChrW(252) & "hren:" & vbLf & vbLf & _
+           "cp " & Chr(34) & sourcePath & Chr(34) & " \" & vbLf & _
+           "   ~/Library/Application\ Scripts/com.microsoft.Excel/" & vbLf & vbLf & _
+           "Danach den Import erneut starten.", _
+           vbExclamation, "Manuelle Installation erforderlich"
 End Sub
 
 ' --- Ordnerstruktur rekursiv anlegen ---
@@ -630,7 +680,6 @@ End Sub
 Private Function ReadEmlViaShellCopy(filePath As String) As String
     Dim tmpPath    As String
     Dim wbFolder   As String
-    Dim script     As String
     Dim cpResult   As String
     Dim fileNum    As Integer
     Dim fileLen    As Long
@@ -643,10 +692,10 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
     ' MailReader.scpt automatisch installieren falls noch nicht vorhanden
     EnsureMailReaderScptInstalled
 
-    ' Pruefen ob .scpt jetzt wirklich vorhanden (AppleScriptTask-Test statt Dir$)
+    ' Pruefen ob .scpt jetzt wirklich vorhanden (CopyFile-Handler-Test)
     On Error Resume Next
     Dim scptTest As String
-    scptTest = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, """ok""")
+    scptTest = AppleScriptTask(APPLESCRIPT_FILE, HANDLER_COPY, "_test_|_test_")
     Dim scptErr As Long: scptErr = Err.Number
     On Error GoTo ErrHandler
 
@@ -660,11 +709,8 @@ Private Function ReadEmlViaShellCopy(filePath As String) As String
     If Right$(wbFolder, 1) <> "/" Then wbFolder = wbFolder & "/"
     tmpPath = wbFolder & "_tmp_eml_import.eml"
 
-    ' AppleScript: Shell-Copy in Temp-Pfad
-    ' quoted form of (Legacy-Muster): Unicode-sicher fuer Umlaute in Dateinamen
-    script = "do shell script ""cp "" & quoted form of " & Chr(34) & filePath & Chr(34) & " & "" "" & quoted form of " & Chr(34) & tmpPath & Chr(34)
-
-    cpResult = AppleScriptTask(APPLESCRIPT_FILE, APPLESCRIPT_HANDLER, script)
+    ' CopyFile-Handler: Pfade als Parameter (kein run script -> kein Umlaut-Problem)
+    cpResult = AppleScriptTask(APPLESCRIPT_FILE, HANDLER_COPY, filePath & "|" & tmpPath)
 
     ' Pruefen ob Shell-Ergebnis ein Fehler ist
     If Left$(cpResult, 6) = "ERROR:" Then GoTo Cleanup
@@ -1485,8 +1531,28 @@ End Function
 ' ==============================================================
 
 ' CanReadFile und RequestFolderAccess entfernt (v2.6).
-' Sandbox-Zugriff wird jetzt ueber AppleScriptTask Shell-Copy geloest
-' (ReadEmlViaShellCopy) -- kein manueller Dialog mehr noetig.
+' Sandbox-Zugriff ab v3.1 ueber RemoveQuarantine geloest:
+' com.apple.quarantine wird einmalig pro Import-Lauf via AppleScriptTask
+' entfernt -- danach kein Dialog, kein Err 75 bei Umlaut-Dateinamen.
+
+' --- Quarantine-Flag fuer alle EML-Dateien im Ordner entfernen ---
+' Laeuft automatisch am Anfang jedes Import-Laufs (vor Dir$-Scan).
+' Benoetigt MailReader.scpt in Application Scripts.
+Private Sub RemoveQuarantine(folderPath As String)
+    #If Mac Then
+        On Error Resume Next
+        EnsureMailReaderScptInstalled
+        Dim xResult As String
+        xResult = AppleScriptTask(APPLESCRIPT_FILE, HANDLER_XATTR, folderPath)
+        If Err.Number <> 0 Then
+            Debug.Print "[RemoveQuarantine] AppleScriptTask-Fehler: " & Err.Number
+            Err.Clear
+        ElseIf Left$(xResult, 6) = "ERROR:" Then
+            Debug.Print "[RemoveQuarantine] xattr fehlgeschlagen: " & xResult
+        End If
+        On Error GoTo 0
+    #End If
+End Sub
 
 ' Public Sub: Zugriff manuell vorab erteilen (z.B. einmal nach Excel-Neustart).
 ' Danach kann ImportLeadsFromMailFolder ohne Dialoge laufen.

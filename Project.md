@@ -326,6 +326,82 @@ Warte auf Kundenbestätigung.
 
 ---
 
+### 6. xlwings Web Extension verursacht "Fehler beim Speichern"
+
+**Symptom:** Excel zeigt beim Speichern der `.xlsm` den Reparatur-Dialog — „Durch Entfernen einiger Features kann die Datei gespeichert werden."
+
+**Ursache:** xlwings hatte beim Einsatz als aktives Add-in Metadaten in die Datei eingebettet:
+- `xl/webextensions/webextension1.xml` (xlwings UDF-Extension, Taskpane `visibility="1"`)
+- `xl/webextensions/taskpanes.xml` + Querverweise
+- `_xleta.ISNUMBER` / `_xleta.TODAY` Named Ranges mit `#NAME?` (broken UDF-Cache)
+
+| # | Ansatz | Status |
+|---|---|---|
+| 1 | **Python ZIP-Manipulation**: webextension-Dateien droppen, `_xleta.*` aus workbook.xml entfernen, Querverweise in `_rels/.rels` + `[Content_Types].xml` bereinigen | ✅ Bestätigt — Datei lässt sich wieder speichern |
+
+**Lösung:** Python-Fix-Script (Datei muss geschlossen sein): alle drei webextension-Einträge aus dem ZIP entfernen und Querverweise in `_rels/.rels` / `[Content_Types].xml` / `workbook.xml` bereinigen. → Siehe `LESSONS_LEARNED.md` LL-002.
+
+---
+
+### 7. Err 75 (Pfadzugriff) bei EML-Dateien mit Umlauten im Dateinamen
+
+**Symptom:** `ReadEmlText [Err 75: Fehler beim Zugriff auf Pfad/Datei]` für alle EML-Dateien mit `ö`, `ü` oder `ß` im Dateinamen. Dateien ohne Umlaute werden korrekt importiert.
+
+**Ursache (bestätigt durch Test):** `FetchMessages`-Handler in `MailReader.scpt` verwendet `run script scriptText`. AppleScript kompiliert den übergebenen String zur Laufzeit — Umlaut-Zeichen als String-Literal triggern Syntax-Error -2741. Alle drei Fallbacks in `ReadEmlText` schlagen dadurch fehl:
+1. `ReadEmlViaShellCopy` → gibt `""` zurück (cp wurde nie ausgeführt)
+2. `FileCopy filePath, tmpPath` → Mac VBA: Non-ASCII-Pfade nicht unterstützt
+3. `Open filePath For Binary` → Err 75
+
+**Diagnostik (Python-Test):**
+```python
+# Direkt → OK
+osascript -e 'do shell script "cp " & quoted form of "/Pfad/Höbel.eml" ...'
+# Via run script → Syntax-Error -2741
+osascript -e 'run script "do shell script \"cp \" & quoted form of \"/Pfad/Höbel.eml\"..."'
+```
+
+| # | Ansatz | Status |
+|---|---|---|
+| 1 | NFC/NFD-Normalisierung prüfen | ❌ macOS löst NFC/NFD transparent auf — nicht die Ursache |
+| 2 | **Dedizierte Handler `CopyFile` + `RemoveXattr` in `MailReader.scpt`** | ✅ Bestätigt — Pfade als Parameter, kein `run script` |
+
+**Lösung (`Main.bas` v3.2):**
+- `MailReader.applescript`: neue Handler `CopyFile(params)` und `RemoveXattr(folderPath)`
+- `ReadEmlViaShellCopy`: `AppleScriptTask(…, "CopyFile", filePath & "|" & tmpPath)`
+- `RemoveQuarantine`: `AppleScriptTask(…, "RemoveXattr", folderPath)`
+- `EnsureMailReaderScptInstalled`: testet auf `CopyFile`-Handler → altes .scpt triggert Neuinstall
+- → Detail: `LESSONS_LEARNED.md` LL-003
+
+---
+
+### 8. `EnsureMailReaderScptInstalled` installiert .scpt nicht zuverlässig
+
+**Symptom:** Nach Löschen des gecachten `.scpt` und Neuimport von `Main.bas` laufen Import-Fehler identisch weiter. **Diagnostik:** Fehler in < 2 Sekunden = kein .scpt; Fehler über > 10 Sekunden = falscher Handler (Timeout).
+
+**Ursachen:**
+1. `Static alreadyTried As Boolean` — wird nach Modulimport nicht garantiert zurückgesetzt. Bleibt `True` aus früherem Aufruf in der Session → Install-Block wird übersprungen.
+2. VBA `FileCopy` nach `~/Library/Application Scripts/` scheitert still im Sandbox-Kontext (dokumentiertes Mac-VBA-Verhalten, vgl. Issue #4).
+
+| # | Ansatz | Status |
+|---|---|---|
+| 1 | Manueller `cp`-Befehl im Terminal | ✅ Sofort-Workaround |
+| 2 | **`InstallMailReaderScpt` als Public Sub** + 4-stufige Strategie (FileCopy → MacScript → MsgBox) | ✅ Bestätigt — robuste Auto-Installation |
+
+**Lösung (`Main.bas` v3.3):**
+- `EnsureMailReaderScptInstalled` nur noch Static-Guard → delegiert an `InstallMailReaderScpt`
+- `InstallMailReaderScpt` ist `Public` → direkt im VBA-Direktbereich aufrufbar (bypasses Static)
+- MacScript-Fallback für FileCopy (Pfade sind ASCII → `run script` sicher verwendbar)
+- MsgBox mit Terminal-Befehl als letzte Eskalationsstufe
+
+**Manueller Notfall-Install:**
+```bash
+cp "/Users/steffen/Documents/GitHub/Excel Leads/Excel_files/MailReader.scpt" \
+   ~/Library/Application\ Scripts/com.microsoft.Excel/
+```
+→ Detail: `LESSONS_LEARNED.md` LL-004
+
+---
+
 ### Commit-Historie (chronologisch)
 | Datum | SHA | Beschreibung |
 |---|---|---|
@@ -336,4 +412,8 @@ Warte auf Kundenbestätigung.
 | 2026-02-27 | `8ea347b` | RunShellCommand MacScript→AppleScriptTask Fallback |
 | 2026-03-01 | `a375de7` | Embedded MailReader.scpt als Base64, DecodeBase64 |
 | 2026-03-01 | `bfebe45` | Shell-basierte .scpt Installation (Sandbox-Fix) |
+| 2026-06-11 | *(lokal)* | Fix: xlwings webextension aus Pipeline-Leads-26_06_11.xlsm entfernt (LL-002) |
+| 2026-06-11 | *(lokal)* | v3.1: Quarantine-Fix (RemoveQuarantine via AppleScriptTask), LogError Pipe-Bug |
+| 2026-06-11 | *(lokal)* | v3.2: Umlaut-Fix — CopyFile/RemoveXattr-Handler, kein `run script` mehr (LL-003) |
+| 2026-06-11 | *(lokal)* | v3.3: InstallMailReaderScpt Public + 4-stufige Install-Strategie (LL-004) |
 
