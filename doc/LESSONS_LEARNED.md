@@ -211,9 +211,8 @@ cpResult = AppleScriptTask(APPLESCRIPT_FILE, "CopyFile", filePath & "|" & tmpPat
 | ✅ 5 | **Nach .scpt-Änderung: `~/Library/Application Scripts/com.microsoft.Excel/MailReader.scpt` löschen** | Excel nutzt gecachte Version – manuelles Löschen erzwingt Neuinstall |
 
 ### Betroffene Dateien
-- `Excel_files/MailReader.applescript` / `MailReader.scpt`
-- `Excel_leads/MailReader.applescript` / `MailReader.scpt`
-- `Excel_files/bas/Main.bas` (v3.2)
+- `Excel_leads/Excel_files/MailReader.applescript` / `MailReader.scpt`
+- `Excel_leads/Excel_files/bas/Main.bas` (v3.2)
 
 ---
 
@@ -279,7 +278,47 @@ Versuch 4: MsgBox mit Terminal-Befehl für manuellen Copy
 | ✅ 5 | **MsgBox mit Terminal-Befehl** als letzte Eskalationsstufe | Nutzer bekommt konkreten Befehl, kein stilles Scheitern |
 
 ### Betroffene Dateien
-- `Excel_files/bas/Main.bas` (v3.3)
+- `Excel_leads/Excel_files/bas/Main.bas` (v3.3)
+
+---
+
+## LL-005 · 2026-06-12 · `InstallMailReaderScpt` schlägt fehl wenn .xlsm aus Outlook geöffnet wird
+
+### Was ist passiert?
+Karim (Kunde) erhielt die MsgBox „Installation fehlgeschlagen – MailReader.scpt fehlt im Workbook-Ordner" beim ersten Import-Start. Der gezeigte Pfad war der Outlook-Temp-Ordner:
+```
+/Users/maghrebikarim/Library/Containers/com.microsoft.Outlook/Data/tmp/OutlookTemp/MailReader.scpt
+```
+
+### Ursache
+`InstallMailReaderScpt` (v3.3) suchte `MailReader.scpt` in `ThisWorkbook.Path`. Karim hatte die `.xlsm` direkt aus einer Outlook-E-Mail geöffnet (ohne zu speichern) → `ThisWorkbook.Path` = Outlook-Temp-Ordner → `.scpt` nie dort vorhanden → MsgBox statt Auto-Install.
+
+### Fix (Main.bas v3.4)
+`MailReader.scpt` wird nun als Base64-String direkt im VBA eingebettet (`GetMailReaderScptBase64()`). Kein externer Datei-Copy mehr nötig.
+
+**Neue Installations-Strategie:**
+```
+Versuch 1: AppleScriptTask(CopyFile, "_test_|_test_") → bereits installiert? → fertig
+Versuch 2: GetMailReaderScptBase64() → VBA schreibt in $TMPDIR (kein Sandbox-Block)
+           MacScript "base64 -D -i tmpFile -o ~/Library/Application Scripts/..." → installiert
+Versuch 3: MsgBox mit Terminal-Befehl (letzte Eskalation)
+```
+
+**Warum TMPDIR + Shell:**
+- VBA hat Schreibrecht auf `$TMPDIR` (kein Sandbox-Block)
+- MacScript `base64 -D` umgeht Application-Scripts-Sandbox
+- Pfade sind ASCII → kein Umlaut-Problem in `do shell script`
+
+### Regeln
+
+| # | Regel | Begründung |
+|---|---|---|
+| 🚫 1 | **Niemals `ThisWorkbook.Path` für externe Ressourcen nutzen** | Pfad ist Outlook-Temp wenn Datei aus Mail geöffnet wird |
+| ✅ 2 | **Binäre Ressourcen als Base64 einbetten** | Macht .xlsm selbsttragend, kein Deployment-Problem |
+| ✅ 3 | **TMPDIR als Staging-Bereich** für Shell-Operationen | Einzige Sandbox-sichere VBA-Write-Location |
+
+### Betroffene Dateien
+- `Excel_leads/Excel_files/bas/Main.bas` (v3.4)
 
 ---
 

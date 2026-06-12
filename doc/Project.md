@@ -267,16 +267,14 @@ VBA `Dir$`, `Open For Binary`, `MacScript` können NFD-kodierte Umlaute (ö = o 
 | 1 | Dateien nach `Excel_files/` kopiert + osacompile via MacScript statt `Shell` | `12e719a` | ❌ Hilft nicht wenn Kunde nur die .xlsm hat |
 | 2 | **MailReader.scpt als Base64 direkt im VBA eingebettet (1138 Bytes)** | `a375de7` | ❌ MWriteBase64ToFile nutzte MSXML2.DOMDocument (Windows-only) |
 | 3 | **Pure-VBA DecodeBase64() Decoder** (ersetzt MSXML2) | `a375de7` | ❌ VBA `Open For Binary` kann in Sandbox nicht in Application Scripts schreiben |
-| 4 | **Shell-basierte Installation: Base64 → TMPDIR → `base64 -D` via Shell → Ziel** | `bfebe45` | 🔧 TMPDIR-Write per VBA (erlaubt), Shell dekodiert zum Ziel (umgeht Sandbox) |
+| 4 | **Shell-basierte Installation: Base64 → TMPDIR → `base64 -D` via Shell → Ziel** | `bfebe45` | ❌ Ansatz korrekt, aber v3.3 nutzte noch ThisWorkbook.Path → bricht bei Outlook-Temp-Pfad |
+| 5 | **MailReader.scpt als Base64 in VBA eingebettet (`GetMailReaderScptBase64`)** | *(lokal)* | ✅ Bestätigt — kein externer Pfad mehr nötig, funktioniert bei jedem Öffnungsweg |
 
-**Aktueller Stand:** Strategie-Reihenfolge in `InstallAppleScript`:
-1. Base64 → TMPDIR (VBA) → `base64 -D` via MacScript Shell → Ziel
-2. osacompile via MacScript (`.applescript` → `.scpt`)
-3. FileCopy (nur nicht-sandboxed Excel)
-4. MsgBox mit manuellem Terminal-Befehl
-
-Existenzprüfung via `FileExistsViaShell()` (`test -f` via MacScript) statt `Dir$()`.
-Warte auf Kundenbestätigung.
+**Lösung (Main.bas v3.4):**
+- `GetMailReaderScptBase64()` liefert vollständige .scpt als Base64-String (6720 Zeichen)
+- `InstallMailReaderScpt`: Base64 → `$TMPDIR` via VBA → `base64 -D` via MacScript → Application Scripts
+- Kein `ThisWorkbook.Path` mehr — .xlsm kann aus Outlook, Desktop oder beliebigem Pfad geöffnet werden
+- → Detail: `LESSONS_LEARNED.md` LL-005
 
 ---
 
@@ -286,10 +284,10 @@ Warte auf Kundenbestätigung.
 
 | # | Ansatz | Commit | Status |
 |---|---|---|---|
-| 1 | **FileExistsViaShell()** – `test -f` via MacScript statt Dir$ | `bfebe45` | 🔧 |
-| 2 | **Shell-Write statt VBA I/O** – `base64 -D > target` via MacScript | `bfebe45` | 🔧 |
+| 1 | **FileExistsViaShell()** – `test -f` via MacScript statt Dir$ | `bfebe45` | ✅ |
+| 2 | **Shell-Write statt VBA I/O** – `base64 -D > target` via MacScript | `bfebe45` | ✅ |
 
-**Aktueller Stand:** Alle Dateizugriffe auf den Application-Scripts-Ordner laufen jetzt über Shell-Kommandos. VBA-I/O wird nur noch für TMPDIR verwendet (dort hat VBA Zugriff). Warte auf Kundenbestätigung.
+**Lösung:** TMPDIR als Staging-Bereich (VBA-Write erlaubt), MacScript-Shell für Decode nach Application Scripts. Kombiniert mit Base64-Embedding (Issue #3 Ansatz 5) vollständig gelöst.
 
 ---
 
@@ -416,4 +414,6 @@ cp "/Users/steffen/Documents/GitHub/Excel Leads/Excel_files/MailReader.scpt" \
 | 2026-06-11 | *(lokal)* | v3.1: Quarantine-Fix (RemoveQuarantine via AppleScriptTask), LogError Pipe-Bug |
 | 2026-06-11 | *(lokal)* | v3.2: Umlaut-Fix — CopyFile/RemoveXattr-Handler, kein `run script` mehr (LL-003) |
 | 2026-06-11 | *(lokal)* | v3.3: InstallMailReaderScpt Public + 4-stufige Install-Strategie (LL-004) |
+| 2026-06-12 | *(lokal)* | v3.4: Base64-Self-Install — MailReader.scpt in GetMailReaderScptBase64() eingebettet, kein ThisWorkbook.Path mehr (LL-005) |
+| 2026-06-12 | *(lokal)* | chore: Projektstruktur bereinigt — Excel_leads/ als einziger aktiver Ordner, Duplikate nach Backup/, doc/ ins Repo verschoben |
 

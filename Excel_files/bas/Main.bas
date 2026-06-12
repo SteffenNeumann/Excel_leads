@@ -4,8 +4,8 @@ Option Explicit
 ' ==============================================================
 ' Main.bas -- Lead-Import aus gespeicherten EML-Dateien
 ' --------------------------------------------------------------
-' Version  : 3.3
-' Datum    : 2026-06-11
+' Version  : 3.4
+' Datum    : 2026-06-12
 ' Autor    : Steffen
 ' --------------------------------------------------------------
 ' Liest .eml-Dateien direkt per VBA -- kein Python, kein Shell.
@@ -19,12 +19,16 @@ Option Explicit
 ' Umlaut-Sicherheit : Base64-Bytes -> Utf8BytesToString (pure VBA)
 ' Dictionary        : Pure VBA Collection (kein Scripting.Dictionary)
 '
-' Mac-Sandbox-Loesung (v3.2):
+' Mac-Sandbox-Loesung (v3.4):
 '   RemoveQuarantine entfernt com.apple.quarantine via AppleScriptTask
 '   einmalig vor dem Dir$-Scan -> kein Sandbox-Dialog, kein Err 75.
-'   Benoetigt: MailReader.scpt in ~/Library/Application Scripts/com.microsoft.Excel/
+'   MailReader.scpt als Base64 eingebettet (GetMailReaderScptBase64) ->
+'   kein externes File benoetigt, Auto-Install via TMPDIR+Shell.
 '
 ' Changelog:
+'   v3.4 | 2026-06-12 | Base64-Self-Install: .scpt in GetMailReaderScptBase64() eingebettet
+'                        Kein ThisWorkbook.Path mehr -> funktioniert bei Outlook-Temp-Pfad
+'                        Strategie: AppleScriptTask-Test -> Base64+Shell -> MsgBox
 '   v3.3 | 2026-06-11 | InstallMailReaderScpt public + 4-stufige Install-Strategie
 '                        (FileCopy -> MacScript-Fallback -> MsgBox mit Terminal-Befehl)
 '                        Static alreadyTried ausgelagert -> manueller Reset via InstallMailReaderScpt()
@@ -558,20 +562,13 @@ ErrHandler:
 End Function
 
 ' --- MailReader.scpt automatisch in Application Scripts installieren ---
-' macOS Sandbox erlaubt sandboxed Apps explizit Schreibzugriff auf
-'   ~/Library/Application Scripts/<bundle-id>/
-' wobei ~ = ECHTER Home-Pfad (/Users/<user>), NICHT Container-Pfad.
+' Strategie (v3.4):
+'   1. AppleScriptTask-Test (CopyFile-Handler) -> bereits installiert?
+'   2. Base64-encoded .scpt eingebettet -> TMPDIR via VBA schreiben (kein Sandbox-Block)
+'      Dann Shell: base64 -D -i tmpFile -o Application-Scripts-Ziel
+'   3. MsgBox mit manuellem Terminal-Befehl
 '
-' Strategie (v3.3):
-'   1. AppleScriptTask-Test mit HANDLER_COPY -> bereits vorhanden + aktuell?
-'   2. FileCopy aus Workbook-Ordner (zuverlaessig in den meisten Sandbox-Zust"anden)
-'   3. MacScript-Fallback: do shell script cp (umgeht Sandbox-Einschraenkung)
-'   4. MsgBox mit manuellem Terminal-Befehl (letzte Option)
-'
-' WICHTIG: Static alreadyTried -> nur einmal pro Session versucht.
-' Nach Modulimport oder VBA-Reset wird Static zurueckgesetzt.
-' Bei Problemen: im Direktbereich "alreadyTried = False" geht nicht (Static).
-' Stattdessen: Excel neu starten oder InstallMailReaderScpt() manuell aufrufen.
+' Kein ThisWorkbook.Path mehr noetig -> funktioniert auch wenn .xlsm aus Outlook geoeffnet.
 Private Sub EnsureMailReaderScptInstalled()
     Static alreadyTried As Boolean
     If alreadyTried Then Exit Sub
@@ -579,80 +576,173 @@ Private Sub EnsureMailReaderScptInstalled()
     InstallMailReaderScpt
 End Sub
 
-' Oeffentlich aufrufbar fuer manuellen Reset (Direktbereich: InstallMailReaderScpt)
+' Oeffentlich aufrufbar (Direktbereich: InstallMailReaderScpt)
 Public Sub InstallMailReaderScpt()
-    Dim sourcePath As String
-    Dim contPath   As String
     Dim contDir    As String
+    Dim contPath   As String
+    Dim tmpB64Path As String
+    Dim fileNum    As Integer
+    Dim shellCmd   As String
     Dim writeErr   As Long
 
-    ' --- Versuch 1: Bereits installiert mit CopyFile-Handler? ---
+    ' --- Versuch 1: Bereits installiert? ---
     On Error Resume Next
     Dim testResult As String
     testResult = AppleScriptTask(APPLESCRIPT_FILE, HANDLER_COPY, "_test_|_test_")
     If Err.Number = 0 Then
         On Error GoTo 0
-        Debug.Print "[INFO] MailReader.scpt mit CopyFile-Handler vorhanden"
+        Debug.Print "[INFO] MailReader.scpt bereits installiert"
         Exit Sub
     End If
     Err.Clear
     On Error GoTo 0
 
-    sourcePath = ThisWorkbook.Path & "/" & APPLESCRIPT_FILE
-    contDir    = Environ("HOME") & "/Library/Application Scripts/com.microsoft.Excel"
-    contPath   = contDir & "/" & APPLESCRIPT_FILE
-
-    If Len(Dir$(sourcePath)) = 0 Then
-        MsgBox "MailReader.scpt fehlt im Workbook-Ordner:" & vbLf & sourcePath & vbLf & vbLf & _
-               "Bitte die Datei dort ablegen und erneut versuchen.", vbCritical, "Installation fehlgeschlagen"
-        Exit Sub
-    End If
+    contDir  = Environ("HOME") & "/Library/Application Scripts/com.microsoft.Excel"
+    contPath = contDir & "/" & APPLESCRIPT_FILE
 
     EnsureFolderExists contDir
 
-    ' --- Versuch 2: FileCopy (funktioniert in den meisten Sandbox-Zustaenden) ---
+    ' --- Versuch 2: Base64 -> TMPDIR (VBA) -> base64 -D (Shell) -> Application Scripts ---
+    tmpB64Path = Environ("TMPDIR") & "MailReader_b64.txt"
+
     On Error Resume Next
-    FileCopy sourcePath, contPath
+    fileNum = FreeFile()
+    Open tmpB64Path For Output As #fileNum
+    Print #fileNum, GetMailReaderScptBase64()
+    Close #fileNum
     writeErr = Err.Number
     On Error GoTo 0
 
-    If writeErr = 0 Then
-        Debug.Print "[INFO] MailReader.scpt installiert via FileCopy: " & contPath
-        Exit Sub
+    If writeErr <> 0 Then
+        Debug.Print "[WARN] TMPDIR-Write fehlgeschlagen (Err " & writeErr & ")"
+        GoTo FallbackMsg
     End If
-    Debug.Print "[WARN] FileCopy fehlgeschlagen (Err " & writeErr & ") -> MacScript-Fallback"
 
-    ' --- Versuch 3: MacScript shell cp (Fallback wenn FileCopy in Sandbox blockiert) ---
-    ' Pfade enthalten keine Umlaute -> run script sicher verwendbar
+    shellCmd = "do shell script ""base64 -D -i " & Chr(34) & tmpB64Path & Chr(34) & _
+               " -o " & Chr(34) & contPath & Chr(34) & """"
     On Error Resume Next
-    Dim cpScript As String
-    cpScript = "do shell script ""cp "" & quoted form of """ & sourcePath & """ & "" "" & quoted form of """ & contPath & """"
-    MacScript cpScript
+    MacScript shellCmd
     writeErr = Err.Number
     On Error GoTo 0
 
+    On Error Resume Next
+    Kill tmpB64Path
+    On Error GoTo 0
+
     If writeErr = 0 Then
-        ' Pruefen ob Datei wirklich angelegt wurde
         On Error Resume Next
         Dim chk As String
         chk = AppleScriptTask(APPLESCRIPT_FILE, HANDLER_COPY, "_test_|_test_")
         Dim chkErr As Long: chkErr = Err.Number
         On Error GoTo 0
         If chkErr = 0 Then
-            Debug.Print "[INFO] MailReader.scpt installiert via MacScript"
+            Debug.Print "[INFO] MailReader.scpt installiert via Base64+Shell"
             Exit Sub
         End If
+        Debug.Print "[WARN] Shell ok aber Verifikation fehlgeschlagen (Err " & chkErr & ")"
+    Else
+        Debug.Print "[WARN] Shell base64-Decode fehlgeschlagen (Err " & writeErr & ")"
     End If
-    Debug.Print "[WARN] MacScript-Fallback fehlgeschlagen (Err " & writeErr & ")"
 
-    ' --- Versuch 4: MsgBox mit manuellem Befehl ---
+FallbackMsg:
     MsgBox "MailReader.scpt konnte nicht automatisch installiert werden." & vbLf & vbLf & _
-           "Bitte Terminal " & ChrW(246) & "ffnen und diesen Befehl ausf" & ChrW(252) & "hren:" & vbLf & vbLf & _
-           "cp " & Chr(34) & sourcePath & Chr(34) & " \" & vbLf & _
-           "   ~/Library/Application\ Scripts/com.microsoft.Excel/" & vbLf & vbLf & _
-           "Danach den Import erneut starten.", _
+           "Bitte im Terminal ausf" & ChrW(252) & "hren:" & vbLf & vbLf & _
+           "mkdir -p ~/Library/Application\ Scripts/com.microsoft.Excel/" & vbLf & _
+           "base64 -D -i ~/Downloads/MailReader_b64.txt -o ~/Library/Application\ Scripts/com.microsoft.Excel/MailReader.scpt" & vbLf & vbLf & _
+           "Hinweis: MailReader_b64.txt zuerst per AirDrop/E-Mail von Steffen holen.", _
            vbExclamation, "Manuelle Installation erforderlich"
 End Sub
+
+' --- Liefert MailReader.scpt als Base64-String ---
+' Eingebettet damit kein externes File benoetigt wird.
+Private Function GetMailReaderScptBase64() As String
+    Dim s As String
+    s = s & "RmFzZFVBUyAxLjEwMS4xMA4AAAAED///AAEAAgADAf//AAANAAEAAWsAAAAAAAAABAIABAACAAUABg0A"
+    s = s & "BQACaQAAAAAAAwAHAAgNAAcAA0kAAAAAAAD//gAJ//0L//4AHjAADWZldGNobWVzc2FnZXMADUZldGNo"
+    s = s & "TWVzc2FnZXMCAAkAAgAK//wNAAoAAW8AAAAAAAD/+wv/+wAYMAAKc2NyaXB0dGV4dAAKc2NyaXB0VGV4"
+    s = s & "dAL//AAAAv/9AAANAAgAA1EAAAAAABkACwAMAA0NAAsAAUwAAAADAAkADg0ADgADSQACAAMACP/6AA//"
+    s = s & "+Qr/+gAYLnN5c29kc2N0KioqKgAAAAAAAAAAc2NwdA0ADwABbwAAAAMABP/4C//4ABgwAApzY3JpcHR0"
+    s = s & "ZXh0AApzY3JpcHRUZXh0Av/5AAANAAwAA1IAAAAAAAD/9wAQABEK//cAGC5hc2NyZXJyICoqKioAAAAA"
+    s = s & "AACQACoqKioNABAAAW8AAAAAAAD/9gv/9gAQMAAGZXJybXNnAAZlcnJNc2cGABEAA//1ABL/9Ar/9QAE"
+    s = s & "CmVycm4NABIAAW8AAAAAAAD/8wv/8wAQMAAGZXJybnVtAAZlcnJOdW0G//QAAA0ADQABTAAAABEAGQAT"
+    s = s & "DQATAAJiAAAAEQAYABQAFQ0AFAACYgAAABEAFgAWABcNABYAAmIAAAARABQAGAAZDQAYAAFtAAAAEQAS"
+    s = s & "ABoOABoAAbEAGxEAGwAMAEUAUgBSAE8AUgA6DQAZAAFvAAAAEgAT//IL//IAEDAABmVycm51bQAGZXJy"
+    s = s & "TnVtDQAXAAFtAAAAFAAVABwOABwAAbEAHREAHQACADoNABUAAW8AAAAWABf/8Qv/8QAQMAAGZXJybXNn"
+    s = s & "AAZlcnJNc2cCAAYAAgAeAB8NAB4AA2wAAgAAAAD/8P/v/+4B//AAAAH/7wAAAf/uAAACAB8AAgAgACEN"
+    s = s & "ACAAAmkAAAAEAAcAIgAjDQAiAANJAAAAAAAA/+0AJP/sC//tABQwAAhjb3B5ZmlsZQAIQ29weUZpbGUC"
+    s = s & "ACQAAgAl/+sNACUAAW8AAAAAAAD/6gv/6gAKMAAGcGFyYW1zAAAC/+sAAAL/7AAADQAjAAFrAAAAAABe"
+    s = s & "ACYCACYAAgAnACgNACcAA2wAAQAAAAD/6QApACoB/+kAAAwAKQAkAB4gcGFyYW1zOiAic291cmNlUGF0"
+    s = s & "aHxkZXN0UGF0aCIAAgAADgAqAAGxACsRACsAPAAgAHAAYQByAGEAbQBzADoAIAAiAHMAbwB1AHIAYwBl"
+    s = s & "AFAAYQB0AGgAfABkAGUAcwB0AFAAYQB0AGgAIgIAKAACACwALQ0ALAACcgAAAAAACwAuAC8NAC4AA0kA"
+    s = s & "AgAAAAn/6P/nADAK/+gAGC5zeXNvb2Zmc2xvbmcAAAAA//+AAG51bGwB/+cAAAYAMAAD/+YAMQAyCv/m"
+    s = s & "AAQKcHNvZg0AMQABbQAAAAIAAwAzDgAzAAGxADQRADQAAgB8BgAyAAP/5QA1/+QK/+UABApwc2luDQA1"
+    s = s & "AAFvAAAABAAF/+ML/+MACjAABnBhcmFtcwAABv/kAAANAC8AAW8AAAAAAAD/4gv/4gAUMAAIZGVsaW1w"
+    s = s & "b3MACGRlbGltUG9zAgAtAAIANgA3DQA2AARaAAEADAAYADgAOf/h/+ANADgAAj0AAwAMAA8AOgA7DQA6"
+    s = s & "AAFvAAAADAAN/98L/98AFDAACGRlbGltcG9zAAhkZWxpbVBvcw0AOwABbQAAAA0ADv/eA//eAAANADkA"
+    s = s & "AUwAAAASABQAPA0APAABbQAAABIAEwA9DgA9AAGxAD4RAD4ANABFAFIAUgBPAFIAOgAtADEAOgBtAGkA"
+    s = s & "cwBzAGkAbgBnACAAZABlAGwAaQBtAGkAdABlAHIC/+EAAAH/4AAAAgA3AAIAPwBADQA/AAJyAAAAGQAo"
+    s = s & "AEEAQg0AQQACbgAAABkAJgBDAEQNAEMAAzcBAAAaACb/3QBFAEYK/90ABApjdHh0DQBFAAFtAAAAHgAg"
+    s = s & "/9wD/9wAAQ0ARgADbAAFACEAJQBH/9v/2g0ARwACXAAAACEAJQBIAEkNAEgAAW8AAAAiACP/2Qv/2QAU"
+    s = s & "MAAIZGVsaW1wb3MACGRlbGltUG9zDQBJAAFtAAAAIwAk/9gD/9gAAQH/2wAAAf/aAAANAEQAAW8AAAAZ"
+    s = s & "ABr/1wv/1wAKMAAGcGFyYW1zAAANAEIAAW8AAAAAAAD/1gv/1gASMAAHc3JjcGF0aAAHc3JjUGF0aAIA"
+    s = s & "QAACAEoASw0ASgACcgAAACkAOABMAE0NAEwAAm4AAAApADYATgBPDQBOAAM3AQAAKgA2/9UAUABRCv/V"
+    s = s & "AAQKY3R4dA0AUAADbAAFAC4AMgBS/9T/0w0AUgACWwAAAC4AMgBTAFQNAFMAAW8AAAAvADD/0gv/0gAU"
+    s = s & "MAAIZGVsaW1wb3MACGRlbGltUG9zDQBUAAFtAAAAMAAx/9ED/9EAAQH/1AAAAf/TAAANAFEAAW0AAAAz"
+    s = s & "ADX/0AP/0P//DQBPAAFvAAAAKQAq/88L/88ACjAABnBhcmFtcwAADQBNAAFvAAAAAAAA/84L/84AEjAA"
+    s = s & "B2RzdHBhdGgAB2RzdFBhdGgCAEsAAgBV/80NAFUAA1EAAAA5AF4AVgBXAFgNAFYAAWsAAAA8AE4AWQIA"
+    s = s & "WQACAFoAWw0AWgADSQACADwAS//MAFz/ywr/zAAYLnN5c29leGVjVEVYVP//gAAAAAAAVEVYVA0AXAAC"
+    s = s & "YgAAADwARwBdAF4NAF0AAmIAAAA8AEMAXwBgDQBfAAJiAAAAPABBAGEAYg0AYQABbQAAADwAPQBjDgBj"
+    s = s & "AAGxAGQRAGQABgBjAHAAIA0AYgACbgAAAD0AQABlAGYNAGUAATEAAAA+AED/ygr/ygAECnN0cnENAGYA"
+    s = s & "AW8AAAA9AD7/yQv/yQASMAAHc3JjcGF0aAAHc3JjUGF0aA0AYAABbQAAAEEAQgBnDgBnAAGxAGgRAGgA"
+    s = s & "AgAgDQBeAAJuAAAAQwBGAGkAag0AaQABMQAAAEQARv/ICv/IAAQKc3RycQ0AagABbwAAAEMARP/HC//H"
+    s = s & "ABIwAAdkc3RwYXRoAAdkc3RQYXRoAv/LAAACAFsAAgBr/8YNAGsAAUwAAABMAE4AbA0AbAABbQAAAEwA"
+    s = s & "TQBtDgBtAAGxAG4RAG4ABABPAEsC/8YAAA0AVwADUgAAAAAAAP/FAG8AcAr/xQAYLmFzY3JlcnIgKioq"
+    s = s & "KgAAAAAAAJAAKioqKg0AbwABbwAAAAAAAP/EC//EABAwAAZlcnJtc2cABmVyck1zZwYAcAAD/8MAcf/C"
+    s = s & "Cv/DAAQKZXJybg0AcQABbwAAAAAAAP/BC//BABAwAAZlcnJudW0ABmVyck51bQb/wgAADQBYAAFMAAAA"
+    s = s & "VgBeAHINAHIAAmIAAABWAF0AcwB0DQBzAAJiAAAAVgBbAHUAdg0AdQACYgAAAFYAWQB3AHgNAHcAAW0A"
+    s = s & "AABWAFcAeQ4AeQABsQB6EQB6AAwARQBSAFIATwBSADoNAHgAAW8AAABXAFj/wAv/wAAQMAAGZXJybnVt"
+    s = s & "AAZlcnJOdW0NAHYAAW0AAABZAFoAew4AewABsQB8EQB8AAIAOg0AdAABbwAAAFsAXP+/C/+/ABAwAAZl"
+    s = s & "cnJtc2cABmVyck1zZwL/zQAAAgAhAAIAfQB+DQB9AANsAAIAAAAA/77/vf+8Af++AAAB/70AAAH/vAAA"
+    s = s & "AgB+AAIAfwCADQB/AAJpAAAACAALAIEAgg0AgQADSQAAAAAAAP+7AIP/ugv/uwAaMAALcmVtb3ZleGF0"
+    s = s & "dHIAC1JlbW92ZVhhdHRyAgCDAAIAhP+5DQCEAAFvAAAAAAAA/7gL/7gAGDAACmZvbGRlcnBhdGgACmZv"
+    s = s & "bGRlclBhdGgC/7kAAAL/ugAADQCCAANRAAAAAAAfAIUAhgCHDQCFAAFrAAAAAwAPAIgCAIgAAgCJAIoN"
+    s = s & "AIkAA0kAAgADAAz/twCL/7YK/7cAGC5zeXNvZXhlY1RFWFT//4AAAAAAAFRFWFQNAIsAAmIAAAADAAgA"
+    s = s & "jACNDQCMAAFtAAAAAwAEAI4OAI4AAbEAjxEAjwA+AHgAYQB0AHQAcgAgAC0AcgBkACAAYwBvAG0ALgBh"
+    s = s & "AHAAcABsAGUALgBxAHUAYQByAGEAbgB0AGkAbgBlACANAI0AAm4AAAAEAAcAkACRDQCQAAExAAAABQAH"
+    s = s & "/7UK/7UABApzdHJxDQCRAAFvAAAABAAF/7QL/7QAGDAACmZvbGRlcnBhdGgACmZvbGRlclBhdGgC/7YA"
+    s = s & "AAIAigACAJL/sw0AkgABTAAAAA0ADwCTDQCTAAFtAAAADQAOAJQOAJQAAbEAlREAlQAEAE8ASwL/swAA"
+    s = s & "DQCGAANSAAAAAAAA/7IAlgCXCv+yABguYXNjcmVyciAqKioqAAAAAAAAkAAqKioqDQCWAAFvAAAAAAAA"
+    s = s & "/7EL/7EAEDAABmVycm1zZwAGZXJyTXNnBgCXAAP/sACY/68K/7AABAplcnJuDQCYAAFvAAAAAAAA/64L"
+    s = s & "/64AEDAABmVycm51bQAGZXJyTnVtBv+vAAANAIcAAUwAAAAXAB8AmQ0AmQACYgAAABcAHgCaAJsNAJoA"
+    s = s & "AmIAAAAXABwAnACdDQCcAAJiAAAAFwAaAJ4Anw0AngABbQAAABcAGACgDgCgAAGxAKERAKEADABFAFIA"
+    s = s & "UgBPAFIAOg0AnwABbwAAABgAGf+tC/+tABAwAAZlcnJudW0ABmVyck51bQ0AnQABbQAAABoAGwCiDgCi"
+    s = s & "AAGxAKMRAKMAAgA6DQCbAAFvAAAAHAAd/6wL/6wAEDAABmVycm1zZwAGZXJyTXNnAgCAAAIApP+rDQCk"
+    s = s & "AANsAAIAAAAA/6r/qf+oAf+qAAAB/6kAAAH/qAAAAv+rAAAOAAIAAA8QAAMABf+nAKUApgCnAKgB/6cA"
+    s = s & "ABAApQAD/6b/pf+kC/+mAB4wAA1mZXRjaG1lc3NhZ2VzAA1GZXRjaE1lc3NhZ2VzC/+lABQwAAhjb3B5"
+    s = s & "ZmlsZQAIQ29weUZpbGUL/6QAGjAAC3JlbW92ZXhhdHRyAAtSZW1vdmVYYXR0cg4ApgAHEP+jAAj/ov+h"
+    s = s & "AKkAqv+gC/+jAB4wAA1mZXRjaG1lc3NhZ2VzAA1GZXRjaE1lc3NhZ2VzDv+iAAIE/58AqwP/nwABDgCr"
+    s = s & "AAEA/54L/54AGDAACnNjcmlwdHRleHQACnNjcmlwdFRleHQC/6EAABAAqQAD/53/nP+bC/+dABgwAApz"
+    s = s & "Y3JpcHR0ZXh0AApzY3JpcHRUZXh0C/+cABAwAAZlcnJtc2cABmVyck1zZwv/mwAQMAAGZXJybnVtAAZl"
+    s = s & "cnJOdW0QAKoABf+a/5kArAAaABwK/5oAGC5zeXNvZHNjdCoqKioAAAAAAAAAAHNjcHQL/5kAEDAABmVy"
+    s = s & "cm1zZwAGZXJyTXNnBgCsAAP/mP+X/5YK/5gABAplcnJuC/+XABAwAAZlcnJudW0ABmVyck51bQb/lgAA"
+    s = s & "Ef+gABoUAAugagwAAA9XAA9YAAEAAuOiJeQloSUPDw4ApwAHEP+VACP/lP+TAK0Arv+SC/+VABQwAAhj"
+    s = s & "b3B5ZmlsZQAIQ29weUZpbGUO/5QAAgT/kQCvA/+RAAEOAK8AAQD/kAv/kAAKMAAGcGFyYW1zAAAC/5MA"
+    s = s & "ABAArQAG/4//jv+N/4z/i/+KC/+PAAowAAZwYXJhbXMAAAv/jgAUMAAIZGVsaW1wb3MACGRlbGltUG9z"
+    s = s & "C/+NABIwAAdzcmNwYXRoAAdzcmNQYXRoC/+MABIwAAdkc3RwYXRoAAdkc3RQYXRoC/+LABAwAAZlcnJt"
+    s = s & "c2cABmVyck1zZwv/igAQMAAGZXJybnVtAAZlcnJOdW0QAK4AEP+JADP/iP+H/4YAPf+FAGP/hABn/4MA"
+    s = s & "bf+CALAAeQB7Cv+JAAQKcHNvZgr/iAAECnBzaW4D/4cABAr/hgAYLnN5c29vZmZzbG9uZwAAAAD//4AA"
+    s = s & "bnVsbAr/hQAECmN0eHQK/4QABApzdHJxCv+DABguc3lzb2V4ZWNURVhU//+AAAAAAABURVhUC/+CABAw"
+    s = s & "AAZlcnJtc2cABmVyck1zZwYAsAAD/4H/gP9/Cv+BAAQKZXJybgv/gAAQMAAGZXJybnVtAAZlcnJOdW0G"
+    s = s & "/38AABH/kgBfKuDh4qDjDAAERbFPoWoAHQAH5Q9ZAANoT6Bb5lxbWmtcWqFrHzJFsk+gW+ZcW1qhax5c"
+    s = s & "WmkyRbNPFAAX56LoLCXpJaPoLCVqDAAKT+sPVwAPWAAMAA3upSXvJaQlDw8OAKgABxD/fgCC/33/fACx"
+    s = s & "ALL/ewv/fgAaMAALcmVtb3ZleGF0dHIAC1JlbW92ZVhhdHRyDv99AAIE/3oAswP/egABDgCzAAEA/3kL"
+    s = s & "/3kAGDAACmZvbGRlcnBhdGgACmZvbGRlclBhdGgC/3wAABAAsQAD/3j/d/92C/94ABgwAApmb2xkZXJw"
+    s = s & "YXRoAApmb2xkZXJQYXRoC/93ABAwAAZlcnJtc2cABmVyck1zZwv/dgAQMAAGZXJybnVtAAZlcnJOdW0Q"
+    s = s & "ALIACACO/3X/dACU/3MAtACgAKIK/3UABApzdHJxCv90ABguc3lzb2V4ZWNURVhU//+AAAAAAABURVhU"
+    s = s & "C/9zABAwAAZlcnJtc2cABmVyck1zZwYAtAAD/3L/cf9wCv9yAAQKZXJybgv/cQAQMAAGZXJybnVtAAZl"
+    s = s & "cnJOdW0G/3AAABH/ewAgFAAR4KDhLCVqDAACT+MPVwAPWAAEAAXmoiXnJaElDw8AYXNjcgABAA363t6t"
+    GetMailReaderScptBase64 = s
+End Function
 
 ' --- Ordnerstruktur rekursiv anlegen ---
 Private Sub EnsureFolderExists(ByVal folderPath As String)
